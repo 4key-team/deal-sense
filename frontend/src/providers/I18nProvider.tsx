@@ -1,17 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Copy, Lang } from "../i18n/types";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import type { Lang } from "../i18n/types";
 import { ru } from "../i18n/ru";
 import { en } from "../i18n/en";
+import { I18nContext } from "./I18nContext";
+import type { Copy } from "../i18n/types";
 
 const copies: Record<Lang, Copy> = { ru, en };
-
-interface I18nContextValue {
-  lang: Lang;
-  setLang: (lang: Lang) => void;
-  t: Copy;
-}
-
-const I18nContext = createContext<I18nContextValue | null>(null);
 
 function getInitialLang(): Lang {
   const saved = localStorage.getItem("ds:lang");
@@ -33,10 +27,4 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       {children}
     </I18nContext.Provider>
   );
-}
-
-export function useI18n(): I18nContextValue {
-  const ctx = useContext(I18nContext);
-  if (!ctx) throw new Error("useI18n must be used within I18nProvider");
-  return ctx;
 }

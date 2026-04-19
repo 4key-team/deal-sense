@@ -1,6 +1,6 @@
 import { Card } from "../../ui/Card";
 import { FitGauge } from "../../ui/FitGauge";
-import { useI18n } from "../../providers/I18nProvider";
+import { useI18n } from "../../providers/useI18n";
 import type { TenderData } from "../../mocks/tender";
 import styles from "./VerdictHero.module.css";
 

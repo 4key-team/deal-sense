@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useI18n } from "../../providers/I18nProvider";
-import { useTheme } from "../../providers/ThemeProvider";
+import { useI18n } from "../../providers/useI18n";
+import { useTheme } from "../../providers/useTheme";
 import { SunIcon, MoonIcon, ChevIcon } from "../../icons/Icons";
 import { Lockup } from "../Logo";
 import { StatusPill } from "../../ui/StatusPill";

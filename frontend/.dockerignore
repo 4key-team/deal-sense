@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+test-results
+playwright-report
+.playwright-mcp
+e2e
+*.test.tsx
+*.test.ts
+*.spec.ts
+playwright.config.ts
+vitest.config.ts
+.env
+.env.local

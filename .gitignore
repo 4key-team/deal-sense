@@ -35,3 +35,13 @@ Thumbs.db
 # Playwright
 playwright-report/
 test-results/
+.playwright-mcp/
+
+# Serena
+.serena/
+
+# Screenshots
+check-*.png
+
+# Coverage
+frontend/coverage/

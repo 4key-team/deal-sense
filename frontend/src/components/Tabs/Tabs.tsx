@@ -1,4 +1,4 @@
-import { useI18n } from "../../providers/I18nProvider";
+import { useI18n } from "../../providers/useI18n";
 import styles from "./Tabs.module.css";
 
 export interface TabsProps {

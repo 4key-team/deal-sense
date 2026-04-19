@@ -1,0 +1,7 @@
+server
+bin/
+*.out
+*.test
+*.exe
+coverage.out
+coverage.html
