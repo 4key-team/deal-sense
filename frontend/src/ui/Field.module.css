@@ -1,0 +1,11 @@
+.wrapper { margin-bottom: 18px; }
+
+.label {
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+
+.hint {
+  margin-top: 6px;
+  text-wrap: pretty;
+}

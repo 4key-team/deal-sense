@@ -1,0 +1,68 @@
+.container {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.header.go {
+  background: var(--go-wash);
+  border-bottom-color: var(--go-line);
+}
+
+.header.no {
+  background: var(--no-wash);
+  border-bottom-color: var(--no-line);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dotGo {
+  background: var(--go);
+}
+
+.dotNo {
+  background: var(--no);
+}
+
+.headerTitle {
+  flex: 1;
+}
+
+.count {
+  color: var(--ink-3);
+}
+
+.body {
+  padding: 4px 18px;
+}
+
+.item {
+  padding: 14px 0;
+}
+
+.item + .item {
+  border-top: 1px solid var(--line);
+}
+
+.itemTitle {
+  margin: 0 0 3px;
+}
+
+.itemDesc {
+  margin: 0;
+  color: var(--ink-3);
+}

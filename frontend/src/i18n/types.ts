@@ -1,0 +1,74 @@
+export type Lang = "ru" | "en";
+
+export interface Copy {
+  tabs: { kp: string; tender: string };
+  header: {
+    status_ok: string;
+    status_err: string;
+    settings: string;
+    new: string;
+    history: string;
+  };
+  kp: {
+    title: string;
+    subtitle: string;
+    ready_chip: string;
+    meta: { client: string; project: string; price: string; term: string; created: string };
+    sections: string;
+    section_filled: string;
+    section_review: string;
+    section_ai: string;
+    download: string;
+    re_generate: string;
+    open: string;
+    regenerate_section: string;
+    context_used: string;
+    context_cases: string;
+    context_prices: string;
+    context_brief: string;
+    source_label: string;
+    time_label: string;
+    cost_label: string;
+    changelog: string;
+  };
+  tender: {
+    title: string;
+    subtitle: string;
+    fit: string;
+    verdict_go: string;
+    verdict_no: string;
+    verdict_go_sub: string;
+    verdict_no_sub: string;
+    pros: string;
+    cons: string;
+    requirements: string;
+    req_met: string;
+    req_partial: string;
+    req_miss: string;
+    files: string;
+    effort: string;
+    actions_export: string;
+    actions_draft: string;
+    actions_prep: string;
+    recent: string;
+    trend: string;
+  };
+  settings: {
+    title: string;
+    subtitle: string;
+    provider: string;
+    key: string;
+    key_hint: string;
+    url: string;
+    url_hint: string;
+    model: string;
+    test: string;
+    testing: string;
+    test_ok: string;
+    test_fail: string;
+    save: string;
+    cancel: string;
+    show: string;
+    hide: string;
+  };
+}

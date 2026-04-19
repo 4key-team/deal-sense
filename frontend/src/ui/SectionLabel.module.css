@@ -1,0 +1,16 @@
+.wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.label {
+  color: var(--ink-3);
+}
+
+.line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}

@@ -1,0 +1,310 @@
+/* ProposalResult layout */
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ── Columns ── */
+
+.leftCol {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.rightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Hero card ── */
+
+.heroBg {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--brand-wash) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.heroTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  position: relative;
+}
+
+.heroTopLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sourceLabel {
+  color: var(--ink-3);
+}
+
+.heroTopRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heroTitle {
+  font-family: var(--font-serif);
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 24px 0 6px;
+  color: var(--ink-1);
+  position: relative;
+}
+
+.heroSubtitle {
+  color: var(--ink-2);
+  margin: 0;
+  position: relative;
+}
+
+/* Meta grid */
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  margin-top: 28px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  position: relative;
+}
+
+.metaCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.metaCellLabel {
+  color: var(--ink-3);
+}
+
+.metaCellValue {
+  color: var(--ink-1);
+  font-weight: 500;
+}
+
+/* Footer stats */
+
+.heroStats {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  position: relative;
+}
+
+/* ── Sections block ── */
+
+.sectionsBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionsList {
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.sectionRow {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+}
+
+.sectionRow + .sectionRow {
+  border-top: 1px solid var(--line);
+}
+
+.sectionIdx {
+  color: var(--ink-3);
+}
+
+.sectionInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sectionTitle {
+  color: var(--ink-1);
+  font-weight: 500;
+}
+
+.sectionTokens {
+  color: var(--ink-4);
+  margin-top: 2px;
+}
+
+/* Regen button */
+
+.regenBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-1);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.regenBtn:hover {
+  background: var(--surface-2);
+  color: var(--brand);
+}
+
+/* ── Right column cards ── */
+
+.cardLabel {
+  color: var(--ink-3);
+  margin: 0 0 12px;
+}
+
+/* Context */
+
+.contextList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contextRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.contextIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  border-radius: var(--r-1);
+  flex-shrink: 0;
+}
+
+.contextIconTpl {
+  background: var(--brand-wash);
+  border: 1px solid var(--brand-line);
+  color: var(--brand-ink);
+}
+
+.contextIconCtx {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.contextInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contextName {
+  color: var(--ink-1);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextMeta {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+/* Changelog */
+
+.logList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logRow {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.logTime {
+  color: var(--ink-4);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.logMsg {
+  color: var(--ink-2);
+}
+
+/* Donut */
+
+.donutRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.donutLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legendCount {
+  color: var(--ink-1);
+  font-weight: 500;
+  min-width: 14px;
+}
+
+.legendLabel {
+  color: var(--ink-3);
+}

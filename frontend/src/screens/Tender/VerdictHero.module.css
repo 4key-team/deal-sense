@@ -1,0 +1,99 @@
+.card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.inner {
+  padding: 32px;
+}
+
+.innerGo {
+  background: linear-gradient(180deg, var(--go-wash) 0%, var(--surface) 80%);
+}
+
+.innerNo {
+  background: linear-gradient(180deg, var(--no-wash) 0%, var(--surface) 80%);
+}
+
+.topArea {
+  position: relative;
+  min-height: 28px;
+  margin-bottom: 24px;
+}
+
+.toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-radius: 99px;
+  padding: 2px;
+  border: 1px solid var(--line);
+}
+
+.toggleBtn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: 99px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+  line-height: 1.4;
+}
+
+.toggleBtn:hover:not(.active) {
+  color: var(--ink-2);
+}
+
+.toggleBtnGoActive {
+  background: var(--go-wash);
+  color: var(--go-ink);
+}
+
+.toggleBtnNoActive {
+  background: var(--no-wash);
+  color: var(--no-ink);
+}
+
+.content {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 32px;
+}
+
+.left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fitLabel {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.bigTitle {
+  font-family: var(--font-serif);
+  font-size: 104px;
+  line-height: 0.9;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.subtitle {
+  margin: 0;
+}

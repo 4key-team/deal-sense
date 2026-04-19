@@ -1,0 +1,72 @@
+.wrapper { position: relative; }
+
+.trigger {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--ink-1);
+}
+
+.trigger.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.chevron { color: var(--ink-3); }
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+  z-index: 2;
+  overflow: hidden;
+}
+
+.option {
+  width: 100%;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--ink-1);
+  text-align: left;
+}
+
+.option.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.option:hover { background: var(--surface-2); }
+
+.optionCheck { color: var(--brand); }

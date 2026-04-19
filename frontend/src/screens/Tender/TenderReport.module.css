@@ -1,0 +1,201 @@
+.screen {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 28px;
+  align-items: start;
+  padding: 28px;
+}
+
+/* Left column */
+.left {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.proConGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Requirements */
+.requirementsLabel {
+  margin-bottom: 10px;
+}
+
+.reqGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.reqRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+}
+
+/* Border-top for all except first two rows */
+.reqRow:nth-child(n + 3) {
+  border-top: 1px solid var(--line);
+}
+
+/* Border-left for odd columns (every other item, 1-based) */
+.reqRow:nth-child(odd) {
+  border-left: 1px solid var(--line);
+}
+
+.statusCircle {
+  width: 22px;
+  height: 22px;
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.reqLabel {
+  flex: 1;
+}
+
+.reqStatus {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* Right column */
+.right {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Files card */
+.cardHeader {
+  color: var(--ink-3);
+  margin-bottom: 12px;
+  display: block;
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.docIconBox {
+  width: 28px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  border-radius: var(--r-2);
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+
+.fileName {
+  flex: 1;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileMeta {
+  font-size: 11px;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* Effort card */
+.effortValue {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink-1);
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Recent activity card */
+.bigNumber {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-1);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Trend card */
+.trendHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.trendValue {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--ink-1);
+}
+
+.trendText {
+  font-size: 12.5px;
+  color: var(--go-ink);
+}
+
+.trendFooter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 6px;
+  display: block;
+}
+
+/* Action buttons */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
