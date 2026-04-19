@@ -31,6 +31,7 @@ Thumbs.db
 # Claude Code
 .claude/
 .mcp.json
+CLAUDE.md
 
 # Playwright
 playwright-report/
