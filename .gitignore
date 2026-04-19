@@ -1,0 +1,36 @@
+# Go
+backend/bin/
+backend/coverage.out
+backend/coverage.html
+*.exe
+*.test
+*.out
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/.playwright-mcp/
+frontend/*.png
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+
+# Claude Code
+.claude/
+.mcp.json
+
+# Playwright
+playwright-report/
+test-results/
