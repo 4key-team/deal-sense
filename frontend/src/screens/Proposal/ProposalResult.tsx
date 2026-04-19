@@ -1,16 +1,37 @@
-import { useI18n } from "../../providers/I18nProvider";
+import { useState } from "react";
+import { useI18n } from "../../providers/useI18n";
 import { Card } from "../../ui/Card";
 import { SectionLabel } from "../../ui/SectionLabel";
 import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
+import { Spinner } from "../../ui/Spinner";
 import { CheckIcon, DocIcon, DownloadIcon, SparkIcon } from "../../icons/Icons";
 import { MiniDonut } from "../../components/charts";
 import { getSections, getContext, getMeta, getLog } from "../../mocks/proposal";
 import type { ProposalSection } from "../../mocks/proposal";
+import { generateProposal, downloadBlob } from "../../lib/api";
 import styles from "./ProposalResult.module.css";
 
 export function ProposalResult() {
   const { lang, t } = useI18n();
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    setDownloading(true);
+    try {
+      const tplFile = new File([], "proposal-tpl.docx");
+      const blob = await generateProposal(tplFile);
+      downloadBlob(blob, "proposal.docx");
+    } catch {
+      // TODO: show error toast
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function handleOpenPreview() {
+    // TODO: implement preview modal
+  }
 
   const sections = getSections(lang);
   const context = getContext(lang, {
@@ -40,8 +61,8 @@ export function ProposalResult() {
               </span>
             </div>
             <div className={styles.heroTopRight}>
-              <Button variant="ghost" icon={<DocIcon />}>{t.kp.open}</Button>
-              <Button variant="brand" icon={<DownloadIcon />}>{t.kp.download}</Button>
+              <Button variant="ghost" icon={<DocIcon />} onClick={handleOpenPreview}>{t.kp.open}</Button>
+              <Button variant="brand" icon={downloading ? <Spinner /> : <DownloadIcon />} onClick={handleDownload} disabled={downloading}>{t.kp.download}</Button>
             </div>
           </div>
 

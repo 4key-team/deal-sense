@@ -23,7 +23,7 @@ test.describe("DealSense smoke tests", () => {
   test("language switches to EN", async ({ page }) => {
     await page.goto("/tender");
     await page.getByRole("button", { name: "en" }).click();
-    await expect(page.getByText("Go")).toBeVisible();
+    await expect(page.getByText("Go", { exact: true })).toBeVisible();
     await expect(page.getByText("Partner portal")).toBeVisible();
   });
 
@@ -54,6 +54,6 @@ test.describe("DealSense smoke tests", () => {
   test("verdict toggle switches to NO-GO", async ({ page }) => {
     await page.goto("/tender");
     await page.getByRole("button", { name: "NO-GO" }).click();
-    await expect(page.getByText("Пас")).toBeVisible();
+    await expect(page.getByText("Пас", { exact: true })).toBeVisible();
   });
 });

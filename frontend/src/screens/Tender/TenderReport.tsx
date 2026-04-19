@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useI18n } from "../../providers/I18nProvider";
+import { useNavigate } from "react-router-dom";
+import { useI18n } from "../../providers/useI18n";
 import { Card } from "../../ui/Card";
 import { SectionLabel } from "../../ui/SectionLabel";
 import { Button } from "../../ui/Button";
@@ -22,6 +23,7 @@ import {
   winTrend,
 } from "../../mocks/tender";
 import type { TenderRequirement } from "../../mocks/tender";
+import { downloadBlob } from "../../lib/api";
 import { VerdictHero } from "./VerdictHero";
 import { ProConCard } from "./ProConCard";
 import styles from "./TenderReport.module.css";
@@ -68,6 +70,7 @@ function getStatusConfig(status: TenderRequirement["status"]): StatusConfig {
 
 export function TenderReport() {
   const { lang, t } = useI18n();
+  const navigate = useNavigate();
   const [verdict, setVerdict] = useState<"go" | "no">("go");
 
   const data = getTenderData(verdict, lang);
@@ -86,6 +89,17 @@ export function TenderReport() {
   const metCount = requirements.filter((r) => r.status === "met").length;
   const partialCount = requirements.filter((r) => r.status === "partial").length;
   const missCount = requirements.filter((r) => r.status === "miss").length;
+
+  function handleExport() {
+    const report = { verdict, data, requirements, files };
+    const json = JSON.stringify(report, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    downloadBlob(blob, "tender-report.json");
+  }
+
+  function handlePrep() {
+    navigate("/proposal");
+  }
 
   return (
     <div className={`screen-enter ${styles.screen}`}>
@@ -233,10 +247,10 @@ export function TenderReport() {
         <div className={styles.actions}>
           {verdict === "go" ? (
             <>
-              <Button variant="brand" size="lg" icon={<SparkIcon />}>
+              <Button variant="brand" size="lg" icon={<SparkIcon />} onClick={handlePrep}>
                 {t.tender.actions_prep}
               </Button>
-              <Button variant="secondary" size="lg" icon={<DownloadIcon />}>
+              <Button variant="secondary" size="lg" icon={<DownloadIcon />} onClick={handleExport}>
                 {t.tender.actions_export}
               </Button>
             </>
@@ -245,7 +259,7 @@ export function TenderReport() {
               <Button variant="secondary" size="lg">
                 {t.tender.actions_draft}
               </Button>
-              <Button variant="ghost" size="lg" icon={<DownloadIcon />}>
+              <Button variant="ghost" size="lg" icon={<DownloadIcon />} onClick={handleExport}>
                 {t.tender.actions_export}
               </Button>
             </>
