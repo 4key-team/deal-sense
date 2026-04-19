@@ -53,6 +53,14 @@ export const en: Copy = {
     recent: "Last 12 tenders",
     trend: "Trend · 8 weeks",
   },
+  dropzone: {
+    tender_label: "Upload tender documentation",
+    tender_hint: "PDF or DOCX · multiple files OK",
+    proposal_tpl_label: "Proposal template (.docx)",
+    proposal_tpl_hint: "DOCX template with placeholders",
+    proposal_ctx_label: "Context (brief, cases, prices)",
+    proposal_ctx_hint: "PDF or DOCX · up to 5 files",
+  },
   settings: {
     title: "LLM provider",
     subtitle: "Your key stays in this browser.",

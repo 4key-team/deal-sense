@@ -53,6 +53,14 @@ export interface Copy {
     recent: string;
     trend: string;
   };
+  dropzone: {
+    tender_label: string;
+    tender_hint: string;
+    proposal_tpl_label: string;
+    proposal_tpl_hint: string;
+    proposal_ctx_label: string;
+    proposal_ctx_hint: string;
+  };
   settings: {
     title: string;
     subtitle: string;

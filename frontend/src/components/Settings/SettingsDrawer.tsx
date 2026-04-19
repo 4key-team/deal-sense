@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useI18n } from "../../providers/I18nProvider";
+import { useI18n } from "../../providers/useI18n";
 import { Button } from "../../ui/Button";
 import { Select } from "../../ui/Select";
 import { Field } from "../../ui/Field";
 import { Spinner } from "../../ui/Spinner";
 import { XIcon, EyeIcon, CheckIcon } from "../../icons/Icons";
+import { getItem, setItem } from "../../lib/storage";
 import styles from "./SettingsDrawer.module.css";
 
 interface Provider {
@@ -55,6 +56,25 @@ const PROVIDERS: Provider[] = [
 
 type TestState = "idle" | "testing" | "ok" | "fail";
 
+export interface LLMSettings {
+  providerId: string;
+  apiKey: string;
+  url: string;
+  model: string;
+}
+
+const STORAGE_KEY = "llm-settings";
+
+function loadSettings(): LLMSettings {
+  const defaultProvider = PROVIDERS[0];
+  return getItem<LLMSettings>(STORAGE_KEY, {
+    providerId: defaultProvider.id,
+    apiKey: "",
+    url: defaultProvider.url,
+    model: defaultProvider.models[0],
+  });
+}
+
 export interface SettingsDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -64,12 +84,13 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const { lang, t } = useI18n();
 
   const defaultProvider = PROVIDERS[0];
+  const saved = loadSettings();
 
-  const [providerId, setProviderId] = useState<string>(defaultProvider.id);
-  const [apiKey, setApiKey] = useState<string>("");
+  const [providerId, setProviderId] = useState<string>(saved.providerId);
+  const [apiKey, setApiKey] = useState<string>(saved.apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
-  const [url, setUrl] = useState<string>(defaultProvider.url);
-  const [model, setModel] = useState<string>(defaultProvider.models[0]);
+  const [url, setUrl] = useState<string>(saved.url);
+  const [model, setModel] = useState<string>(saved.model);
   const [testState, setTestState] = useState<TestState>("idle");
   const [providerOpen, setProviderOpen] = useState<boolean>(false);
   const [modelOpen, setModelOpen] = useState<boolean>(false);
@@ -98,6 +119,11 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     setTimeout(() => {
       setTestState("ok");
     }, 1200);
+  }
+
+  function handleSave() {
+    setItem<LLMSettings>(STORAGE_KEY, { providerId, apiKey, url, model });
+    onClose();
   }
 
   const providerOptions = PROVIDERS.map((p) => ({
@@ -232,7 +258,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
           <Button variant="ghost" onClick={onClose} type="button">
             {t.settings.cancel}
           </Button>
-          <Button variant="primary" type="button">
+          <Button variant="primary" type="button" onClick={handleSave}>
             {t.settings.save}
           </Button>
         </div>

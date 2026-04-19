@@ -53,6 +53,14 @@ export const ru: Copy = {
     recent: "За 12 тендеров",
     trend: "Тренд · 8 недель",
   },
+  dropzone: {
+    tender_label: "Загрузи тендерную документацию",
+    tender_hint: "PDF или DOCX · можно несколько файлов",
+    proposal_tpl_label: "Шаблон КП (.docx)",
+    proposal_tpl_hint: "DOCX-шаблон с плейсхолдерами",
+    proposal_ctx_label: "Контекст (бриф, кейсы, прайс)",
+    proposal_ctx_hint: "PDF или DOCX · до 5 файлов",
+  },
   settings: {
     title: "LLM-провайдер",
     subtitle: "Ключ хранится только в твоём браузере.",
