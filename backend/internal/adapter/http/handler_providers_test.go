@@ -10,7 +10,7 @@ import (
 )
 
 func TestHandleListProviders(t *testing.T) {
-	h := handler.NewHandler(&stubLLM{name: "test"}, nil, nil, nil)
+	h := handler.NewHandler(&stubLLM{name: "test"}, nil, nil, nil, stubPrompt, stubPrompt)
 	req := httptest.NewRequest(http.MethodGet, "/api/llm/providers", nil)
 	rec := httptest.NewRecorder()
 

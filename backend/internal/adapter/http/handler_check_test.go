@@ -50,7 +50,7 @@ func TestHandleCheckConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			llm := &stubLLM{err: tt.llmErr, name: tt.llmName}
-			h := handler.NewHandler(llm, nil, nil, nil)
+			h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/llm/check", nil)
 			rec := httptest.NewRecorder()
@@ -73,3 +73,5 @@ func TestHandleCheckConnection(t *testing.T) {
 		})
 	}
 }
+
+func stubPrompt(_ string) string { return "test prompt" }

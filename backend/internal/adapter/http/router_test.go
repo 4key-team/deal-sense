@@ -9,7 +9,7 @@ import (
 )
 
 func TestRouter_Routes(t *testing.T) {
-	h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{content: "text"}, &stubTemplateEngine{result: []byte("doc")})
+	h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{content: "text"}, &stubTemplateEngine{result: []byte("doc")}, stubPrompt, stubPrompt)
 	mux := handler.NewRouter(h)
 
 	tests := []struct {

@@ -76,3 +76,96 @@ func TestProposal_SetResult(t *testing.T) {
 		t.Errorf("Result() = %q, want %q", p.Result(), "generated")
 	}
 }
+
+func TestParseSectionStatus(t *testing.T) {
+	tests := []struct {
+		input string
+		want  domain.SectionStatus
+		err   error
+	}{
+		{"ai", domain.SectionAI, nil},
+		{"filled", domain.SectionFilled, nil},
+		{"review", domain.SectionReview, nil},
+		{"bad", "", domain.ErrInvalidSectionStatus},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := domain.ParseSectionStatus(tt.input)
+			if got != tt.want { t.Errorf("got %q, want %q", got, tt.want) }
+			if !errors.Is(err, tt.err) { t.Errorf("err = %v, want %v", err, tt.err) }
+		})
+	}
+}
+
+func TestNewLogEntry(t *testing.T) {
+	tests := []struct {
+		name    string
+		time    string
+		msg     string
+		wantErr error
+	}{
+		{name: "valid", time: "14:00", msg: "parsed template"},
+		{name: "empty time is ok", time: "", msg: "step completed"},
+		{name: "empty msg", time: "14:00", msg: "", wantErr: domain.ErrEmptyMsg},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, err := domain.NewLogEntry(tt.time, tt.msg)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("NewLogEntry() error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewLogEntry() unexpected error: %v", err)
+			}
+			if e.Time() != tt.time {
+				t.Errorf("Time() = %q, want %q", e.Time(), tt.time)
+			}
+			if e.Msg() != tt.msg {
+				t.Errorf("Msg() = %q, want %q", e.Msg(), tt.msg)
+			}
+		})
+	}
+}
+
+func TestNewProposalSection(t *testing.T) {
+	tests := []struct {
+		name    string
+		title   string
+		status  domain.SectionStatus
+		tokens  int
+		wantErr error
+	}{
+		{name: "valid ai", title: "Summary", status: domain.SectionAI, tokens: 420},
+		{name: "valid filled", title: "Intro", status: domain.SectionFilled, tokens: 0},
+		{name: "valid review", title: "Pricing", status: domain.SectionReview, tokens: 200},
+		{name: "empty title", title: "", status: domain.SectionAI, tokens: 100, wantErr: domain.ErrEmptyTitle},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := domain.NewProposalSection(tt.title, tt.status, tt.tokens)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("NewProposalSection() error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewProposalSection() unexpected error: %v", err)
+			}
+			if s.Title() != tt.title {
+				t.Errorf("Title() = %q, want %q", s.Title(), tt.title)
+			}
+			if s.Status() != tt.status {
+				t.Errorf("Status() = %v, want %v", s.Status(), tt.status)
+			}
+			if s.Tokens() != tt.tokens {
+				t.Errorf("Tokens() = %d, want %d", s.Tokens(), tt.tokens)
+			}
+		})
+	}
+}

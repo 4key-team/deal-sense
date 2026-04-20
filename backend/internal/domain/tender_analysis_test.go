@@ -18,7 +18,7 @@ func TestNewDocument(t *testing.T) {
 		{name: "valid pdf", docName: "spec.pdf", ft: domain.FileTypePDF, content: "some text"},
 		{name: "valid docx", docName: "req.docx", ft: domain.FileTypeDOCX, content: "requirements"},
 		{name: "empty content", docName: "spec.pdf", ft: domain.FileTypePDF, content: "", wantErr: domain.ErrEmptyContent},
-		{name: "empty name", docName: "", ft: domain.FileTypePDF, content: "text", wantErr: domain.ErrEmptyContent},
+		{name: "empty name", docName: "", ft: domain.FileTypePDF, content: "text", wantErr: domain.ErrEmptyName},
 	}
 
 	for _, tt := range tests {
@@ -109,5 +109,96 @@ func TestTenderAnalysis_SetResult(t *testing.T) {
 	}
 	if ta.Summary() != "Good fit" {
 		t.Errorf("Summary() = %q, want %q", ta.Summary(), "Good fit")
+	}
+}
+
+func TestParseRequirementStatus(t *testing.T) {
+	tests := []struct {
+		input string
+		want  domain.RequirementStatus
+		err   error
+	}{
+		{"met", domain.ReqMet, nil},
+		{"partial", domain.ReqPartial, nil},
+		{"miss", domain.ReqMiss, nil},
+		{"invalid", "", domain.ErrInvalidReqStatus},
+		{"", "", domain.ErrInvalidReqStatus},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := domain.ParseRequirementStatus(tt.input)
+			if got != tt.want { t.Errorf("got %q, want %q", got, tt.want) }
+			if !errors.Is(err, tt.err) { t.Errorf("err = %v, want %v", err, tt.err) }
+		})
+	}
+}
+
+func TestNewProCon(t *testing.T) {
+	tests := []struct {
+		name    string
+		title   string
+		desc    string
+		wantErr error
+	}{
+		{name: "valid with desc", title: "Strong team", desc: "10 engineers"},
+		{name: "valid empty desc", title: "Fast delivery", desc: ""},
+		{name: "valid long title", title: "Experienced in government tenders", desc: "5+ years"},
+		{name: "empty title", title: "", desc: "desc", wantErr: domain.ErrEmptyTitle},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc, err := domain.NewProCon(tt.title, tt.desc)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("NewProCon() error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewProCon() unexpected error: %v", err)
+			}
+			if pc.Title() != tt.title {
+				t.Errorf("Title() = %q, want %q", pc.Title(), tt.title)
+			}
+			if pc.Desc() != tt.desc {
+				t.Errorf("Desc() = %q, want %q", pc.Desc(), tt.desc)
+			}
+		})
+	}
+}
+
+func TestNewRequirement(t *testing.T) {
+	tests := []struct {
+		name    string
+		label   string
+		status  domain.RequirementStatus
+		wantErr error
+	}{
+		{name: "valid met", label: "Go experience", status: domain.ReqMet},
+		{name: "valid partial", label: "ISO 27001", status: domain.ReqPartial},
+		{name: "valid miss", label: "5 year track record", status: domain.ReqMiss},
+		{name: "empty label", label: "", status: domain.ReqMet, wantErr: domain.ErrEmptyLabel},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := domain.NewRequirement(tt.label, tt.status)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("NewRequirement() error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewRequirement() unexpected error: %v", err)
+			}
+			if r.Label() != tt.label {
+				t.Errorf("Label() = %q, want %q", r.Label(), tt.label)
+			}
+			if r.Status() != tt.status {
+				t.Errorf("Status() = %v, want %v", r.Status(), tt.status)
+			}
+		})
 	}
 }
