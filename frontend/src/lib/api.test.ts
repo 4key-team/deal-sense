@@ -27,14 +27,6 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-function blobResponse(content = "docx-bytes") {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    blob: () => Promise.resolve(new Blob([content])),
-  });
-}
-
 describe("analyzeTender", () => {
   it("sends multipart with files and company_profile", async () => {
     mockFetch.mockReturnValueOnce(
@@ -67,10 +59,15 @@ describe("analyzeTender", () => {
     ).rejects.toThrow("Tender analyze failed: 500");
   });
 
-  it("sends API key from localStorage", async () => {
+  it("sends LLM settings from localStorage", async () => {
     localStorage.setItem(
       "ds:llm-settings",
-      JSON.stringify({ apiKey: "sk-test-key" }),
+      JSON.stringify({
+        providerId: "groq",
+        apiKey: "sk-test-key",
+        url: "https://api.groq.com/openai/v1",
+        model: "llama-3.3-70b",
+      }),
     );
 
     mockFetch.mockReturnValueOnce(
@@ -80,29 +77,39 @@ describe("analyzeTender", () => {
     await analyzeTender([], "Co");
 
     const headers = mockFetch.mock.calls[0][1].headers;
-    expect(headers["X-API-Key"]).toBe("sk-test-key");
+    expect(headers["X-LLM-Key"]).toBe("sk-test-key");
+    expect(headers["X-LLM-Provider"]).toBe("groq");
+    expect(headers["X-LLM-URL"]).toBe("https://api.groq.com/openai/v1");
+    expect(headers["X-LLM-Model"]).toBe("llama-3.3-70b");
   });
 });
 
 describe("generateProposal", () => {
-  it("sends template and returns blob", async () => {
-    mockFetch.mockReturnValueOnce(blobResponse());
+  it("sends template with context and returns JSON", async () => {
+    mockFetch.mockReturnValueOnce(
+      jsonResponse({ template: "tpl.docx", summary: "ok", sections: [], docx: true }),
+    );
 
     const tpl = new File(["docx"], "tpl.docx");
-    const blob = await generateProposal(tpl, { client: "Acme" });
+    const ctx = [new File(["pdf"], "brief.pdf", { type: "application/pdf" })];
+    const result = await generateProposal(tpl, ctx, "ru", { client: "Acme" });
 
     const form = mockFetch.mock.calls[0][1].body as FormData;
     expect(form.get("template")).toBeTruthy();
+    expect(form.get("lang")).toBe("ru");
+    expect(form.getAll("context")).toHaveLength(1);
     expect(form.get("params")).toBe('{"client":"Acme"}');
 
-    expect(blob).toBeInstanceOf(Blob);
+    expect(result.template).toBe("tpl.docx");
   });
 
   it("sends without params when omitted", async () => {
-    mockFetch.mockReturnValueOnce(blobResponse());
+    mockFetch.mockReturnValueOnce(
+      jsonResponse({ template: "t.docx", summary: "", sections: [], docx: false }),
+    );
 
     const tpl = new File(["docx"], "tpl.docx");
-    await generateProposal(tpl);
+    await generateProposal(tpl, []);
 
     const form = mockFetch.mock.calls[0][1].body as FormData;
     expect(form.get("params")).toBeNull();
@@ -114,7 +121,7 @@ describe("generateProposal", () => {
     );
 
     await expect(
-      generateProposal(new File(["x"], "t.docx")),
+      generateProposal(new File(["x"], "t.docx"), []),
     ).rejects.toThrow("Proposal generate failed: 422");
   });
 });

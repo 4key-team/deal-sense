@@ -59,6 +59,7 @@
 
 /* Dark theme */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --brand: #D77357;
   --brand-ink: #E8907A;
   --brand-wash: #2E1F1A;

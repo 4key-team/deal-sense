@@ -5,32 +5,37 @@ import { Tabs } from "./components/Tabs";
 import { SettingsDrawer } from "./components/Settings";
 import { TenderReport } from "./screens/Tender";
 import { ProposalResult } from "./screens/Proposal";
+import { CompanyProfile } from "./screens/Profile";
 import styles from "./App.module.css";
 
 export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
-  const tab = location.pathname === "/proposal" ? "kp" : "tender";
+  const pathMap: Record<string, string> = { "/proposal": "kp", "/profile": "profile" };
+  const tab = pathMap[location.pathname] ?? "tender";
   const setTab = (t: string) => {
-    navigate(t === "kp" ? "/proposal" : "/tender");
+    const routes: Record<string, string> = { kp: "/proposal", profile: "/profile" };
+    navigate(routes[t] ?? "/tender");
   };
 
   return (
     <div className={styles.shell}>
-      <Header onOpenSettings={() => setSettingsOpen(true)} />
+      <Header onOpenSettings={() => setSettingsOpen(true)} settingsVersion={settingsVersion} />
       <Tabs tab={tab} setTab={setTab} />
 
       <main className={styles.main}>
         <Routes>
           <Route path="/tender" element={<TenderReport />} />
           <Route path="/proposal" element={<ProposalResult />} />
+          <Route path="/profile" element={<CompanyProfile />} />
           <Route path="*" element={<Navigate to="/tender" replace />} />
         </Routes>
       </main>
 
-      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={() => setSettingsVersion((v) => v + 1)} />
     </div>
   );
 }

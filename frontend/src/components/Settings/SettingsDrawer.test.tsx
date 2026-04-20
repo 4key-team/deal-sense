@@ -127,20 +127,22 @@ describe("SettingsDrawer", () => {
     const urlInput = screen.getByDisplayValue("https://api.openai.com/v1");
     expect(urlInput).toBeInTheDocument();
 
-    expect(screen.getByText("gpt-4o")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("gpt-4o")).toBeInTheDocument();
   });
 
   it("switches model via dropdown", async () => {
     const user = userEvent.setup();
     renderDrawer();
 
-    const modelTrigger = screen.getByText("claude-haiku-4-5");
-    await user.click(modelTrigger);
+    expect(screen.getByDisplayValue("claude-haiku-4-5")).toBeInTheDocument();
+
+    // Open model dropdown
+    await user.click(screen.getByRole("button", { name: "Pick model" }));
 
     const sonnetOption = screen.getByText("claude-sonnet-4-5");
     await user.click(sonnetOption);
 
-    expect(screen.getByText("claude-sonnet-4-5")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("claude-sonnet-4-5")).toBeInTheDocument();
   });
 
   it("handles unknown provider gracefully", async () => {
@@ -175,18 +177,23 @@ describe("SettingsDrawer", () => {
     expect(saved.url).toBe("http://localhost:8080");
   });
 
-  it("closes model dropdown on backdrop click", async () => {
+  it("allows typing custom model name", async () => {
     const user = userEvent.setup();
     renderDrawer();
 
-    await user.click(screen.getByText("claude-haiku-4-5"));
+    const modelInput = screen.getByDisplayValue("claude-haiku-4-5");
+    await user.clear(modelInput);
+    await user.type(modelInput, "my-custom-model");
 
-    const backdrops = document.querySelectorAll("[class*='backdrop']");
-    expect(backdrops.length).toBeGreaterThan(1);
+    await user.click(screen.getByRole("button", { name: /сохранить|save/i }));
 
-    await user.click(backdrops[backdrops.length - 1]);
-
-    expect(screen.getByText("claude-haiku-4-5")).toBeInTheDocument();
+    const saved = getItem<LLMSettings>("llm-settings", {
+      providerId: "",
+      apiKey: "",
+      url: "",
+      model: "",
+    });
+    expect(saved.model).toBe("my-custom-model");
   });
 
   it("saves changed provider to localStorage", async () => {

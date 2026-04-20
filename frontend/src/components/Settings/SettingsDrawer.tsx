@@ -4,9 +4,9 @@ import { Button } from "../../ui/Button";
 import { Select } from "../../ui/Select";
 import { Field } from "../../ui/Field";
 import { Spinner } from "../../ui/Spinner";
-import { XIcon, EyeIcon, CheckIcon } from "../../icons/Icons";
+import { XIcon, EyeIcon, CheckIcon, ChevIcon } from "../../icons/Icons";
 import { getItem, setItem } from "../../lib/storage";
-import { checkConnection } from "../../lib/api";
+import { checkConnection, listModels } from "../../lib/api";
 import styles from "./SettingsDrawer.module.css";
 
 interface Provider {
@@ -38,13 +38,13 @@ const PROVIDERS: Provider[] = [
   {
     id: "groq",
     label: () => "Groq",
-    models: ["llama-3.3-70b", "mixtral-8x7b"],
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
     url: "https://api.groq.com/openai/v1",
   },
   {
     id: "ollama",
     label: () => "Ollama (local)",
-    models: ["llama3.1:70b", "qwen2.5:32b"],
+    models: ["llama3.1:70b", "qwen2.5:32b", "mistral:7b"],
     url: "http://localhost:11434/v1",
   },
   {
@@ -79,9 +79,10 @@ function loadSettings(): LLMSettings {
 export interface SettingsDrawerProps {
   open: boolean;
   onClose: () => void;
+  onSave?: () => void;
 }
 
-export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
+export function SettingsDrawer({ open, onClose, onSave }: SettingsDrawerProps) {
   const { lang, t } = useI18n();
 
   const defaultProvider = PROVIDERS[0];
@@ -95,10 +96,28 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [testState, setTestState] = useState<TestState>("idle");
   const [providerOpen, setProviderOpen] = useState<boolean>(false);
   const [modelOpen, setModelOpen] = useState<boolean>(false);
+  const [testError, setTestError] = useState("");
+  const [remoteModels, setRemoteModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   if (!open) return null;
 
   const currentProvider = PROVIDERS.find((p) => p.id === providerId) ?? defaultProvider;
+
+  async function fetchModels(provId: string, provUrl: string) {
+    if (!apiKey) return;
+    setLoadingModels(true);
+    try {
+      const result = await listModels(provId, apiKey, provUrl);
+      if (result.models.length > 0) {
+        setRemoteModels(result.models);
+      }
+    } catch {
+      // keep local list
+    } finally {
+      setLoadingModels(false);
+    }
+  }
 
   function handleProviderPick(id: string) {
     const p = PROVIDERS.find((pr) => pr.id === id);
@@ -108,6 +127,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     setModel(p.models[0]);
     setTestState("idle");
     setProviderOpen(false);
+    setRemoteModels([]);
+    fetchModels(id, p.url);
   }
 
   function handleModelPick(id: string) {
@@ -117,16 +138,27 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
 
   async function handleTest() {
     setTestState("testing");
+    setTestError("");
     try {
-      const result = await checkConnection();
+      const result = await checkConnection({
+        provider: providerId,
+        apiKey,
+        url,
+        model,
+      });
       setTestState(result.ok ? "ok" : "fail");
-    } catch {
+      if (!result.ok && result.error) {
+        setTestError(result.error);
+      }
+    } catch (err) {
       setTestState("fail");
+      setTestError(err instanceof Error ? err.message : String(err));
     }
   }
 
   function handleSave() {
     setItem<LLMSettings>(STORAGE_KEY, { providerId, apiKey, url, model });
+    onSave?.();
     onClose();
   }
 
@@ -135,7 +167,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     label: p.label(lang),
   }));
 
-  const modelOptions = currentProvider.models.map((m) => ({
+  const modelList = remoteModels.length > 0 ? remoteModels : currentProvider.models;
+  const modelOptions = modelList.map((m) => ({
     id: m,
     label: m,
     mono: true,
@@ -176,7 +209,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
         {/* Body */}
         <div className={styles.body}>
           {/* Provider */}
-          <Field label={t.settings.provider}>
+          <Field label={t.settings.provider} tooltip={t.settings.provider_tip}>
             <Select
               value={providerLabel}
               options={providerOptions}
@@ -189,7 +222,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
           </Field>
 
           {/* API Key */}
-          <Field label={t.settings.key} hint={t.settings.key_hint}>
+          <Field label={t.settings.key} hint={t.settings.key_hint} tooltip={t.settings.key_tip}>
             <div className={styles.keyWrap}>
               <input
                 className={styles.keyInput}
@@ -211,7 +244,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
           </Field>
 
           {/* API URL */}
-          <Field label={t.settings.url} hint={t.settings.url_hint}>
+          <Field label={t.settings.url} hint={t.settings.url_hint} tooltip={t.settings.url_tip}>
             <input
               className={styles.urlInput}
               type="text"
@@ -222,17 +255,45 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
           </Field>
 
           {/* Model */}
-          <Field label={t.settings.model}>
-            <Select
-              value={model}
-              options={modelOptions}
-              selected={model}
-              open={modelOpen}
-              onOpen={() => setModelOpen(true)}
-              onClose={() => setModelOpen(false)}
-              onPick={handleModelPick}
-              mono
-            />
+          <Field label={t.settings.model} hint={t.settings.model_hint} tooltip={t.settings.model_tip}>
+            <div className={styles.modelWrap}>
+              <input
+                className={`${styles.keyInput} ${styles.modelInput}`}
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                spellCheck={false}
+                placeholder="e.g. llama-3.3-70b-versatile"
+              />
+              <button
+                type="button"
+                className={styles.modelPickBtn}
+                onClick={() => {
+                  const opening = !modelOpen;
+                  setModelOpen(opening);
+                  if (opening && remoteModels.length === 0) {
+                    fetchModels(providerId, url);
+                  }
+                }}
+                aria-label="Pick model"
+              >
+                {loadingModels ? <Spinner /> : <ChevIcon dir={modelOpen ? "up" : "down"} />}
+              </button>
+            </div>
+            {modelOpen && (
+              <div className={styles.modelDropdown}>
+                {modelOptions.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`${styles.modelOption} ${o.id === model ? styles.modelOptionActive : ""}`}
+                    onClick={() => handleModelPick(o.id)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </Field>
 
           {/* Test connection */}
@@ -255,6 +316,9 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
             {testState === "ok" && t.settings.test_ok}
             {testState === "fail" && t.settings.test_fail}
           </Button>
+          {testError && (
+            <p className={`t-small ${styles.testError}`}>{testError}</p>
+          )}
         </div>
 
         {/* Footer */}

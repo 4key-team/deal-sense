@@ -1,7 +1,7 @@
 export type Lang = "ru" | "en";
 
 export interface Copy {
-  tabs: { kp: string; tender: string };
+  tabs: { kp: string; tender: string; profile: string };
   header: {
     status_ok: string;
     status_err: string;
@@ -12,6 +12,7 @@ export interface Copy {
   kp: {
     title: string;
     subtitle: string;
+    subtitle_result: string;
     generate_btn: string;
     generating: string;
     error: string;
@@ -38,6 +39,9 @@ export interface Copy {
   tender: {
     title: string;
     subtitle: string;
+    profile_label: string;
+    profile_placeholder: string;
+    profile_tip: string;
     analyze_btn: string;
     analyzing: string;
     error: string;
@@ -61,6 +65,45 @@ export interface Copy {
     recent: string;
     trend: string;
   };
+  profile: {
+    title: string;
+    subtitle: string;
+    saved: string;
+    name: string;
+    name_tip: string;
+    team_size: string;
+    team_size_tip: string;
+    experience: string;
+    experience_tip: string;
+    experience_suffix: string;
+    stack: string;
+    stack_tip: string;
+    stack_placeholder: string;
+    certs: string;
+    certs_tip: string;
+    cert_iso27001: string;
+    cert_soc2: string;
+    cert_152fz: string;
+    cert_pci: string;
+    cert_gdpr: string;
+    specializations: string;
+    specializations_tip: string;
+    spec_web: string;
+    spec_mobile: string;
+    spec_integrations: string;
+    spec_ml: string;
+    spec_devops: string;
+    spec_security: string;
+    spec_enterprise: string;
+    spec_ecommerce: string;
+    clients: string;
+    clients_tip: string;
+    clients_placeholder: string;
+    extra: string;
+    extra_tip: string;
+    extra_placeholder: string;
+    save: string;
+  };
   dropzone: {
     tender_label: string;
     tender_hint: string;
@@ -73,11 +116,16 @@ export interface Copy {
     title: string;
     subtitle: string;
     provider: string;
+    provider_tip: string;
     key: string;
     key_hint: string;
+    key_tip: string;
     url: string;
     url_hint: string;
+    url_tip: string;
     model: string;
+    model_hint: string;
+    model_tip: string;
     test: string;
     testing: string;
     test_ok: string;

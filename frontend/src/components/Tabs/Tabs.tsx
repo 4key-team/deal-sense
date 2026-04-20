@@ -9,12 +9,12 @@ export interface TabsProps {
 interface TabDef {
   id: string;
   label: (t: ReturnType<typeof useI18n>["t"]) => string;
-  count: number;
 }
 
 const TABS: TabDef[] = [
-  { id: "kp",     label: (t) => t.tabs.kp,     count: 12 },
-  { id: "tender", label: (t) => t.tabs.tender,  count: 4  },
+  { id: "kp",      label: (t) => t.tabs.kp },
+  { id: "tender",  label: (t) => t.tabs.tender },
+  { id: "profile", label: (t) => t.tabs.profile },
 ];
 
 export function Tabs({ tab, setTab }: TabsProps) {
@@ -23,7 +23,7 @@ export function Tabs({ tab, setTab }: TabsProps) {
   return (
     <nav className={styles.bar} aria-label="Main navigation">
       <div className={styles.inner} role="tablist">
-        {TABS.map(({ id, label, count }) => {
+        {TABS.map(({ id, label }) => {
           const isActive = tab === id;
           return (
             <button
@@ -34,12 +34,6 @@ export function Tabs({ tab, setTab }: TabsProps) {
               onClick={() => setTab(id)}
             >
               {label(t)}
-              <span
-                className={isActive ? `${styles.badge} ${styles.badgeActive}` : styles.badge}
-                aria-label={`${count} items`}
-              >
-                {count}
-              </span>
             </button>
           );
         })}

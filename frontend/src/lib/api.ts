@@ -2,11 +2,25 @@ import { getItem } from "./storage";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
+export interface TenderProCon {
+  title: string;
+  desc: string;
+}
+
+export interface TenderRequirement {
+  label: string;
+  status: "met" | "partial" | "miss";
+}
+
 export interface TenderResult {
   verdict: string;
   risk: string;
   score: number;
   summary: string;
+  pros: TenderProCon[];
+  cons: TenderProCon[];
+  requirements: TenderRequirement[];
+  effort: string;
 }
 
 export interface CheckResult {
@@ -25,21 +39,31 @@ export interface ProvidersResult {
   providers: ProviderInfo[];
 }
 
+interface StoredSettings {
+  providerId?: string;
+  apiKey?: string;
+  url?: string;
+  model?: string;
+}
+
 function apiHeaders(): Record<string, string> {
-  const settings = getItem<{ apiKey?: string }>("llm-settings", {});
+  const s = getItem<StoredSettings>("llm-settings", {});
   const headers: Record<string, string> = {};
-  if (settings.apiKey) {
-    headers["X-API-Key"] = settings.apiKey;
-  }
+  if (s.apiKey) headers["X-LLM-Key"] = s.apiKey;
+  if (s.providerId) headers["X-LLM-Provider"] = s.providerId;
+  if (s.url) headers["X-LLM-URL"] = s.url;
+  if (s.model) headers["X-LLM-Model"] = s.model;
   return headers;
 }
 
 export async function analyzeTender(
   files: File[],
   companyProfile: string,
+  lang = "ru",
 ): Promise<TenderResult> {
   const form = new FormData();
   form.append("company_profile", companyProfile);
+  form.append("lang", lang);
   files.forEach((f) => form.append("files", f));
 
   const res = await fetch(`${BASE}/api/tender/analyze`, {
@@ -55,12 +79,29 @@ export async function analyzeTender(
   return res.json() as Promise<TenderResult>;
 }
 
+export interface ProposalSection {
+  title: string;
+  status: "ai" | "filled" | "review";
+  tokens: number;
+}
+
+export interface ProposalResult {
+  template: string;
+  summary: string;
+  sections: ProposalSection[];
+  docx: string; // base64 encoded .docx
+}
+
 export async function generateProposal(
   template: File,
+  contextFiles: File[],
+  lang = "ru",
   params?: Record<string, string>,
-): Promise<Blob> {
+): Promise<ProposalResult> {
   const form = new FormData();
   form.append("template", template);
+  form.append("lang", lang);
+  contextFiles.forEach((f) => form.append("context", f));
   if (params) {
     form.append("params", JSON.stringify(params));
   }
@@ -75,13 +116,27 @@ export async function generateProposal(
     throw new Error(`Proposal generate failed: ${res.status}`);
   }
 
-  return res.blob();
+  return res.json() as Promise<ProposalResult>;
 }
 
-export async function checkConnection(): Promise<CheckResult> {
+export async function checkConnection(overrides?: {
+  provider?: string;
+  apiKey?: string;
+  url?: string;
+  model?: string;
+}): Promise<CheckResult> {
+  const headers: Record<string, string> = overrides
+    ? {
+        ...(overrides.provider && { "X-LLM-Provider": overrides.provider }),
+        ...(overrides.apiKey && { "X-LLM-Key": overrides.apiKey }),
+        ...(overrides.url && { "X-LLM-URL": overrides.url }),
+        ...(overrides.model && { "X-LLM-Model": overrides.model }),
+      }
+    : apiHeaders();
+
   const res = await fetch(`${BASE}/api/llm/check`, {
     method: "POST",
-    headers: apiHeaders(),
+    headers,
   });
 
   return res.json() as Promise<CheckResult>;
@@ -98,6 +153,28 @@ export async function listProviders(): Promise<ProvidersResult> {
   }
 
   return res.json() as Promise<ProvidersResult>;
+}
+
+export interface ModelsResult {
+  models: string[];
+  error?: string;
+}
+
+export async function listModels(
+  provider: string,
+  apiKey: string,
+  url: string,
+): Promise<ModelsResult> {
+  const res = await fetch(`${BASE}/api/llm/models`, {
+    method: "GET",
+    headers: {
+      "X-LLM-Provider": provider,
+      "X-LLM-Key": apiKey,
+      "X-LLM-URL": url,
+    },
+  });
+
+  return res.json() as Promise<ModelsResult>;
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

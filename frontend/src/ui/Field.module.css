@@ -3,9 +3,44 @@
 .label {
   color: var(--ink-3);
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .hint {
   margin-top: 6px;
   text-wrap: pretty;
+}
+
+.tipBtn {
+  all: unset;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--ink-4);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tipBtn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.tipBox {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  color: var(--ink-2);
+  line-height: 1.5;
 }

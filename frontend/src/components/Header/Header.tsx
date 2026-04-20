@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useI18n } from "../../providers/useI18n";
 import { useTheme } from "../../providers/useTheme";
-import { SunIcon, MoonIcon, ChevIcon } from "../../icons/Icons";
+import { SunIcon, MoonIcon } from "../../icons/Icons";
 import { Lockup } from "../Logo";
 import { StatusPill } from "../../ui/StatusPill";
+import { getItem } from "../../lib/storage";
 import type { Lang } from "../../i18n/types";
 import styles from "./Header.module.css";
 
@@ -26,11 +27,16 @@ function getStoredVariant(): LogoVariant {
 
 export interface HeaderProps {
   onOpenSettings: () => void;
+  settingsVersion?: number;
 }
 
-export function Header({ onOpenSettings }: HeaderProps) {
+const LLM_DEFAULTS = { providerId: "anthropic", apiKey: "", model: "claude-sonnet-4-5" };
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function Header({ onOpenSettings, settingsVersion: _v }: HeaderProps) {
   const { lang, setLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
+  const llmSettings = getItem<typeof LLM_DEFAULTS>("llm-settings", LLM_DEFAULTS);
 
   const [logoVariant, setLogoVariant] = useState<LogoVariant>(getStoredVariant);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -60,8 +66,6 @@ export function Header({ onOpenSettings }: HeaderProps) {
     localStorage.setItem("ds:logo", v);
     setDropdownOpen(false);
   }
-
-  const breadPortal = lang === "ru" ? "Партнёрский портал" : "Partner portal";
 
   return (
     <header className={styles.header}>
@@ -103,18 +107,6 @@ export function Header({ onOpenSettings }: HeaderProps) {
           )}
         </div>
 
-        {/* Divider */}
-        <span className={styles.divider} aria-hidden="true" />
-
-        {/* Breadcrumbs */}
-        <nav className={styles.breadcrumbs} aria-label="breadcrumb">
-          <span className={styles.breadOrg}>Northwind Logistics</span>
-          <span className={styles.breadChev} aria-hidden="true">
-            <ChevIcon dir="right" />
-          </span>
-          <span className={styles.breadPage}>{breadPortal}</span>
-        </nav>
-
         <div className={styles.spacer} />
 
         {/* Theme toggle */}
@@ -146,9 +138,9 @@ export function Header({ onOpenSettings }: HeaderProps) {
 
         {/* Status pill — opens settings */}
         <StatusPill
-          provider="Anthropic"
-          model="claude-sonnet-4-5"
-          status="ok"
+          provider={llmSettings.providerId}
+          model={llmSettings.model}
+          status={llmSettings.apiKey ? "ok" : "err"}
           onClick={onOpenSettings}
         />
       </div>

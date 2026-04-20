@@ -171,6 +171,78 @@
   color: var(--ink-4);
 }
 
+/* Model input + dropdown */
+.modelWrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+
+.modelWrap:focus-within {
+  border-color: var(--ink-3);
+}
+
+.modelInput {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.modelPickBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.modelPickBtn:hover {
+  color: var(--ink-1);
+}
+
+.modelDropdown {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+
+.modelOption {
+  all: unset;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  transition: background 80ms ease;
+}
+
+.modelOption:hover {
+  background: var(--surface-2);
+}
+
+.modelOptionActive {
+  color: var(--ink-1);
+  font-weight: 500;
+  background: var(--surface-2);
+}
+
 /* Test state icon colors */
 .iconGo {
   color: var(--go);
@@ -182,6 +254,13 @@
   color: var(--no);
   display: flex;
   align-items: center;
+}
+
+/* Test error */
+.testError {
+  color: var(--no);
+  margin-top: 8px;
+  word-break: break-word;
 }
 
 /* Footer */
