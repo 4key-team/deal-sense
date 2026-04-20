@@ -2,7 +2,7 @@
 
 Инструмент для команд, которые регулярно участвуют в тендерах и готовят коммерческие предложения.
 
-**Версия:** 0.3.0
+**Версия:** 0.4.0
 
 ## Проблема
 
@@ -69,7 +69,7 @@ just dev-frontend   # :5173
 ```bash
 just dev              # Backend + Frontend параллельно
 just test             # Backend тесты (164 теста)
-just test-frontend    # Frontend тесты (24 теста)
+just test-frontend    # Frontend тесты (153 теста)
 just test-all         # Все тесты
 just test-cover       # Backend покрытие
 just build            # Сборка
@@ -92,7 +92,7 @@ just docker-up        # Docker Compose
 
 ## Статус
 
-**Версия 0.3.0** — backend production-ready (164 теста, 100% coverage, 0 races). Frontend — визуальная оболочка (95 тестов, 100% coverage), подключение к backend в процессе.
+**Версия 0.4.0** — backend production-ready (164 теста, 100% coverage, 0 races). Frontend — upload → analyze/generate flow, settings persistence, API client, 153 теста, 100% lines/functions.
 
 ## Лицензия
 
