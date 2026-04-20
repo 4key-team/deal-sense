@@ -10,6 +10,7 @@ import (
 type LLMProvider interface {
 	GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error)
 	CheckConnection(ctx context.Context) error
+	ListModels(ctx context.Context) ([]string, error)
 	Name() string
 }
 
@@ -22,4 +23,17 @@ type DocumentParser interface {
 // TemplateEngine fills a DOCX template with key-value parameters.
 type TemplateEngine interface {
 	Fill(ctx context.Context, template []byte, params map[string]string) ([]byte, error)
+}
+
+// LLMProviderConfig holds user-selected LLM settings from the request.
+type LLMProviderConfig struct {
+	Provider string
+	BaseURL  string
+	APIKey   string
+	Model    string
+}
+
+// LLMProviderFactory creates an LLMProvider from a user-supplied config.
+type LLMProviderFactory interface {
+	Create(cfg LLMProviderConfig) (LLMProvider, error)
 }

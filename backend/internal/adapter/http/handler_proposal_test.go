@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -24,16 +23,18 @@ func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]stri
 }
 
 func TestHandleGenerateProposal(t *testing.T) {
-	t.Run("successful generation", func(t *testing.T) {
-		llm := &stubLLM{response: `{"company":"Acme"}`, name: "test"}
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Резюме","status":"ai","tokens":100}],"summary":"Done"}`
+
+	t.Run("successful generation returns JSON", func(t *testing.T) {
+		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("filled document")}
-		h := handler.NewHandler(llm, nil, tmpl)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
 		fw, _ := w.CreateFormFile("template", "offer.docx")
 		fw.Write([]byte("template data"))
-		w.WriteField("params", `{"company":"Acme","project":"Portal"}`)
+		w.WriteField("params", `{"company":"Acme"}`)
 		w.Close()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
@@ -44,17 +45,21 @@ func TestHandleGenerateProposal(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
 		}
-		if ct := rec.Header().Get("Content-Type"); ct != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
-			t.Errorf("Content-Type = %q, want docx", ct)
+		ct := rec.Header().Get("Content-Type")
+		if !strings.Contains(ct, "application/json") {
+			t.Errorf("Content-Type = %q, want JSON", ct)
 		}
-		body, _ := io.ReadAll(rec.Body)
-		if string(body) != "filled document" {
-			t.Errorf("body = %q, want 'filled document'", body)
+		body := rec.Body.String()
+		if !strings.Contains(body, `"summary"`) {
+			t.Errorf("response missing summary: %s", body)
+		}
+		if !strings.Contains(body, `"sections"`) {
+			t.Errorf("response missing sections: %s", body)
 		}
 	})
 
 	t.Run("missing template", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubTemplateEngine{})
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{})
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -72,7 +77,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("invalid params JSON", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubTemplateEngine{})
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{})
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -94,7 +99,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	t.Run("llm error returns 500", func(t *testing.T) {
 		llm := &stubLLM{err: errors.New("llm down"), name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, tmpl)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -113,7 +118,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("invalid multipart", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubTemplateEngine{})
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{})
 		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", strings.NewReader("bad"))
 		req.Header.Set("Content-Type", "multipart/form-data; boundary=bad")
 		rec := httptest.NewRecorder()

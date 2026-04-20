@@ -28,34 +28,48 @@ func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, er
 	return s.response, s.err
 }
 
-func (s *stubLLM) CheckConnection(_ context.Context) error { return s.err }
-func (s *stubLLM) Name() string                            { return s.name }
+func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
+func (s *stubLLM) ListModels(_ context.Context) ([]string, error)     { return nil, nil }
+func (s *stubLLM) Name() string                                       { return s.name }
 
 func TestGenerateProposal_Execute(t *testing.T) {
+	llmResp := `{"params":{"client_name":"Acme","summary":"Great project"},"sections":[{"title":"Резюме","status":"ai","tokens":120}],"summary":"КП сгенерировано"}`
+
 	tests := []struct {
 		name       string
 		tmplName   string
 		tmplData   []byte
+		context    []usecase.FileInput
 		params     map[string]string
 		llmResp    string
 		llmErr     error
 		tmplResult []byte
 		tmplErr    error
-		wantErr    error
+		wantErr    bool
+		wantSecs   int
 	}{
 		{
 			name:       "successful generation",
-			tmplName:   "offer.docx",
+			tmplName:   "proposal.docx",
 			tmplData:   []byte("template"),
 			params:     map[string]string{"company": "Acme"},
-			llmResp:    `{"company_description": "Best company"}`,
+			llmResp:    llmResp,
 			tmplResult: []byte("filled document"),
+			wantSecs:   1,
 		},
 		{
-			name:    "empty template",
-			tmplName: "offer.docx",
+			name:     "empty template",
+			tmplName: "proposal.docx",
 			tmplData: nil,
-			wantErr: domain.ErrEmptyTemplate,
+			params:   map[string]string{"company": "Acme"},
+			wantErr:  true,
+		},
+		{
+			name:     "empty template name",
+			tmplName: "",
+			tmplData: []byte("template"),
+			params:   map[string]string{"company": "Acme"},
+			wantErr:  true,
 		},
 		{
 			name:     "llm failure",
@@ -63,35 +77,57 @@ func TestGenerateProposal_Execute(t *testing.T) {
 			tmplData: []byte("template"),
 			params:   map[string]string{"company": "Acme"},
 			llmErr:   errors.New("llm unavailable"),
-			wantErr:  errors.New("llm unavailable"),
+			wantErr:  true,
 		},
 		{
 			name:       "template engine failure",
 			tmplName:   "offer.docx",
 			tmplData:   []byte("template"),
 			params:     map[string]string{"company": "Acme"},
-			llmResp:    `{"field": "value"}`,
+			llmResp:    llmResp,
 			tmplResult: nil,
 			tmplErr:    errors.New("template error"),
-			wantErr:    errors.New("template error"),
+			wantErr:    true,
+		},
+		{
+			name:       "invalid llm json",
+			tmplName:   "offer.docx",
+			tmplData:   []byte("template"),
+			llmResp:    "not json at all",
+			tmplResult: []byte("filled"),
+			wantErr:    true,
+		},
+		{
+			name:       "with context files",
+			tmplName:   "proposal.docx",
+			tmplData:   []byte("template"),
+			context:    []usecase.FileInput{{Name: "brief.pdf", Data: []byte("brief"), Type: domain.FileTypePDF}},
+			llmResp:    llmResp,
+			tmplResult: []byte("filled"),
+			wantSecs:   1,
+		},
+		{
+			name:       "invalid section status defaults to ai",
+			tmplName:   "proposal.docx",
+			tmplData:   []byte("template"),
+			llmResp:    `{"params":{"x":"y"},"sections":[{"title":"Sec","status":"unknown","tokens":50}],"summary":"ok"}`,
+			tmplResult: []byte("filled"),
+			wantSecs:   1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			llm := &stubLLM{response: tt.llmResp, err: tt.llmErr, name: "test"}
+			parser := &stubParser{content: "parsed text"}
 			tmplEng := &stubTemplateEngine{result: tt.tmplResult, err: tt.tmplErr}
 
-			uc := usecase.NewGenerateProposal(llm, tmplEng)
-			result, err := uc.Execute(t.Context(), tt.tmplName, tt.tmplData, tt.params)
+			uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "test prompt")
+			result, err := uc.Execute(t.Context(), tt.tmplName, tt.tmplData, tt.context, tt.params)
 
-			if tt.wantErr != nil {
+			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
-				}
-				if tt.wantErr.Error() != err.Error() && !errors.Is(err, tt.wantErr) {
-					// Allow wrapped errors
-					return
 				}
 				return
 			}
@@ -102,7 +138,13 @@ func TestGenerateProposal_Execute(t *testing.T) {
 				t.Fatal("expected non-nil result")
 			}
 			if result.Result() == nil {
-				t.Error("expected result to be set")
+				t.Error("expected result bytes to be set")
+			}
+			if len(result.Sections()) != tt.wantSecs {
+				t.Errorf("sections = %d, want %d", len(result.Sections()), tt.wantSecs)
+			}
+			if tt.wantSecs > 0 && result.Summary() == "" {
+				t.Error("expected non-empty summary")
 			}
 		})
 	}

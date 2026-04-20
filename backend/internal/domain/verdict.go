@@ -1,7 +1,5 @@
 package domain
 
-import "errors"
-
 // Verdict represents a Go/No-Go decision for a tender.
 type Verdict string
 
@@ -17,6 +15,6 @@ func ParseVerdict(s string) (Verdict, error) {
 	case "no-go":
 		return VerdictNoGo, nil
 	default:
-		return "", errors.New("invalid verdict: must be 'go' or 'no-go'")
+		return "", ErrInvalidVerdict
 	}
 }

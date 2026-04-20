@@ -1,7 +1,5 @@
 package domain
 
-import "errors"
-
 // Risk represents a risk level for a tender.
 type Risk string
 
@@ -20,6 +18,6 @@ func ParseRisk(s string) (Risk, error) {
 	case "high":
 		return RiskHigh, nil
 	default:
-		return "", errors.New("invalid risk: must be 'low', 'medium', or 'high'")
+		return "", ErrInvalidRisk
 	}
 }

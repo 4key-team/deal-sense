@@ -2,44 +2,82 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
 )
 
 type GenerateProposal struct {
-	llm      LLMProvider
-	template TemplateEngine
+	llm          LLMProvider
+	parser       DocumentParser
+	template     TemplateEngine
+	systemPrompt string
 }
 
-func NewGenerateProposal(llm LLMProvider, template TemplateEngine) *GenerateProposal {
-	return &GenerateProposal{llm: llm, template: template}
+func NewGenerateProposal(llm LLMProvider, parser DocumentParser, template TemplateEngine, systemPrompt string) *GenerateProposal {
+	return &GenerateProposal{llm: llm, parser: parser, template: template, systemPrompt: systemPrompt}
+}
+
+type proposalLLMResponse struct {
+	Params   map[string]string      `json:"params"`
+	Sections []proposalLLMSection   `json:"sections"`
+	Summary  string                 `json:"summary"`
+}
+
+type proposalLLMSection struct {
+	Title  string `json:"title"`
+	Status string `json:"status"`
+	Tokens int    `json:"tokens"`
 }
 
 func (uc *GenerateProposal) Execute(
 	ctx context.Context,
 	templateName string,
 	templateData []byte,
-	params map[string]string,
+	contextFiles []FileInput,
+	userParams map[string]string,
 ) (*domain.Proposal, error) {
-	proposal, err := domain.NewProposal(templateName, templateData, params)
+	proposal, err := domain.NewProposal(templateName, templateData, userParams)
 	if err != nil {
 		return nil, err
 	}
 
-	systemPrompt := "You are a commercial proposal generator. Given template parameters, generate appropriate values for each placeholder in JSON format."
-	userPrompt := fmt.Sprintf("Template: %s\nParameters: %v\nGenerate values for all placeholders.", templateName, params)
+	// Parse context files
+	var contextText strings.Builder
+	for _, f := range contextFiles {
+		text, err := uc.parser.Parse(ctx, f.Name, f.Data)
+		if err != nil {
+			continue // skip unparseable context files
+		}
+		fmt.Fprintf(&contextText, "=== %s ===\n%s\n\n", f.Name, text)
+	}
 
-	llmResponse, err := uc.llm.GenerateCompletion(ctx, systemPrompt, userPrompt)
+	// Read template text for LLM
+	templateText, _ := uc.parser.Parse(ctx, templateName, templateData)
+
+	userPrompt := fmt.Sprintf(
+		"Template placeholders from file %s:\n%s\n\nContext documents:\n%s\n\nUser parameters: %v\n\nGenerate values for ALL placeholders based on the context.",
+		templateName, templateText, contextText.String(), userParams,
+	)
+
+	llmResp, err := uc.llm.GenerateCompletion(ctx, uc.systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("llm completion: %w", err)
 	}
 
-	// Merge LLM-generated values with user params
+	cleaned := extractJSON(llmResp)
+	var resp proposalLLMResponse
+	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
+		return nil, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
+	}
+
+	// Merge: user params override LLM params
 	mergedParams := make(map[string]string)
-	maps.Copy(mergedParams, params)
-	mergedParams["_llm_response"] = llmResponse
+	maps.Copy(mergedParams, resp.Params)
+	maps.Copy(mergedParams, userParams)
 
 	filled, err := uc.template.Fill(ctx, templateData, mergedParams)
 	if err != nil {
@@ -47,5 +85,17 @@ func (uc *GenerateProposal) Execute(
 	}
 
 	proposal.SetResult(filled)
+
+	// Map sections
+	sections := make([]domain.ProposalSection, 0, len(resp.Sections))
+	for _, s := range resp.Sections {
+		st, err := domain.ParseSectionStatus(s.Status)
+		if err != nil {
+			st = domain.SectionAI
+		}
+		sections = append(sections, domain.NewProposalSection(s.Title, st, s.Tokens))
+	}
+	proposal.SetSections(sections, resp.Summary)
+
 	return proposal, nil
 }

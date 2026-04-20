@@ -7,6 +7,7 @@ func NewRouter(h *Handler) *http.ServeMux {
 
 	mux.HandleFunc("POST /api/llm/check", h.HandleCheckConnection)
 	mux.HandleFunc("GET /api/llm/providers", h.HandleListProviders)
+	mux.HandleFunc("GET /api/llm/models", h.HandleListModels)
 	mux.HandleFunc("POST /api/tender/analyze", h.HandleAnalyzeTender)
 	mux.HandleFunc("POST /api/proposal/generate", h.HandleGenerateProposal)
 

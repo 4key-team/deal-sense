@@ -112,7 +112,7 @@ func TestAnalyzeTender_Execute(t *testing.T) {
 			parser := &stubParser{content: tt.parseText, err: tt.parseErr}
 			llm := &stubLLM{response: tt.llmResp, err: tt.llmErr, name: "test"}
 
-			uc := usecase.NewAnalyzeTender(llm, parser)
+			uc := usecase.NewAnalyzeTender(llm, parser, "test prompt")
 			result, err := uc.Execute(t.Context(), tt.files, tt.profile)
 
 			if tt.wantErr {

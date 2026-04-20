@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -20,8 +21,16 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 
 	companyProfile := strings.TrimSpace(r.FormValue("company_profile"))
 	if companyProfile == "" {
-		writeError(w, http.StatusBadRequest, "company_profile is required")
-		return
+		companyProfile = "Software development company"
+	}
+
+	langCode := r.FormValue("lang")
+	if langCode == "" {
+		langCode = "ru"
+	}
+	langName := "Russian"
+	if langCode == "en" {
+		langName = "English"
 	}
 
 	files := r.MultipartForm.File["files"]
@@ -39,9 +48,17 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		f, _ := fh.Open()
-		data, _ := io.ReadAll(f)
+		f, err := fh.Open()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "cannot read file: "+fh.Filename)
+			return
+		}
+		data, err := io.ReadAll(f)
 		f.Close()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "cannot read file: "+fh.Filename)
+			return
+		}
 
 		inputs = append(inputs, usecase.FileInput{
 			Name: fh.Filename,
@@ -50,17 +67,34 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	uc := usecase.NewAnalyzeTender(h.llm, h.parser)
+	uc := usecase.NewAnalyzeTender(h.resolveLLM(r), h.parser, llm.TenderAnalysisPrompt(langName))
 	result, err := uc.Execute(r.Context(), inputs, companyProfile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	pros := make([]map[string]string, len(result.Pros()))
+	for i, p := range result.Pros() {
+		pros[i] = map[string]string{"title": p.Title(), "desc": p.Desc()}
+	}
+	cons := make([]map[string]string, len(result.Cons()))
+	for i, c := range result.Cons() {
+		cons[i] = map[string]string{"title": c.Title(), "desc": c.Desc()}
+	}
+	reqs := make([]map[string]string, len(result.Requirements()))
+	for i, r := range result.Requirements() {
+		reqs[i] = map[string]string{"label": r.Label(), "status": string(r.Status())}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"verdict": string(result.Verdict()),
-		"risk":    string(result.Risk()),
-		"score":   result.Score().Value(),
-		"summary": result.Summary(),
+		"verdict":      string(result.Verdict()),
+		"risk":         string(result.Risk()),
+		"score":        result.Score().Value(),
+		"summary":      result.Summary(),
+		"pros":         pros,
+		"cons":         cons,
+		"requirements": reqs,
+		"effort":       result.Effort(),
 	})
 }

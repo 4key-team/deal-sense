@@ -9,13 +9,32 @@ import (
 
 // Handler holds use cases and exposes HTTP endpoints.
 type Handler struct {
-	llm      usecase.LLMProvider
-	parser   usecase.DocumentParser
-	template usecase.TemplateEngine
+	llm        usecase.LLMProvider
+	llmFactory usecase.LLMProviderFactory
+	parser     usecase.DocumentParser
+	template   usecase.TemplateEngine
 }
 
-func NewHandler(llm usecase.LLMProvider, parser usecase.DocumentParser, template usecase.TemplateEngine) *Handler {
-	return &Handler{llm: llm, parser: parser, template: template}
+func NewHandler(llm usecase.LLMProvider, factory usecase.LLMProviderFactory, parser usecase.DocumentParser, template usecase.TemplateEngine) *Handler {
+	return &Handler{llm: llm, llmFactory: factory, parser: parser, template: template}
+}
+
+// resolveLLM returns an LLMProvider from request headers, or the default one.
+func (h *Handler) resolveLLM(r *http.Request) usecase.LLMProvider {
+	provider := r.Header.Get("X-LLM-Provider")
+	if provider == "" || h.llmFactory == nil {
+		return h.llm
+	}
+	p, err := h.llmFactory.Create(usecase.LLMProviderConfig{
+		Provider: provider,
+		BaseURL:  r.Header.Get("X-LLM-URL"),
+		APIKey:   r.Header.Get("X-LLM-Key"),
+		Model:    r.Header.Get("X-LLM-Model"),
+	})
+	if err != nil {
+		return h.llm
+	}
+	return p
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

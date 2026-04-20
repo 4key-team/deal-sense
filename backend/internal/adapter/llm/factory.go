@@ -14,6 +14,18 @@ type ProviderConfig struct {
 	Model    string
 }
 
+// Factory implements usecase.LLMProviderFactory.
+type Factory struct{}
+
+func (Factory) Create(cfg usecase.LLMProviderConfig) (usecase.LLMProvider, error) {
+	return NewLLMProvider(ProviderConfig{
+		Provider: cfg.Provider,
+		BaseURL:  cfg.BaseURL,
+		APIKey:   cfg.APIKey,
+		Model:    cfg.Model,
+	})
+}
+
 // NewLLMProvider creates an LLMProvider based on the provider name.
 func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
 	switch cfg.Provider {

@@ -106,3 +106,7 @@ func (p *Anthropic) CheckConnection(ctx context.Context) error {
 	_, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
 	return err
 }
+
+func (p *Anthropic) ListModels(_ context.Context) ([]string, error) {
+	return nil, nil
+}

@@ -7,12 +7,13 @@ import (
 )
 
 func (h *Handler) HandleCheckConnection(w http.ResponseWriter, r *http.Request) {
-	uc := usecase.NewCheckLLMConnection(h.llm)
+	llm := h.resolveLLM(r)
+	uc := usecase.NewCheckLLMConnection(llm)
 	result, err := uc.Execute(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"ok":       false,
-			"provider": h.llm.Name(),
+			"provider": llm.Name(),
 			"error":    err.Error(),
 		})
 		return

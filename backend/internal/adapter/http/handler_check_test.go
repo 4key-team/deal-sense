@@ -20,8 +20,9 @@ type stubLLM struct {
 func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, error) {
 	return s.response, s.err
 }
-func (s *stubLLM) CheckConnection(_ context.Context) error { return s.err }
-func (s *stubLLM) Name() string                            { return s.name }
+func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
+func (s *stubLLM) ListModels(_ context.Context) ([]string, error)     { return nil, nil }
+func (s *stubLLM) Name() string                                       { return s.name }
 
 func TestHandleCheckConnection(t *testing.T) {
 	tests := []struct {
@@ -49,7 +50,7 @@ func TestHandleCheckConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			llm := &stubLLM{err: tt.llmErr, name: tt.llmName}
-			h := handler.NewHandler(llm, nil, nil)
+			h := handler.NewHandler(llm, nil, nil, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/llm/check", nil)
 			rec := httptest.NewRecorder()

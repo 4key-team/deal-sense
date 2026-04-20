@@ -107,3 +107,40 @@ func (p *OpenAICompatible) CheckConnection(ctx context.Context) error {
 	_, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
 	return err
 }
+
+type modelsResponse struct {
+	Data []modelEntry `json:"data"`
+}
+
+type modelEntry struct {
+	ID string `json:"id"`
+}
+
+func (p *OpenAICompatible) ListModels(ctx context.Context) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.config.BaseURL+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list models: status %d", resp.StatusCode)
+	}
+
+	var result modelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse models: %w", err)
+	}
+
+	models := make([]string, len(result.Data))
+	for i, m := range result.Data {
+		models[i] = m.ID
+	}
+	return models, nil
+}

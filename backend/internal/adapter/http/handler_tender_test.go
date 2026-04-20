@@ -54,7 +54,7 @@ func TestHandleAnalyzeTender(t *testing.T) {
 			name:     "test",
 		}
 		parser := &stubParser{content: "tender requirements"}
-		h := handler.NewHandler(llm, parser, nil)
+		h := handler.NewHandler(llm, nil, parser, nil)
 
 		req := makeMultipartRequest(t,
 			map[string][]byte{"spec.pdf": []byte("pdf data")},
@@ -75,7 +75,7 @@ func TestHandleAnalyzeTender(t *testing.T) {
 	})
 
 	t.Run("missing files", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, &stubParser{}, nil)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -92,8 +92,9 @@ func TestHandleAnalyzeTender(t *testing.T) {
 		}
 	})
 
-	t.Run("missing company profile", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, &stubParser{}, nil)
+	t.Run("empty company profile uses default", func(t *testing.T) {
+		llmResp := `{"verdict":"go","risk":"low","score":75,"summary":"ok","pros":[],"cons":[],"requirements":[],"effort":"~10h"}`
+		h := handler.NewHandler(&stubLLM{name: "test", response: llmResp}, nil, &stubParser{content: "text"}, nil)
 
 		req := makeMultipartRequest(t,
 			map[string][]byte{"spec.pdf": []byte("pdf data")},
@@ -102,13 +103,13 @@ func TestHandleAnalyzeTender(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.HandleAnalyzeTender(rec, req)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
 	})
 
 	t.Run("unsupported file type", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, &stubParser{content: "text"}, nil)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{content: "text"}, nil)
 
 		req := makeMultipartRequest(t,
 			map[string][]byte{"spec.txt": []byte("data")},
@@ -125,7 +126,7 @@ func TestHandleAnalyzeTender(t *testing.T) {
 	t.Run("llm error returns 500", func(t *testing.T) {
 		llm := &stubLLM{response: "not json", name: "test"}
 		p := &stubParser{content: "requirements"}
-		h := handler.NewHandler(llm, p, nil)
+		h := handler.NewHandler(llm, nil, p, nil)
 
 		req := makeMultipartRequest(t,
 			map[string][]byte{"spec.pdf": []byte("data")},
@@ -140,7 +141,7 @@ func TestHandleAnalyzeTender(t *testing.T) {
 	})
 
 	t.Run("invalid multipart", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, &stubParser{}, nil)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, nil)
 		req := httptest.NewRequest(http.MethodPost, "/api/tender/analyze", strings.NewReader("not multipart"))
 		req.Header.Set("Content-Type", "multipart/form-data; boundary=bad")
 		rec := httptest.NewRecorder()
