@@ -21,6 +21,12 @@ const MOCK_RESULT: ProposalResultType = {
     { title: "Стоимость", status: "filled", tokens: 0 },
     { title: "Команда", status: "review", tokens: 120 },
   ],
+  meta: { client: "Северные технологии", project: "HR-портал", price: "8.5 млн", timeline: "5 месяцев" },
+  log: [
+    { time: "14:31:04", msg: "прочитан шаблон · 13 плейсхолдеров" },
+    { time: "14:31:06", msg: "индексирован контекст · 1 файл" },
+    { time: "14:31:18", msg: "сгенерированы секции · 4 из 4" },
+  ],
   docx: "ZG9jeA==",
 };
 
@@ -120,9 +126,9 @@ describe("ProposalResult result phase (RU)", () => {
     expect(screen.getByText("250 токенов")).toBeInTheDocument();
   });
 
-  it("shows summary", async () => {
+  it("shows summary in hero subtitle", async () => {
     await goToResult();
-    expect(screen.getByText("КП сгенерировано на основе контекста")).toBeInTheDocument();
+    expect(screen.getAllByText(/HR-портал/).length).toBeGreaterThan(0);
   });
 
   it("shows uploaded files", async () => {
@@ -130,9 +136,21 @@ describe("ProposalResult result phase (RU)", () => {
     expect(screen.getAllByText("template.docx").length).toBeGreaterThan(0);
   });
 
-  it("shows download button", async () => {
+  it("shows download button in hero", async () => {
     await goToResult();
     expect(screen.getByRole("button", { name: /Скачать .docx/i })).toBeInTheDocument();
+  });
+
+  it("shows meta grid", async () => {
+    await goToResult();
+    expect(screen.getByText("Северные технологии")).toBeInTheDocument();
+    expect(screen.getByText("HR-портал")).toBeInTheDocument();
+    expect(screen.getByText("8.5 млн")).toBeInTheDocument();
+  });
+
+  it("shows changelog", async () => {
+    await goToResult();
+    expect(screen.getByText(/прочитан шаблон/)).toBeInTheDocument();
   });
 
   it("shows stats sidebar", async () => {
