@@ -17,6 +17,7 @@ export interface Copy {
     generating: string;
     error: string;
     retry: string;
+    new_proposal: string;
     ready_chip: string;
     meta: { client: string; project: string; price: string; term: string; created: string };
     sections: string;
@@ -46,6 +47,7 @@ export interface Copy {
     analyzing: string;
     error: string;
     retry: string;
+    new_analysis: string;
     fit: string;
     verdict_go: string;
     verdict_no: string;

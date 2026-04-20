@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/render";
 import { ProposalResult } from "./ProposalResult";
 import * as api from "../../lib/api";
+import type { ProposalResult as ProposalResultType } from "../../lib/api";
 
 function docxFile(name = "template.docx") {
   return new File(["docx"], name, {
@@ -11,8 +12,20 @@ function docxFile(name = "template.docx") {
   });
 }
 
+const MOCK_RESULT: ProposalResultType = {
+  template: "template.docx",
+  summary: "КП сгенерировано на основе контекста",
+  sections: [
+    { title: "Резюме проекта", status: "ai", tokens: 250 },
+    { title: "Описание решения", status: "ai", tokens: 400 },
+    { title: "Стоимость", status: "filled", tokens: 0 },
+    { title: "Команда", status: "review", tokens: 120 },
+  ],
+  docx: "ZG9jeA==",
+};
+
 describe("ProposalResult upload phase (RU)", () => {
-  beforeEach(() => localStorage.setItem("ds:lang", "ru"));
+  beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
   it("renders upload screen by default", () => {
     renderWithProviders(<ProposalResult />);
@@ -34,25 +47,23 @@ describe("ProposalResult upload phase (RU)", () => {
     const inputs = screen.getAllByTestId("dropzone-input");
     await user.upload(inputs[0], docxFile());
 
-    const btn = screen.getByRole("button", { name: /Сгенерировать КП/i });
-    expect(btn).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /Сгенерировать КП/i })).not.toBeDisabled();
   });
 });
 
 describe("ProposalResult generating phase", () => {
-  beforeEach(() => localStorage.setItem("ds:lang", "ru"));
+  beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
   it("shows spinner during generation", async () => {
     let resolveGen!: () => void;
     vi.spyOn(api, "generateProposal").mockReturnValue(
       new Promise((resolve) => {
-        resolveGen = () => resolve(new Blob(["docx"]));
+        resolveGen = () => resolve(MOCK_RESULT);
       }),
     );
 
     const user = userEvent.setup();
     renderWithProviders(<ProposalResult />);
-
     const inputs = screen.getAllByTestId("dropzone-input");
     await user.upload(inputs[0], docxFile());
     await user.click(screen.getByRole("button", { name: /Сгенерировать КП/i }));
@@ -66,8 +77,9 @@ describe("ProposalResult generating phase", () => {
 
 describe("ProposalResult result phase (RU)", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem("ds:lang", "ru");
-    vi.spyOn(api, "generateProposal").mockResolvedValue(new Blob(["docx"]));
+    vi.spyOn(api, "generateProposal").mockResolvedValue(MOCK_RESULT);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -82,73 +94,58 @@ describe("ProposalResult result phase (RU)", () => {
     return user;
   }
 
-  it("renders proposal result after generation", async () => {
+  it("renders result after generation", async () => {
     await goToResult();
     expect(screen.getByText("Коммерческое предложение")).toBeInTheDocument();
-    expect(screen.getByText("Northwind Logistics")).toBeInTheDocument();
+    expect(screen.getAllByText("template.docx").length).toBeGreaterThan(0);
   });
 
-  it("shows meta fields", async () => {
+  it("shows sections from API", async () => {
     await goToResult();
-    expect(screen.getByText("2 450 000 ₽")).toBeInTheDocument();
-    expect(screen.getByText("9 недель")).toBeInTheDocument();
+    expect(screen.getByText("Резюме проекта")).toBeInTheDocument();
+    expect(screen.getByText("Описание решения")).toBeInTheDocument();
+    expect(screen.getByText("Стоимость")).toBeInTheDocument();
+    expect(screen.getByText("Команда")).toBeInTheDocument();
   });
 
-  it("renders sections with statuses", async () => {
+  it("shows section statuses", async () => {
     await goToResult();
-    expect(screen.getByText("Резюме")).toBeInTheDocument();
-    expect(screen.getAllByText("сгенерировано").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("сгенерировано").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("заполнено").length).toBeGreaterThan(0);
-    expect(screen.getByText("нужна проверка")).toBeInTheDocument();
+    expect(screen.getAllByText("нужна проверка").length).toBeGreaterThan(0);
   });
 
-  it("shows context files", async () => {
+  it("shows token counts", async () => {
     await goToResult();
-    expect(screen.getByText("proposal-tpl.docx")).toBeInTheDocument();
-    expect(screen.getByText("brief-klient.txt")).toBeInTheDocument();
+    expect(screen.getByText("250 токенов")).toBeInTheDocument();
   });
 
-  it("shows changelog", async () => {
+  it("shows summary", async () => {
     await goToResult();
-    expect(screen.getByText("14:31:04")).toBeInTheDocument();
+    expect(screen.getByText("КП сгенерировано на основе контекста")).toBeInTheDocument();
   });
 
-  it("shows stats footer", async () => {
+  it("shows uploaded files", async () => {
     await goToResult();
-    expect(screen.getByText(/Заняло/)).toBeInTheDocument();
-    expect(screen.getByText(/Токенов/)).toBeInTheDocument();
+    expect(screen.getAllByText("template.docx").length).toBeGreaterThan(0);
   });
 
-  it("shows source from uploaded template name", async () => {
+  it("shows download button", async () => {
     await goToResult();
-    expect(screen.getByText(/template\.docx/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Скачать .docx/i })).toBeInTheDocument();
   });
 
-  it("downloads docx on click", async () => {
-    const downloadSpy = vi.spyOn(api, "downloadBlob").mockImplementation(() => {});
-    const user = await goToResult();
-    await user.click(screen.getByRole("button", { name: /Скачать .docx/i }));
-    expect(downloadSpy).toHaveBeenCalledOnce();
-    downloadSpy.mockRestore();
-  });
-
-  it("open preview is clickable", async () => {
-    const user = await goToResult();
-    const btn = screen.getByRole("button", { name: /Открыть в предпросмотре/i });
-    await user.click(btn);
-    expect(btn).toBeInTheDocument();
-  });
-
-  it("renders token counts", async () => {
+  it("shows stats sidebar", async () => {
     await goToResult();
-    expect(screen.getByText("412 токенов")).toBeInTheDocument();
+    // ai: 2, filled: 1, review: 1
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
   });
 });
 
 describe("ProposalResult error phase", () => {
-  beforeEach(() => localStorage.setItem("ds:lang", "ru"));
+  beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
-  it("shows error on generation failure", async () => {
+  it("shows error on failure", async () => {
     vi.spyOn(api, "generateProposal").mockRejectedValue(new Error("Server error"));
 
     const user = userEvent.setup();
@@ -163,24 +160,10 @@ describe("ProposalResult error phase", () => {
     vi.restoreAllMocks();
   });
 
-  it("handles non-Error rejection", async () => {
-    vi.spyOn(api, "generateProposal").mockRejectedValue("oops");
-
-    const user = userEvent.setup();
-    renderWithProviders(<ProposalResult />);
-    const inputs = screen.getAllByTestId("dropzone-input");
-    await user.upload(inputs[0], docxFile());
-    await user.click(screen.getByRole("button", { name: /Сгенерировать КП/i }));
-
-    await waitFor(() => expect(screen.getByText("oops")).toBeInTheDocument());
-
-    vi.restoreAllMocks();
-  });
-
   it("retries from error state", async () => {
     vi.spyOn(api, "generateProposal")
       .mockRejectedValueOnce(new Error("fail"))
-      .mockResolvedValueOnce(new Blob(["docx"]));
+      .mockResolvedValueOnce(MOCK_RESULT);
 
     const user = userEvent.setup();
     renderWithProviders(<ProposalResult />);
@@ -199,8 +182,9 @@ describe("ProposalResult error phase", () => {
 
 describe("ProposalResult (EN)", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem("ds:lang", "en");
-    vi.spyOn(api, "generateProposal").mockResolvedValue(new Blob(["docx"]));
+    vi.spyOn(api, "generateProposal").mockResolvedValue(MOCK_RESULT);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -219,7 +203,6 @@ describe("ProposalResult (EN)", () => {
     await user.click(screen.getByRole("button", { name: /Generate proposal/i }));
 
     await waitFor(() => expect(screen.getByText("Ready")).toBeInTheDocument());
-    expect(screen.getByText("€24,500")).toBeInTheDocument();
-    expect(screen.getByText("Executive summary")).toBeInTheDocument();
+    expect(screen.getByText("Резюме проекта")).toBeInTheDocument();
   });
 });

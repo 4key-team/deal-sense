@@ -8,49 +8,46 @@ import { Spinner } from "../../ui/Spinner";
 import { Dropzone } from "../../ui/Dropzone";
 import { CheckIcon, DocIcon, DownloadIcon, SparkIcon } from "../../icons/Icons";
 import { MiniDonut } from "../../components/charts";
-import { getSections, getContext, getMeta, getLog } from "../../mocks/proposal";
-import type { ProposalSection } from "../../mocks/proposal";
 import { generateProposal, downloadBlob } from "../../lib/api";
+import { getItem, setItem } from "../../lib/storage";
+import type { ProposalResult as ProposalResultType, ProposalSection } from "../../lib/api";
 import styles from "./ProposalResult.module.css";
 
 type Phase = "upload" | "generating" | "result" | "error";
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ProposalResult() {
   const { lang, t } = useI18n();
-  const [phase, setPhase] = useState<Phase>("upload");
+  const cachedResult = getItem<ProposalResultType | null>("last-proposal-result", null);
+  const cachedFiles = getItem<{ name: string; size: number }[]>("last-proposal-files", []);
+  const [phase, setPhase] = useState<Phase>(cachedResult ? "result" : "upload");
   const [template, setTemplate] = useState<File[]>([]);
   const [contextFiles, setContextFiles] = useState<File[]>([]);
+  const [fileInfos, setFileInfos] = useState(cachedFiles);
   const [errorMsg, setErrorMsg] = useState("");
-  const [downloading, setDownloading] = useState(false);
+  const [result, setResult] = useState<ProposalResultType | null>(cachedResult);
 
   async function handleGenerate() {
     if (template.length === 0) return;
     setPhase("generating");
     setErrorMsg("");
     try {
-      await generateProposal(template[0]);
+      const res = await generateProposal(template[0], contextFiles, lang);
+      setResult(res);
+      const infos = [...template, ...contextFiles].map((f) => ({ name: f.name, size: f.size }));
+      setFileInfos(infos);
+      setItem("last-proposal-result", res);
+      setItem("last-proposal-files", infos);
       setPhase("result");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setPhase("error");
     }
-  }
-
-  async function handleDownload() {
-    if (template.length === 0) return;
-    setDownloading(true);
-    try {
-      const blob = await generateProposal(template[0]);
-      downloadBlob(blob, "proposal.docx");
-    } catch {
-      // TODO: toast
-    } finally {
-      setDownloading(false);
-    }
-  }
-
-  function handleOpenPreview() {
-    // TODO: preview modal
   }
 
   // --- Upload phase ---
@@ -111,244 +108,133 @@ export function ProposalResult() {
   }
 
   // --- Result phase ---
-  const sections = getSections(lang);
-  const context = getContext(lang, {
-    context_brief: t.kp.context_brief,
-    context_cases: t.kp.context_cases,
-    context_prices: t.kp.context_prices,
-  });
-  const meta = getMeta(lang);
-  const log = getLog(lang);
+  if (!result) return null;
+
+  const sections = result.sections ?? [];
+  const aiCount = sections.filter((s) => s.status === "ai").length;
+  const filledCount = sections.filter((s) => s.status === "filled").length;
+  const reviewCount = sections.filter((s) => s.status === "review").length;
+
+  function statusChip(s: ProposalSection) {
+    if (s.status === "ai") {
+      return <Chip tone="brand" icon={<SparkIcon />}>{t.kp.section_ai}</Chip>;
+    }
+    if (s.status === "review") {
+      return <Chip tone="warn">{t.kp.section_review}</Chip>;
+    }
+    return <Chip tone="neutral" icon={<CheckIcon />}>{t.kp.section_filled}</Chip>;
+  }
 
   return (
     <div className={`screen-enter ${styles.layout}`}>
-      {/* ── Left column ── */}
+      {/* Left column */}
       <div className={styles.leftCol}>
         {/* Hero card */}
-        <Card padding={32} style={{ position: "relative", overflow: "hidden" }}>
-          <div className={styles.heroBg} aria-hidden="true" />
-
-          {/* Top row */}
+        <Card padding={32}>
           <div className={styles.heroTop}>
-            <div className={styles.heroTopLeft}>
-              <Chip tone="go" strong icon={<CheckIcon />}>
-                {t.kp.ready_chip}
-              </Chip>
-              <span className={`t-small ${styles.sourceLabel}`}>
-                {lang === "ru" ? "Источник" : "Source"}: {template[0]?.name ?? "proposal-tpl.docx"}
-              </span>
-            </div>
-            <div className={styles.heroTopRight}>
-              <Button variant="ghost" icon={<DocIcon />} onClick={handleOpenPreview}>{t.kp.open}</Button>
-              <Button variant="brand" icon={downloading ? <Spinner /> : <DownloadIcon />} onClick={handleDownload} disabled={downloading}>{t.kp.download}</Button>
-            </div>
+            <Chip tone="go" strong icon={<CheckIcon />}>
+              {t.kp.ready_chip}
+            </Chip>
+            <span className={`t-small muted`}>
+              {result.template}
+            </span>
           </div>
-
-          {/* Title */}
           <h1 className={styles.heroTitle}>{t.kp.title}</h1>
-
-          {/* Subtitle */}
-          <p className={`t-body ${styles.heroSubtitle}`}>
-            {meta.project} · {meta.client}
-          </p>
-
-          {/* Meta grid */}
-          <div className={styles.metaGrid}>
-            {(
-              [
-                [t.kp.meta.client, meta.client],
-                [t.kp.meta.project, meta.project],
-                [t.kp.meta.price, meta.price],
-                [t.kp.meta.term, meta.term],
-                [t.kp.meta.created, meta.created],
-              ] as [string, string][]
-            ).map(([label, value]) => (
-              <div key={label} className={styles.metaCell}>
-                <span className={`t-micro ${styles.metaCellLabel}`}>{label}</span>
-                <span className={`t-small ${styles.metaCellValue}`}>{value}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Footer stats */}
-          <div className={styles.heroStats}>
-            <span className="t-mono dim">
-              {lang === "ru" ? "Заняло" : "Took"}: 1m 04s
-            </span>
-            <span className="t-mono dim">
-              {lang === "ru" ? "Токенов" : "Tokens"}: 12,840
-            </span>
-            <span className="t-mono dim">
-              18 {lang === "ru" ? "стр." : "pages"}
-            </span>
-          </div>
+          <p className={`t-body ${styles.heroSubtitle}`}>{t.kp.subtitle_result}</p>
+          <p className="t-small muted">{result.summary}</p>
         </Card>
 
         {/* Sections list */}
-        <div className={styles.sectionsBlock}>
-          <SectionLabel
-            right={
-              <Button variant="ghost" size="sm" icon={<SparkIcon />}>
-                {t.kp.re_generate}
-              </Button>
-            }
-          >
+        <div>
+          <SectionLabel>
             {t.kp.sections} · {sections.length}
           </SectionLabel>
-
           <div className={styles.sectionsList}>
             {sections.map((section, idx) => (
-              <SectionRow
-                key={section.id}
-                section={section}
-                index={idx}
-                regenerateLabel={t.kp.regenerate_section}
-                sectionAiLabel={t.kp.section_ai}
-                sectionReviewLabel={t.kp.section_review}
-                sectionFilledLabel={t.kp.section_filled}
-                lang={lang}
-              />
+              <Card key={idx} padding={16}>
+                <div className={styles.sectionRow}>
+                  <span className={`t-mono ${styles.sectionIdx}`}>
+                    {String(idx + 1).padStart(2, "0")}
+                  </span>
+                  <div className={styles.sectionInfo}>
+                    <span className={`t-body ${styles.sectionTitle}`}>{section.title}</span>
+                    {section.tokens > 0 && (
+                      <span className={`t-mono t-small muted`}>
+                        {section.tokens} {lang === "ru" ? "токенов" : "tokens"}
+                      </span>
+                    )}
+                  </div>
+                  <div>{statusChip(section)}</div>
+                </div>
+              </Card>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── Right column ── */}
+      {/* Right column */}
       <div className={styles.rightCol}>
-        {/* Context card */}
+        {/* Actions */}
+        <Card padding={18}>
+          <Button variant="brand" size="lg" icon={<DownloadIcon />} onClick={() => {
+            if (!result.docx) return;
+            const bytes = Uint8Array.from(atob(result.docx), (c) => c.charCodeAt(0));
+            const blob = new Blob([bytes], {
+              type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            });
+            downloadBlob(blob, "proposal.docx");
+          }}>
+            {t.kp.download}
+          </Button>
+        </Card>
+
+        {/* Uploaded files */}
         <Card padding={18}>
           <p className={`t-micro ${styles.cardLabel}`}>{t.kp.context_used}</p>
-          <div className={styles.contextList}>
-            {context.map((file) => (
-              <div key={file.name} className={styles.contextRow}>
-                <div
-                  className={`${styles.contextIcon} ${
-                    file.kind === "tpl" ? styles.contextIconTpl : styles.contextIconCtx
-                  }`}
-                >
-                  <DocIcon />
-                </div>
-                <div className={styles.contextInfo}>
-                  <span className={`t-small ${styles.contextName}`}>{file.name}</span>
-                  <span className={`t-mono ${styles.contextMeta}`}>
-                    {file.role} · {file.size}
-                  </span>
-                </div>
+          <div className={styles.fileList}>
+            {fileInfos.map((file, i) => (
+              <div key={i} className={styles.fileRow}>
+                <DocIcon />
+                <span className={`t-small ${styles.fileName}`}>{file.name}</span>
+                <span className={`t-mono t-small muted`}>{formatFileSize(file.size)}</span>
               </div>
             ))}
           </div>
         </Card>
 
-        {/* Changelog card */}
+        {/* Stats with donut */}
         <Card padding={18}>
-          <p className={`t-micro ${styles.cardLabel}`}>{t.kp.changelog}</p>
-          <div className={styles.logList}>
-            {log.map((entry) => (
-              <div key={entry.time} className={styles.logRow}>
-                <span className={`t-mono ${styles.logTime}`}>{entry.time}</span>
-                <span className={`t-small ${styles.logMsg}`}>{entry.msg}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Requirements donut card */}
-        <Card padding={18}>
-          <p className={`t-micro ${styles.cardLabel}`}>
-            {lang === "ru" ? "Требования" : "Requirements"}
-          </p>
+          <p className={`t-micro ${styles.cardLabel}`}>{t.kp.sections}</p>
           <div className={styles.donutRow}>
-            <MiniDonut met={5} partial={1} miss={2} size={92} />
-            <div className={styles.donutLegend}>
-              <div className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ background: "var(--go)" }} />
-                <span className={`t-small ${styles.legendCount}`}>5</span>
-                <span className={`t-small ${styles.legendLabel}`}>
-                  {lang === "ru" ? "выполнено" : "met"}
-                </span>
+            <MiniDonut met={aiCount} partial={reviewCount} miss={filledCount} size={92} />
+            <div className={styles.statsGrid}>
+              <div className={styles.statItem}>
+                <span className={styles.statDot} style={{ background: "var(--brand)" }} />
+                <span className={`t-small ${styles.statCount}`}>{aiCount}</span>
+                <span className={`t-small ${styles.statLabel}`}>{t.kp.section_ai}</span>
               </div>
-              <div className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ background: "var(--warn)" }} />
-                <span className={`t-small ${styles.legendCount}`}>1</span>
-                <span className={`t-small ${styles.legendLabel}`}>
-                  {lang === "ru" ? "частично" : "partial"}
-                </span>
+              <div className={styles.statItem}>
+                <span className={styles.statDot} style={{ background: "var(--go)" }} />
+                <span className={`t-small ${styles.statCount}`}>{filledCount}</span>
+                <span className={`t-small ${styles.statLabel}`}>{t.kp.section_filled}</span>
               </div>
-              <div className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ background: "var(--no)" }} />
-                <span className={`t-small ${styles.legendCount}`}>2</span>
-                <span className={`t-small ${styles.legendLabel}`}>
-                  {lang === "ru" ? "не закрыто" : "missing"}
-                </span>
+              <div className={styles.statItem}>
+                <span className={styles.statDot} style={{ background: "var(--warn)" }} />
+                <span className={`t-small ${styles.statCount}`}>{reviewCount}</span>
+                <span className={`t-small ${styles.statLabel}`}>{t.kp.section_review}</span>
               </div>
             </div>
           </div>
         </Card>
+
+        {/* New proposal */}
+        <Button variant="outline" size="lg" onClick={() => {
+          setPhase("upload"); setResult(null); setTemplate([]); setContextFiles([]); setFileInfos([]);
+          setItem("last-proposal-result", null); setItem("last-proposal-files", []);
+        }}>
+          {t.kp.new_proposal}
+        </Button>
       </div>
-    </div>
-  );
-}
-
-// ── Section row sub-component ──
-
-interface SectionRowProps {
-  section: ProposalSection;
-  index: number;
-  regenerateLabel: string;
-  sectionAiLabel: string;
-  sectionReviewLabel: string;
-  sectionFilledLabel: string;
-  lang: string;
-}
-
-function SectionRow({
-  section,
-  index,
-  regenerateLabel,
-  sectionAiLabel,
-  sectionReviewLabel,
-  sectionFilledLabel,
-  lang,
-}: SectionRowProps) {
-  const statusChip = (() => {
-    if (section.status === "ai") {
-      return (
-        <Chip tone="brand" icon={<SparkIcon />}>
-          {sectionAiLabel}
-        </Chip>
-      );
-    }
-    if (section.status === "review") {
-      return <Chip tone="warn">{sectionReviewLabel}</Chip>;
-    }
-    return (
-      <Chip tone="neutral" icon={<CheckIcon />}>
-        {sectionFilledLabel}
-      </Chip>
-    );
-  })();
-
-  return (
-    <div className={styles.sectionRow}>
-      <span className={`t-mono ${styles.sectionIdx}`}>
-        {String(index + 1).padStart(2, "0")}
-      </span>
-      <div className={styles.sectionInfo}>
-        <span className={`t-body ${styles.sectionTitle}`}>{section.title}</span>
-        {section.tokens > 0 && (
-          <span className={`t-mono ${styles.sectionTokens}`}>
-            {section.tokens} {lang === "ru" ? "токенов" : "tokens"}
-          </span>
-        )}
-      </div>
-      <div>{statusChip}</div>
-      <button
-        className={styles.regenBtn}
-        title={regenerateLabel}
-        type="button"
-      >
-        <SparkIcon />
-      </button>
     </div>
   );
 }

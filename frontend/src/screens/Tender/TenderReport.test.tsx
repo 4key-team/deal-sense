@@ -4,15 +4,37 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/render";
 import { TenderReport } from "./TenderReport";
 import * as api from "../../lib/api";
+import type { TenderResult } from "../../lib/api";
+
+const MOCK_RESULT: TenderResult = {
+  verdict: "go",
+  risk: "low",
+  score: 82,
+  summary: "Хорошее соответствие",
+  pros: [
+    { title: "Стек совпадает", desc: "TypeScript, React, Go" },
+    { title: "Бюджет адекватный", desc: "8.5 млн покрывает расходы" },
+  ],
+  cons: [
+    { title: "Нужен ISO 27001", desc: "Сертификата нет" },
+  ],
+  requirements: [
+    { label: "TypeScript", status: "met" },
+    { label: "React", status: "met" },
+    { label: "ISO 27001", status: "miss" },
+    { label: "Опыт 1С", status: "partial" },
+  ],
+  effort: "~120 часов",
+};
 
 describe("TenderReport upload phase (RU)", () => {
-  beforeEach(() => localStorage.setItem("ds:lang", "ru"));
+  beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
   it("renders upload screen by default", () => {
     renderWithProviders(<TenderReport />);
     expect(screen.getByText("Отчёт по тендеру")).toBeInTheDocument();
     expect(screen.getByText("Стоит ли участвовать")).toBeInTheDocument();
-    expect(screen.getByText("Загрузи тендерную документацию")).toBeInTheDocument();
+    expect(screen.getByText("Загрузите тендерную документацию")).toBeInTheDocument();
   });
 
   it("disables analyze button when no files", () => {
@@ -48,13 +70,13 @@ describe("TenderReport upload phase (RU)", () => {
 });
 
 describe("TenderReport analyzing phase", () => {
-  beforeEach(() => localStorage.setItem("ds:lang", "ru"));
+  beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
   it("shows spinner during analysis", async () => {
     let resolveAnalyze!: () => void;
     vi.spyOn(api, "analyzeTender").mockReturnValue(
       new Promise((resolve) => {
-        resolveAnalyze = () => resolve({ verdict: "go", risk: "low", score: 82, summary: "ok" });
+        resolveAnalyze = () => resolve(MOCK_RESULT);
       }),
     );
 
@@ -74,10 +96,9 @@ describe("TenderReport analyzing phase", () => {
 
 describe("TenderReport result phase (RU, GO)", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem("ds:lang", "ru");
-    vi.spyOn(api, "analyzeTender").mockResolvedValue({
-      verdict: "go", risk: "low", score: 82, summary: "ok",
-    });
+    vi.spyOn(api, "analyzeTender").mockResolvedValue(MOCK_RESULT);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -105,18 +126,19 @@ describe("TenderReport result phase (RU, GO)", () => {
 
   it("shows requirements grid", async () => {
     await goToResult();
-    expect(screen.getByText("TypeScript, 3+ года")).toBeInTheDocument();
+    expect(screen.getByText("TypeScript")).toBeInTheDocument();
     expect(screen.getAllByText(/подтверждено/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/не закрыто/).length).toBeGreaterThan(0);
   });
 
-  it("shows documents sidebar", async () => {
+  it("shows uploaded file in sidebar", async () => {
     await goToResult();
-    expect(screen.getByText("tender-tz.pdf")).toBeInTheDocument();
+    expect(screen.getByText("doc.pdf")).toBeInTheDocument();
   });
 
-  it("shows effort card", async () => {
+  it("shows effort from API", async () => {
     await goToResult();
-    expect(screen.getByText(/~6 часов/)).toBeInTheDocument();
+    expect(screen.getByText("~120 часов")).toBeInTheDocument();
   });
 
   it("shows GO action buttons", async () => {
@@ -125,10 +147,10 @@ describe("TenderReport result phase (RU, GO)", () => {
     expect(screen.getByRole("button", { name: /Сохранить отчёт/ })).toBeInTheDocument();
   });
 
-  it("shows histogram and sparkline", async () => {
+  it("shows pros and cons from API", async () => {
     await goToResult();
-    expect(screen.getByText("63")).toBeInTheDocument();
-    expect(screen.getByText("+37")).toBeInTheDocument();
+    expect(screen.getByText("Стек совпадает")).toBeInTheDocument();
+    expect(screen.getByText("Нужен ISO 27001")).toBeInTheDocument();
   });
 
   it("exports report as JSON", async () => {
@@ -146,36 +168,33 @@ describe("TenderReport result phase (RU, GO)", () => {
   });
 });
 
-describe("TenderReport NO-GO toggle", () => {
+describe("TenderReport NO-GO result", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem("ds:lang", "ru");
     vi.spyOn(api, "analyzeTender").mockResolvedValue({
-      verdict: "go", risk: "low", score: 82, summary: "ok",
+      ...MOCK_RESULT,
+      verdict: "no-go",
+      risk: "high",
+      score: 35,
     });
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("toggles to NO-GO and back", async () => {
+  it("shows NO-GO verdict from API", async () => {
     const user = userEvent.setup();
     renderWithProviders(<TenderReport />);
     const input = screen.getByTestId("dropzone-input");
     await user.upload(input, new File(["pdf"], "doc.pdf", { type: "application/pdf" }));
     await user.click(screen.getByRole("button", { name: /Анализировать/i }));
-    await waitFor(() => expect(screen.getByText("Идём")).toBeInTheDocument());
-
-    await user.click(screen.getByRole("button", { name: "NO-GO" }));
-    expect(screen.getByText("Пас")).toBeInTheDocument();
-    expect(screen.getByText(/~14 часов/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Набросать отказ/ })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "GO" }));
-    expect(screen.getByText("Идём")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Пас")).toBeInTheDocument());
+    expect(screen.getByText("35%", { exact: false })).toBeInTheDocument();
   });
 });
 
 describe("TenderReport error phase", () => {
-  beforeEach(() => localStorage.setItem("ds:lang", "ru"));
+  beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
   it("shows error message on analysis failure", async () => {
     vi.spyOn(api, "analyzeTender").mockRejectedValue(new Error("Network error"));
@@ -210,7 +229,7 @@ describe("TenderReport error phase", () => {
   it("retries analysis from error state", async () => {
     const analyzeSpy = vi.spyOn(api, "analyzeTender")
       .mockRejectedValueOnce(new Error("fail"))
-      .mockResolvedValueOnce({ verdict: "go", risk: "low", score: 82, summary: "ok" });
+      .mockResolvedValueOnce(MOCK_RESULT);
 
     const user = userEvent.setup();
     renderWithProviders(<TenderReport />);
@@ -229,10 +248,9 @@ describe("TenderReport error phase", () => {
 
 describe("TenderReport (EN)", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem("ds:lang", "en");
-    vi.spyOn(api, "analyzeTender").mockResolvedValue({
-      verdict: "go", risk: "low", score: 82, summary: "ok",
-    });
+    vi.spyOn(api, "analyzeTender").mockResolvedValue(MOCK_RESULT);
   });
 
   afterEach(() => vi.restoreAllMocks());

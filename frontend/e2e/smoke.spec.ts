@@ -8,7 +8,7 @@ test.describe("DealSense smoke tests", () => {
     await page.goto("/tender");
     await expect(page).toHaveTitle("DealSense");
     await expect(page.getByText("Отчёт по тендеру")).toBeVisible();
-    await expect(page.getByText("Загрузи тендерную документацию")).toBeVisible();
+    await expect(page.getByText("Загрузите тендерную документацию")).toBeVisible();
     expect(errors).toHaveLength(0);
   });
 

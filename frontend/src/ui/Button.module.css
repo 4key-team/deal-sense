@@ -56,6 +56,13 @@
 }
 .ghost:hover:not(:disabled) { background: var(--surface-2); }
 
+.outline {
+  background: transparent;
+  color: var(--ink-1);
+  border-color: var(--ink-1);
+}
+.outline:hover:not(:disabled) { background: var(--ink-1); color: var(--bg); }
+
 .danger {
   background: var(--surface);
   color: var(--no-ink);

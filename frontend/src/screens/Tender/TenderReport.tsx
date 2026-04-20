@@ -13,79 +13,72 @@ import {
   DocIcon,
   DownloadIcon,
   SparkIcon,
-  TrendIcon,
 } from "../../icons/Icons";
 import { MiniHistogram } from "../../components/charts/MiniHistogram";
 import { MiniSparkline } from "../../components/charts/MiniSparkline";
-import {
-  getTenderData,
-  getRequirements,
-  getFiles,
-  fitHistory,
-  winTrend,
-} from "../../mocks/tender";
-import type { TenderRequirement } from "../../mocks/tender";
 import { analyzeTender, downloadBlob } from "../../lib/api";
-import { VerdictHero } from "./VerdictHero";
-import { ProConCard } from "./ProConCard";
+import type { TenderResult, TenderRequirement as TenderReq } from "../../lib/api";
+import { getItem, setItem } from "../../lib/storage";
+import { addEntry, getScores, getTrend, getStats } from "../../lib/history";
+import { loadProfile } from "../Profile";
 import styles from "./TenderReport.module.css";
 
 type Phase = "upload" | "analyzing" | "result" | "error";
 
-type StatusConfig = {
-  bg: string;
-  border: string;
-  icon: React.ReactNode;
-};
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
-function getStatusConfig(status: TenderRequirement["status"]): StatusConfig {
+function reqIcon(status: TenderReq["status"]) {
   if (status === "met") {
-    return {
-      bg: "var(--go-wash)",
-      border: "var(--go-line)",
-      icon: (
-        <span style={{ color: "var(--go)" }}>
-          <CheckIcon />
-        </span>
-      ),
-    };
+    return { bg: "var(--go-wash)", border: "var(--go-line)", icon: <span style={{ color: "var(--go)" }}><CheckIcon /></span> };
   }
   if (status === "partial") {
-    return {
-      bg: "var(--warn-wash)",
-      border: "var(--warn-line)",
-      icon: (
-        <span style={{ color: "var(--warn)" }}>
-          <MinusIcon />
-        </span>
-      ),
-    };
+    return { bg: "var(--warn-wash)", border: "var(--warn-line)", icon: <span style={{ color: "var(--warn)" }}><MinusIcon /></span> };
   }
-  return {
-    bg: "var(--no-wash)",
-    border: "var(--no-line)",
-    icon: (
-      <span style={{ color: "var(--no)" }}>
-        <XIcon />
-      </span>
-    ),
-  };
+  return { bg: "var(--no-wash)", border: "var(--no-line)", icon: <span style={{ color: "var(--no)" }}><XIcon /></span> };
 }
 
 export function TenderReport() {
   const { lang, t } = useI18n();
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<Phase>("upload");
+  const cachedResult = getItem<TenderResult | null>("last-tender-result", null);
+  const cachedFiles = getItem<{ name: string; size: number }[]>("last-tender-files", []);
+  const [phase, setPhase] = useState<Phase>(cachedResult ? "result" : "upload");
   const [files, setFiles] = useState<File[]>([]);
+  const [fileInfos, setFileInfos] = useState(cachedFiles);
   const [errorMsg, setErrorMsg] = useState("");
-  const [verdict, setVerdict] = useState<"go" | "no">("go");
+  const [result, setResult] = useState<TenderResult | null>(cachedResult);
 
   async function handleAnalyze() {
     if (files.length === 0) return;
     setPhase("analyzing");
     setErrorMsg("");
     try {
-      await analyzeTender(files, "");
+      const p = loadProfile();
+      const profileText = [
+        p.name && `Company: ${p.name}`,
+        p.teamSize && `Team: ${p.teamSize} people`,
+        p.experience && `Experience: ${p.experience} years`,
+        p.stack.length > 0 && `Tech stack: ${p.stack.join(", ")}`,
+        p.certs.length > 0 && `Certifications: ${p.certs.join(", ")}`,
+        p.specializations.length > 0 && `Specializations: ${p.specializations.join(", ")}`,
+        p.clients && `Key clients/projects: ${p.clients}`,
+        p.extra && `Additional: ${p.extra}`,
+      ].filter(Boolean).join(". ");
+      const res = await analyzeTender(files, profileText, lang);
+      setResult(res);
+      const infos = files.map((f) => ({ name: f.name, size: f.size }));
+      setFileInfos(infos);
+      setItem("last-tender-result", res);
+      setItem("last-tender-files", infos);
+      addEntry({
+        score: res.score,
+        verdict: res.verdict,
+        fileName: files[0]?.name ?? "unknown",
+      });
       setPhase("result");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -143,27 +136,19 @@ export function TenderReport() {
     );
   }
 
-  // --- Result phase (existing UI) ---
-  const data = getTenderData(verdict, lang);
-  const requirements = getRequirements(lang);
-  const fileList = getFiles(lang);
+  // --- Result phase ---
+  if (!result) return null;
 
-  const effortText =
-    verdict === "go"
-      ? lang === "ru"
-        ? "~6 часов"
-        : "~6 hours"
-      : lang === "ru"
-        ? "~14 часов"
-        : "~14 hours";
-
-  const metCount = requirements.filter((r) => r.status === "met").length;
-  const partialCount = requirements.filter((r) => r.status === "partial").length;
-  const missCount = requirements.filter((r) => r.status === "miss").length;
+  const isGo = result.verdict === "go";
+  const verdictLabel = isGo ? t.tender.verdict_go : t.tender.verdict_no;
+  const verdictSub = isGo ? t.tender.verdict_go_sub : t.tender.verdict_no_sub;
+  const reqs = result.requirements ?? [];
+  const metCount = reqs.filter((r) => r.status === "met").length;
+  const partialCount = reqs.filter((r) => r.status === "partial").length;
+  const missCount = reqs.filter((r) => r.status === "miss").length;
 
   function handleExport() {
-    const report = { verdict, data, requirements, files: fileList };
-    const json = JSON.stringify(report, null, 2);
+    const json = JSON.stringify(result, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     downloadBlob(blob, "tender-report.json");
   }
@@ -176,147 +161,184 @@ export function TenderReport() {
     <div className={`screen-enter ${styles.screen}`}>
       {/* Left column */}
       <div className={styles.left}>
-        <VerdictHero data={data} verdict={verdict} setVerdict={setVerdict} />
+        {/* Verdict hero */}
+        <Card padding={32}>
+          <div className={styles.verdictHeader}>
+            <span className={`t-micro ${styles.fitLabel}`}>
+              {t.tender.fit} · {result.score}%
+            </span>
+          </div>
+          <h1 className={styles.verdictTitle}>{verdictLabel}</h1>
+          <p className={`t-body ${styles.verdictSub}`}>{verdictSub}</p>
+          <div className={styles.scoreBar}>
+            <div className={styles.scoreFill} style={{ width: `${result.score}%` }} />
+          </div>
+          <div className={styles.scoreLabels}>
+            <span className="t-mono t-small muted">0</span>
+            <span className="t-mono t-small muted">100</span>
+          </div>
+        </Card>
 
         {/* Pro/Con grid */}
         <div className={styles.proConGrid}>
-          <ProConCard tone="go" title={t.tender.pros} items={data.pros} />
-          <ProConCard tone="no" title={t.tender.cons} items={data.cons} />
+          <Card padding={24}>
+            <div className={styles.proConHeader}>
+              <span className={styles.proConDot} style={{ background: "var(--go)" }} />
+              <span className={`t-body ${styles.proConTitle}`}>{t.tender.pros}</span>
+              <span className="t-mono muted">{(result.pros ?? []).length}</span>
+            </div>
+            {(result.pros ?? []).map((p, i) => (
+              <div key={i} className={styles.proConItem}>
+                <span className={`t-body ${styles.proConItemTitle}`}>{p.title}</span>
+                <p className={`t-small muted ${styles.proConItemDesc}`}>{p.desc}</p>
+              </div>
+            ))}
+          </Card>
+          <Card padding={24}>
+            <div className={styles.proConHeader}>
+              <span className={styles.proConDot} style={{ background: "var(--no)" }} />
+              <span className={`t-body ${styles.proConTitle}`}>{t.tender.cons}</span>
+              <span className="t-mono muted">{(result.cons ?? []).length}</span>
+            </div>
+            {(result.cons ?? []).map((c, i) => (
+              <div key={i} className={styles.proConItem}>
+                <span className={`t-body ${styles.proConItemTitle}`}>{c.title}</span>
+                <p className={`t-small muted ${styles.proConItemDesc}`}>{c.desc}</p>
+              </div>
+            ))}
+          </Card>
         </div>
 
         {/* Requirements */}
-        <div>
-          <div className={styles.requirementsLabel}>
-            <SectionLabel>
-              {t.tender.requirements} · {requirements.length}
-            </SectionLabel>
-          </div>
-          <Card padding={0} style={{ overflow: "hidden" }}>
-            <div className={styles.reqGrid}>
-              {requirements.map((req, i) => {
-                const cfg = getStatusConfig(req.status);
-                const statusText =
-                  req.status === "met"
-                    ? t.tender.req_met
-                    : req.status === "partial"
-                      ? t.tender.req_partial
-                      : t.tender.req_miss;
-
-                return (
-                  <div key={i} className={styles.reqRow}>
-                    <div
-                      className={styles.statusCircle}
-                      style={{
-                        background: cfg.bg,
-                        border: `1px solid ${cfg.border}`,
-                      }}
-                    >
-                      {cfg.icon}
-                    </div>
-                    <span
-                      className={`t-small ${styles.reqLabel}`}
-                      style={{ fontWeight: 500, color: "var(--ink-1)" }}
-                    >
-                      {req.label}
-                    </span>
-                    <span className={styles.reqStatus}>{statusText}</span>
-                  </div>
-                );
-              })}
+        {reqs.length > 0 && (
+          <div>
+            <div className={styles.requirementsLabel}>
+              <SectionLabel>
+                {t.tender.requirements} · {reqs.length}
+              </SectionLabel>
             </div>
-          </Card>
-        </div>
+            <Card padding={0} style={{ overflow: "hidden" }}>
+              <div className={styles.reqGrid}>
+                {reqs.map((req, i) => {
+                  const cfg = reqIcon(req.status);
+                  const statusText =
+                    req.status === "met"
+                      ? t.tender.req_met
+                      : req.status === "partial"
+                        ? t.tender.req_partial
+                        : t.tender.req_miss;
+                  return (
+                    <div key={i} className={styles.reqRow}>
+                      <div
+                        className={styles.statusCircle}
+                        style={{ background: cfg.bg, border: `1px solid ${cfg.border}` }}
+                      >
+                        {cfg.icon}
+                      </div>
+                      <span className={`t-small ${styles.reqLabel}`} style={{ fontWeight: 500, color: "var(--ink-1)" }}>
+                        {req.label}
+                      </span>
+                      <span className={styles.reqStatus}>{statusText}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Right column */}
       <div className={styles.right}>
-        {/* Files card */}
+        {/* Uploaded files */}
         <Card padding={18}>
           <span className={`t-micro ${styles.cardHeader}`}>{t.tender.files}</span>
           <div className={styles.fileList}>
-            {fileList.map((file, i) => (
+            {fileInfos.map((file, i) => (
               <div key={i} className={styles.fileRow}>
-                <div className={styles.docIconBox}>
-                  <DocIcon />
-                </div>
+                <div className={styles.docIconBox}><DocIcon /></div>
                 <span className={styles.fileName}>{file.name}</span>
-                <span className={styles.fileMeta}>{file.size}</span>
+                <span className={styles.fileMeta}>{formatFileSize(file.size)}</span>
               </div>
             ))}
           </div>
         </Card>
 
-        {/* Effort card */}
+        {/* Effort */}
         <Card padding={18}>
           <span className={`t-micro ${styles.cardHeader}`}>{t.tender.effort}</span>
-          <span className={styles.effortValue}>{effortText}</span>
-          <p className="t-small dim">
-            {verdict === "go"
-              ? lang === "ru"
-                ? "Подготовка заявки при наличии всех материалов"
-                : "Bid preparation with all materials on hand"
-              : lang === "ru"
-                ? "Заявка потребует значительных усилий из-за пробелов"
-                : "Bid requires significant effort due to gaps"}
-          </p>
+          <span className={styles.effortValue}>{result.effort || "—"}</span>
+          <p className="t-small dim">{result.summary}</p>
         </Card>
 
-        {/* Recent activity card */}
+        {/* Stats summary */}
         <Card padding={18}>
-          <span className={`t-micro ${styles.cardHeader}`}>{t.tender.recent}</span>
-          <span className={styles.bigNumber}>63</span>
-          <p className="t-small dim">
-            {lang === "ru" ? "средний fit" : "avg fit"}
-          </p>
-          <MiniHistogram data={fitHistory} height={40} />
+          <span className={`t-micro ${styles.cardHeader}`}>{t.tender.requirements}</span>
           <div className={styles.legend}>
             <div className={styles.legendItem}>
-              <div
-                className={styles.legendDot}
-                style={{ background: "var(--go)" }}
-              />
-              GO {metCount}
+              <div className={styles.legendDot} style={{ background: "var(--go)" }} />
+              {t.tender.req_met} {metCount}
             </div>
             <div className={styles.legendItem}>
-              <div
-                className={styles.legendDot}
-                style={{ background: "var(--warn)" }}
-              />
-              {lang === "ru" ? "watch" : "watch"} {partialCount}
+              <div className={styles.legendDot} style={{ background: "var(--warn)" }} />
+              {t.tender.req_partial} {partialCount}
             </div>
             <div className={styles.legendItem}>
-              <div
-                className={styles.legendDot}
-                style={{ background: "var(--no)" }}
-              />
-              NO {missCount}
+              <div className={styles.legendDot} style={{ background: "var(--no)" }} />
+              {t.tender.req_miss} {missCount}
             </div>
           </div>
         </Card>
 
-        {/* Trend card */}
-        <Card padding={18}>
-          <span className={`t-micro ${styles.cardHeader}`}>{t.tender.trend}</span>
-          <div className={styles.trendHeader}>
-            <span className={styles.trendValue}>+37</span>
-            <span style={{ color: "var(--go)" }}>
-              <TrendIcon />
-            </span>
-            <span className={styles.trendText}>
-              {lang === "ru" ? "+37% за 8 недель" : "+37% over 8 weeks"}
-            </span>
-          </div>
-          <MiniSparkline data={winTrend} height={40} />
-          <span className={styles.trendFooter}>
-            {lang === "ru"
-              ? "winrate растёт · последние 8 тендеров"
-              : "win rate rising · last 8 tenders"}
-          </span>
-        </Card>
+        {/* History charts */}
+        {(() => {
+          const scores = getScores();
+          const trend = getTrend();
+          const stats = getStats();
+          if (scores.length === 0) return null;
+          return (
+            <>
+              <Card padding={18}>
+                <span className={`t-micro ${styles.cardHeader}`}>{t.tender.recent}</span>
+                <span className={styles.bigNumber}>{stats.avgScore}</span>
+                <p className="t-small dim">
+                  {lang === "ru" ? "средний fit" : "avg fit"}
+                </p>
+                <MiniHistogram data={scores} height={40} />
+                <div className={styles.legend}>
+                  <div className={styles.legendItem}>
+                    <div className={styles.legendDot} style={{ background: "var(--go)" }} />
+                    GO {stats.go}
+                  </div>
+                  <div className={styles.legendItem}>
+                    <div className={styles.legendDot} style={{ background: "var(--warn)" }} />
+                    watch {stats.watch}
+                  </div>
+                  <div className={styles.legendItem}>
+                    <div className={styles.legendDot} style={{ background: "var(--no)" }} />
+                    NO {stats.no}
+                  </div>
+                </div>
+              </Card>
+
+              {trend.length >= 2 && (
+                <Card padding={18}>
+                  <span className={`t-micro ${styles.cardHeader}`}>{t.tender.trend}</span>
+                  <MiniSparkline data={trend} height={40} />
+                  <span className={styles.trendFooter}>
+                    {lang === "ru"
+                      ? `${trend.length} анализов`
+                      : `${trend.length} analyses`}
+                  </span>
+                </Card>
+              )}
+            </>
+          );
+        })()}
 
         {/* Action buttons */}
         <div className={styles.actions}>
-          {verdict === "go" ? (
+          {isGo ? (
             <>
               <Button variant="brand" size="lg" icon={<SparkIcon />} onClick={handlePrep}>
                 {t.tender.actions_prep}
@@ -327,14 +349,14 @@ export function TenderReport() {
             </>
           ) : (
             <>
-              <Button variant="secondary" size="lg">
-                {t.tender.actions_draft}
-              </Button>
-              <Button variant="ghost" size="lg" icon={<DownloadIcon />} onClick={handleExport}>
+              <Button variant="secondary" size="lg" icon={<DownloadIcon />} onClick={handleExport}>
                 {t.tender.actions_export}
               </Button>
             </>
           )}
+          <Button variant="outline" size="lg" onClick={() => { setPhase("upload"); setResult(null); setFiles([]); setFileInfos([]); setItem("last-tender-result", null); setItem("last-tender-files", []); }}>
+            {t.tender.new_analysis}
+          </Button>
         </div>
       </div>
     </div>
