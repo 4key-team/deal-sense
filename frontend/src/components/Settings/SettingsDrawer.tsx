@@ -6,6 +6,7 @@ import { Field } from "../../ui/Field";
 import { Spinner } from "../../ui/Spinner";
 import { XIcon, EyeIcon, CheckIcon } from "../../icons/Icons";
 import { getItem, setItem } from "../../lib/storage";
+import { checkConnection } from "../../lib/api";
 import styles from "./SettingsDrawer.module.css";
 
 interface Provider {
@@ -114,11 +115,14 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     setModelOpen(false);
   }
 
-  function handleTest() {
+  async function handleTest() {
     setTestState("testing");
-    setTimeout(() => {
-      setTestState("ok");
-    }, 1200);
+    try {
+      const result = await checkConnection();
+      setTestState(result.ok ? "ok" : "fail");
+    } catch {
+      setTestState("fail");
+    }
   }
 
   function handleSave() {

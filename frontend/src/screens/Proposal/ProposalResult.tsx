@@ -5,6 +5,7 @@ import { SectionLabel } from "../../ui/SectionLabel";
 import { Button } from "../../ui/Button";
 import { Chip } from "../../ui/Chip";
 import { Spinner } from "../../ui/Spinner";
+import { Dropzone } from "../../ui/Dropzone";
 import { CheckIcon, DocIcon, DownloadIcon, SparkIcon } from "../../icons/Icons";
 import { MiniDonut } from "../../components/charts";
 import { getSections, getContext, getMeta, getLog } from "../../mocks/proposal";
@@ -12,27 +13,104 @@ import type { ProposalSection } from "../../mocks/proposal";
 import { generateProposal, downloadBlob } from "../../lib/api";
 import styles from "./ProposalResult.module.css";
 
+type Phase = "upload" | "generating" | "result" | "error";
+
 export function ProposalResult() {
   const { lang, t } = useI18n();
+  const [phase, setPhase] = useState<Phase>("upload");
+  const [template, setTemplate] = useState<File[]>([]);
+  const [contextFiles, setContextFiles] = useState<File[]>([]);
+  const [errorMsg, setErrorMsg] = useState("");
   const [downloading, setDownloading] = useState(false);
 
+  async function handleGenerate() {
+    if (template.length === 0) return;
+    setPhase("generating");
+    setErrorMsg("");
+    try {
+      await generateProposal(template[0]);
+      setPhase("result");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setPhase("error");
+    }
+  }
+
   async function handleDownload() {
+    if (template.length === 0) return;
     setDownloading(true);
     try {
-      const tplFile = new File([], "proposal-tpl.docx");
-      const blob = await generateProposal(tplFile);
+      const blob = await generateProposal(template[0]);
       downloadBlob(blob, "proposal.docx");
     } catch {
-      // TODO: show error toast
+      // TODO: toast
     } finally {
       setDownloading(false);
     }
   }
 
   function handleOpenPreview() {
-    // TODO: implement preview modal
+    // TODO: preview modal
   }
 
+  // --- Upload phase ---
+  if (phase === "upload") {
+    return (
+      <div className={`screen-enter ${styles.uploadScreen}`}>
+        <h2 className={`t-h2 font-serif ${styles.uploadTitle}`}>{t.kp.title}</h2>
+        <p className={`t-body muted ${styles.uploadSubtitle}`}>{t.kp.subtitle}</p>
+        <div className={styles.uploadZones}>
+          <Dropzone
+            files={template}
+            onFiles={setTemplate}
+            label={t.dropzone.proposal_tpl_label}
+            hint={t.dropzone.proposal_tpl_hint}
+            multiple={false}
+          />
+          <Dropzone
+            files={contextFiles}
+            onFiles={setContextFiles}
+            label={t.dropzone.proposal_ctx_label}
+            hint={t.dropzone.proposal_ctx_hint}
+          />
+        </div>
+        <Button
+          variant="brand"
+          size="lg"
+          onClick={handleGenerate}
+          disabled={template.length === 0}
+          icon={<SparkIcon />}
+        >
+          {t.kp.generate_btn}
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Generating phase ---
+  if (phase === "generating") {
+    return (
+      <div className={`screen-enter ${styles.uploadScreen}`}>
+        <Spinner />
+        <p className="t-body muted">{t.kp.generating}</p>
+      </div>
+    );
+  }
+
+  // --- Error phase ---
+  if (phase === "error") {
+    return (
+      <div className={`screen-enter ${styles.uploadScreen}`}>
+        <p className={`t-body ${styles.errorText}`}>{t.kp.error}</p>
+        <p className="t-small muted">{errorMsg}</p>
+        <Button variant="secondary" onClick={handleGenerate}>
+          {t.kp.retry}
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Result phase ---
   const sections = getSections(lang);
   const context = getContext(lang, {
     context_brief: t.kp.context_brief,
@@ -57,7 +135,7 @@ export function ProposalResult() {
                 {t.kp.ready_chip}
               </Chip>
               <span className={`t-small ${styles.sourceLabel}`}>
-                {lang === "ru" ? "Источник" : "Source"}: proposal-tpl.docx
+                {lang === "ru" ? "Источник" : "Source"}: {template[0]?.name ?? "proposal-tpl.docx"}
               </span>
             </div>
             <div className={styles.heroTopRight}>

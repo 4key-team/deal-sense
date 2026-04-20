@@ -1,30 +1,32 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("DealSense smoke tests", () => {
-  test("tender page loads without console errors", async ({ page }) => {
+  test("tender page loads with upload screen", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 
     await page.goto("/tender");
     await expect(page).toHaveTitle("DealSense");
-    await expect(page.getByText("Идём")).toBeVisible();
+    await expect(page.getByText("Отчёт по тендеру")).toBeVisible();
+    await expect(page.getByText("Загрузи тендерную документацию")).toBeVisible();
     expect(errors).toHaveLength(0);
   });
 
-  test("proposal page loads without console errors", async ({ page }) => {
+  test("proposal page loads with upload screen", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 
     await page.goto("/proposal");
     await expect(page.getByText("Коммерческое предложение")).toBeVisible();
+    await expect(page.getByText("Шаблон КП (.docx)")).toBeVisible();
     expect(errors).toHaveLength(0);
   });
 
-  test("language switches to EN", async ({ page }) => {
+  test("language switches to EN on tender", async ({ page }) => {
     await page.goto("/tender");
     await page.getByRole("button", { name: "en" }).click();
-    await expect(page.getByText("Go", { exact: true })).toBeVisible();
-    await expect(page.getByText("Partner portal")).toBeVisible();
+    await expect(page.getByText("Tender report")).toBeVisible();
+    await expect(page.getByText("Upload tender documentation")).toBeVisible();
   });
 
   test("theme toggles to dark", async ({ page }) => {
@@ -48,12 +50,12 @@ test.describe("DealSense smoke tests", () => {
 
     await page.getByRole("tab", { name: /Анализ тендеров/i }).click();
     await expect(page).toHaveURL(/\/tender/);
-    await expect(page.getByText("Идём")).toBeVisible();
+    await expect(page.getByText("Отчёт по тендеру")).toBeVisible();
   });
 
-  test("verdict toggle switches to NO-GO", async ({ page }) => {
+  test("analyze button disabled without files", async ({ page }) => {
     await page.goto("/tender");
-    await page.getByRole("button", { name: "NO-GO" }).click();
-    await expect(page.getByText("Пас", { exact: true })).toBeVisible();
+    const btn = page.getByRole("button", { name: /Анализировать/i });
+    await expect(btn).toBeDisabled();
   });
 });

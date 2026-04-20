@@ -5,6 +5,7 @@ import { I18nProvider } from "../../providers/I18nProvider";
 import { SettingsDrawer } from "./SettingsDrawer";
 import type { LLMSettings } from "./SettingsDrawer";
 import { getItem } from "../../lib/storage";
+import * as api from "../../lib/api";
 
 function renderDrawer(onClose = vi.fn()) {
   return render(
@@ -208,19 +209,36 @@ describe("SettingsDrawer", () => {
     expect(saved.model).toBe("gpt-4o");
   });
 
-  it("shows testing then ok state on test click", async () => {
+  it("shows ok state when connection succeeds", async () => {
+    vi.spyOn(api, "checkConnection").mockResolvedValue({ ok: true, provider: "anthropic" });
     const user = userEvent.setup();
     renderDrawer();
 
-    const testBtn = screen.getByRole("button", { name: /проверить|test/i });
-    await user.click(testBtn);
+    await user.click(screen.getByRole("button", { name: /проверить|test/i }));
 
-    expect(screen.getByText(/проверяю|testing/i)).toBeInTheDocument();
-    expect(testBtn).toBeDisabled();
+    await waitFor(() => expect(screen.getByText(/работает|working/i)).toBeInTheDocument());
+    vi.restoreAllMocks();
+  });
 
-    await waitFor(
-      () => expect(screen.getByText(/работает|working/i)).toBeInTheDocument(),
-      { timeout: 2000 },
-    );
+  it("shows fail state when connection fails", async () => {
+    vi.spyOn(api, "checkConnection").mockResolvedValue({ ok: false, provider: "anthropic", error: "bad key" });
+    const user = userEvent.setup();
+    renderDrawer();
+
+    await user.click(screen.getByRole("button", { name: /проверить|test/i }));
+
+    await waitFor(() => expect(screen.getByText(/не получилось|failed/i)).toBeInTheDocument());
+    vi.restoreAllMocks();
+  });
+
+  it("shows fail state when connection throws", async () => {
+    vi.spyOn(api, "checkConnection").mockRejectedValue(new Error("network"));
+    const user = userEvent.setup();
+    renderDrawer();
+
+    await user.click(screen.getByRole("button", { name: /проверить|test/i }));
+
+    await waitFor(() => expect(screen.getByText(/не получилось|failed/i)).toBeInTheDocument());
+    vi.restoreAllMocks();
   });
 });

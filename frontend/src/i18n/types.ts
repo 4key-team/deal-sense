@@ -12,6 +12,10 @@ export interface Copy {
   kp: {
     title: string;
     subtitle: string;
+    generate_btn: string;
+    generating: string;
+    error: string;
+    retry: string;
     ready_chip: string;
     meta: { client: string; project: string; price: string; term: string; created: string };
     sections: string;
@@ -34,6 +38,10 @@ export interface Copy {
   tender: {
     title: string;
     subtitle: string;
+    analyze_btn: string;
+    analyzing: string;
+    error: string;
+    retry: string;
     fit: string;
     verdict_go: string;
     verdict_no: string;

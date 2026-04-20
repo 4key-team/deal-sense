@@ -12,6 +12,10 @@ export const ru: Copy = {
   kp: {
     title: "Коммерческое предложение",
     subtitle: "Шаблон заполнен. Проверь и скачай.",
+    generate_btn: "Сгенерировать КП",
+    generating: "Генерирую предложение…",
+    error: "Не удалось сгенерировать",
+    retry: "Попробовать снова",
     ready_chip: "Готово",
     meta: { client: "Клиент", project: "Проект", price: "Цена", term: "Срок", created: "Создано" },
     sections: "Секции шаблона",
@@ -34,6 +38,10 @@ export const ru: Copy = {
   tender: {
     title: "Отчёт по тендеру",
     subtitle: "Стоит ли участвовать",
+    analyze_btn: "Анализировать",
+    analyzing: "Анализирую документы…",
+    error: "Не удалось проанализировать",
+    retry: "Попробовать снова",
     fit: "Соответствие",
     verdict_go: "Идём",
     verdict_no: "Пас",

@@ -4,6 +4,8 @@ import { useI18n } from "../../providers/useI18n";
 import { Card } from "../../ui/Card";
 import { SectionLabel } from "../../ui/SectionLabel";
 import { Button } from "../../ui/Button";
+import { Dropzone } from "../../ui/Dropzone";
+import { Spinner } from "../../ui/Spinner";
 import {
   CheckIcon,
   XIcon,
@@ -23,10 +25,12 @@ import {
   winTrend,
 } from "../../mocks/tender";
 import type { TenderRequirement } from "../../mocks/tender";
-import { downloadBlob } from "../../lib/api";
+import { analyzeTender, downloadBlob } from "../../lib/api";
 import { VerdictHero } from "./VerdictHero";
 import { ProConCard } from "./ProConCard";
 import styles from "./TenderReport.module.css";
+
+type Phase = "upload" | "analyzing" | "result" | "error";
 
 type StatusConfig = {
   bg: string;
@@ -71,11 +75,78 @@ function getStatusConfig(status: TenderRequirement["status"]): StatusConfig {
 export function TenderReport() {
   const { lang, t } = useI18n();
   const navigate = useNavigate();
+  const [phase, setPhase] = useState<Phase>("upload");
+  const [files, setFiles] = useState<File[]>([]);
+  const [errorMsg, setErrorMsg] = useState("");
   const [verdict, setVerdict] = useState<"go" | "no">("go");
 
+  async function handleAnalyze() {
+    if (files.length === 0) return;
+    setPhase("analyzing");
+    setErrorMsg("");
+    try {
+      await analyzeTender(files, "");
+      setPhase("result");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setPhase("error");
+    }
+  }
+
+  // --- Upload phase ---
+  if (phase === "upload") {
+    return (
+      <div className={`screen-enter ${styles.uploadScreen}`}>
+        <h2 className={`t-h2 font-serif ${styles.uploadTitle}`}>{t.tender.title}</h2>
+        <p className={`t-body muted ${styles.uploadSubtitle}`}>{t.tender.subtitle}</p>
+        <div className={styles.uploadZone}>
+          <Dropzone
+            files={files}
+            onFiles={setFiles}
+            label={t.dropzone.tender_label}
+            hint={t.dropzone.tender_hint}
+          />
+        </div>
+        <Button
+          variant="brand"
+          size="lg"
+          onClick={handleAnalyze}
+          disabled={files.length === 0}
+          icon={<SparkIcon />}
+        >
+          {t.tender.analyze_btn}
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Analyzing phase ---
+  if (phase === "analyzing") {
+    return (
+      <div className={`screen-enter ${styles.uploadScreen}`}>
+        <Spinner />
+        <p className="t-body muted">{t.tender.analyzing}</p>
+      </div>
+    );
+  }
+
+  // --- Error phase ---
+  if (phase === "error") {
+    return (
+      <div className={`screen-enter ${styles.uploadScreen}`}>
+        <p className={`t-body ${styles.errorText}`}>{t.tender.error}</p>
+        <p className="t-small muted">{errorMsg}</p>
+        <Button variant="secondary" onClick={handleAnalyze}>
+          {t.tender.retry}
+        </Button>
+      </div>
+    );
+  }
+
+  // --- Result phase (existing UI) ---
   const data = getTenderData(verdict, lang);
   const requirements = getRequirements(lang);
-  const files = getFiles(lang);
+  const fileList = getFiles(lang);
 
   const effortText =
     verdict === "go"
@@ -91,7 +162,7 @@ export function TenderReport() {
   const missCount = requirements.filter((r) => r.status === "miss").length;
 
   function handleExport() {
-    const report = { verdict, data, requirements, files };
+    const report = { verdict, data, requirements, files: fileList };
     const json = JSON.stringify(report, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     downloadBlob(blob, "tender-report.json");
@@ -163,7 +234,7 @@ export function TenderReport() {
         <Card padding={18}>
           <span className={`t-micro ${styles.cardHeader}`}>{t.tender.files}</span>
           <div className={styles.fileList}>
-            {files.map((file, i) => (
+            {fileList.map((file, i) => (
               <div key={i} className={styles.fileRow}>
                 <div className={styles.docIconBox}>
                   <DocIcon />

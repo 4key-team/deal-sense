@@ -12,6 +12,10 @@ export const en: Copy = {
   kp: {
     title: "Commercial proposal",
     subtitle: "Template filled in. Review and download.",
+    generate_btn: "Generate proposal",
+    generating: "Generating proposal…",
+    error: "Generation failed",
+    retry: "Try again",
     ready_chip: "Ready",
     meta: { client: "Client", project: "Project", price: "Price", term: "Timeline", created: "Created" },
     sections: "Template sections",
@@ -34,6 +38,10 @@ export const en: Copy = {
   tender: {
     title: "Tender report",
     subtitle: "Should you bid on this",
+    analyze_btn: "Analyze",
+    analyzing: "Analyzing documents…",
+    error: "Analysis failed",
+    retry: "Try again",
     fit: "Fit score",
     verdict_go: "Go",
     verdict_no: "Pass",

@@ -308,3 +308,36 @@
 .legendLabel {
   color: var(--ink-3);
 }
+
+/* Upload phase */
+.uploadScreen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 28px;
+  max-width: 520px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.uploadTitle {
+  color: var(--ink-1);
+}
+
+.uploadSubtitle {
+  color: var(--ink-3);
+}
+
+.uploadZones {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.errorText {
+  color: var(--no);
+  font-weight: 500;
+}
