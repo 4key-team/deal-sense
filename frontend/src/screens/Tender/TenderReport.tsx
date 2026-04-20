@@ -162,20 +162,43 @@ export function TenderReport() {
       {/* Left column */}
       <div className={styles.left}>
         {/* Verdict hero */}
-        <Card padding={32}>
-          <div className={styles.verdictHeader}>
-            <span className={`t-micro ${styles.fitLabel}`}>
-              {t.tender.fit} · {result.score}%
-            </span>
-          </div>
-          <h1 className={styles.verdictTitle}>{verdictLabel}</h1>
-          <p className={`t-body ${styles.verdictSub}`}>{verdictSub}</p>
-          <div className={styles.scoreBar}>
-            <div className={styles.scoreFill} style={{ width: `${result.score}%` }} />
-          </div>
-          <div className={styles.scoreLabels}>
-            <span className="t-mono t-small muted">0</span>
-            <span className="t-mono t-small muted">100</span>
+        <Card padding={0} style={{
+          overflow: "hidden",
+          border: `1px solid ${isGo ? "var(--go-line)" : "var(--no-line)"}`,
+        }}>
+          <div className={styles.verdictWrap} style={{
+            background: `linear-gradient(180deg, ${isGo ? "var(--go-wash)" : "var(--no-wash)"} 0%, var(--surface) 80%)`,
+          }}>
+            <div className={styles.verdictLayout}>
+              <div className={styles.verdictLeft}>
+                <span className={`t-micro`} style={{ color: isGo ? "var(--go-ink)" : "var(--no-ink)" }}>
+                  {t.tender.fit} · {result.score}%
+                </span>
+                <h1 className={styles.verdictTitle} style={{ color: isGo ? "var(--go-ink)" : "var(--no-ink)" }}>
+                  {verdictLabel}
+                </h1>
+              </div>
+              <div className={styles.verdictRight}>
+                <p className={`t-body ${styles.verdictSub}`}>{verdictSub}</p>
+                <div className={styles.scoreBar}>
+                  <div className={styles.scoreFill} style={{
+                    width: `${result.score}%`,
+                    background: isGo ? "var(--go)" : "var(--no)",
+                  }} />
+                </div>
+                <div className={styles.scoreLabels}>
+                  <span className="t-mono t-small muted">0</span>
+                  <span className="t-mono t-small muted">100</span>
+                </div>
+                <p className={`t-small ${styles.verdictNote}`}>
+                  {100 - result.score}% — {result.risk === "low"
+                    ? (lang === "ru" ? "незначительные пробелы" : "minor gaps")
+                    : result.risk === "medium"
+                      ? (lang === "ru" ? "есть пробелы" : "some gaps")
+                      : (lang === "ru" ? "серьёзные пробелы" : "major gaps")}
+                </p>
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -257,8 +280,10 @@ export function TenderReport() {
             {fileInfos.map((file, i) => (
               <div key={i} className={styles.fileRow}>
                 <div className={styles.docIconBox}><DocIcon /></div>
-                <span className={styles.fileName}>{file.name}</span>
-                <span className={styles.fileMeta}>{formatFileSize(file.size)}</span>
+                <div className={styles.fileInfo}>
+                  <span className={`t-small ${styles.fileName}`}>{file.name}</span>
+                  <span className={`t-mono ${styles.fileMeta}`}>{formatFileSize(file.size)}</span>
+                </div>
               </div>
             ))}
           </div>

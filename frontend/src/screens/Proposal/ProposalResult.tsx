@@ -32,6 +32,23 @@ export function ProposalResult() {
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState<ProposalResultType | null>(cachedResult);
 
+  async function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function base64ToFile(dataUrl: string, name: string): File {
+    const [header, data] = dataUrl.split(",");
+    const mime = header.match(/:(.*?);/)?.[1] ?? "";
+    const bytes = atob(data);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new File([arr], name, { type: mime });
+  }
+
   async function handleGenerate() {
     if (template.length === 0) return;
     setPhase("generating");
@@ -43,6 +60,36 @@ export function ProposalResult() {
       setFileInfos(infos);
       setItem("last-proposal-result", res);
       setItem("last-proposal-files", infos);
+      // Save files as base64 for re-generation
+      const savedFiles = await Promise.all(
+        [...template, ...contextFiles].map(async (f) => ({
+          name: f.name,
+          data: await fileToBase64(f),
+        })),
+      );
+      setItem("last-proposal-raw-files", savedFiles);
+      setPhase("result");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setPhase("error");
+    }
+  }
+
+  async function handleRegenerate() {
+    const savedFiles = getItem<{ name: string; data: string }[]>("last-proposal-raw-files", []);
+    if (savedFiles.length === 0) {
+      setPhase("upload");
+      return;
+    }
+    const files = savedFiles.map((f) => base64ToFile(f.data, f.name));
+    setTemplate([files[0]]);
+    setContextFiles(files.slice(1));
+    setPhase("generating");
+    setErrorMsg("");
+    try {
+      const res = await generateProposal(files[0], files.slice(1), lang);
+      setResult(res);
+      setItem("last-proposal-result", res);
       setPhase("result");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -125,82 +172,163 @@ export function ProposalResult() {
     return <Chip tone="neutral" icon={<CheckIcon />}>{t.kp.section_filled}</Chip>;
   }
 
+  const meta = result.meta ?? {};
+  const logEntries = result.log ?? [];
+  const totalTokens = sections.reduce((sum, s) => sum + s.tokens, 0);
+
   return (
     <div className={`screen-enter ${styles.layout}`}>
       {/* Left column */}
       <div className={styles.leftCol}>
         {/* Hero card */}
-        <Card padding={32}>
+        <Card padding={32} style={{ position: "relative", overflow: "hidden" }}>
+          <div className={styles.heroBg} aria-hidden="true" />
           <div className={styles.heroTop}>
-            <Chip tone="go" strong icon={<CheckIcon />}>
-              {t.kp.ready_chip}
-            </Chip>
-            <span className={`t-small muted`}>
-              {result.template}
-            </span>
+            <div className={styles.heroTopLeft}>
+              <Chip tone="go" strong icon={<CheckIcon />}>
+                {t.kp.ready_chip}
+              </Chip>
+              <span className={`t-small muted`}>
+                {lang === "ru" ? "Источник" : "Source"}: {result.template}
+              </span>
+            </div>
+            <div className={styles.heroTopRight}>
+              <Button variant="brand" icon={<DownloadIcon />} onClick={() => {
+                if (!result.docx) return;
+                const bytes = Uint8Array.from(atob(result.docx), (c) => c.charCodeAt(0));
+                const blob = new Blob([bytes], {
+                  type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                });
+                downloadBlob(blob, "proposal.docx");
+              }}>
+                {t.kp.download}
+              </Button>
+            </div>
           </div>
           <h1 className={styles.heroTitle}>{t.kp.title}</h1>
-          <p className={`t-body ${styles.heroSubtitle}`}>{t.kp.subtitle_result}</p>
-          <p className="t-small muted">{result.summary}</p>
+          <p className={`t-body ${styles.heroSubtitle}`}>
+            {meta.project && meta.client ? `${meta.project} · ${meta.client}` : result.summary}
+          </p>
+
+          {/* Meta grid */}
+          <div className={styles.metaGrid}>
+            <div className={styles.metaCell}>
+              <span className={`t-micro ${styles.metaCellLabel}`}>{t.kp.meta.client}</span>
+              <span className={`t-small ${styles.metaCellValue}`}>{meta.client || "—"}</span>
+            </div>
+            <div className={styles.metaCell}>
+              <span className={`t-micro ${styles.metaCellLabel}`}>{t.kp.meta.project}</span>
+              <span className={`t-small ${styles.metaCellValue}`}>{meta.project || "—"}</span>
+            </div>
+            <div className={styles.metaCell}>
+              <span className={`t-micro ${styles.metaCellLabel}`}>{t.kp.meta.price}</span>
+              <span className={`t-small ${styles.metaCellValue}`}>{meta.price || "—"}</span>
+            </div>
+            <div className={styles.metaCell}>
+              <span className={`t-micro ${styles.metaCellLabel}`}>{t.kp.meta.term}</span>
+              <span className={`t-small ${styles.metaCellValue}`}>{meta.timeline || "—"}</span>
+            </div>
+            <div className={styles.metaCell}>
+              <span className={`t-micro ${styles.metaCellLabel}`}>{t.kp.meta.created}</span>
+              <span className={`t-small ${styles.metaCellValue}`}>
+                {new Date().toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          </div>
+
+          {/* Stats footer */}
+          <div className={styles.heroStats}>
+            <span className="t-mono dim">
+              {lang === "ru" ? "Токенов" : "Tokens"}: {totalTokens.toLocaleString()}
+            </span>
+            <span className="t-mono dim">
+              {sections.length} {lang === "ru" ? "секций" : "sections"}
+            </span>
+          </div>
         </Card>
 
         {/* Sections list */}
-        <div>
-          <SectionLabel>
+        <div className={styles.sectionsBlock}>
+          <SectionLabel right={
+            <Button variant="ghost" size="sm" icon={<SparkIcon />} onClick={handleRegenerate}>
+              {t.kp.re_generate}
+            </Button>
+          }>
             {t.kp.sections} · {sections.length}
           </SectionLabel>
-          <div className={styles.sectionsList}>
+
+          <Card padding={0} style={{ overflow: "hidden" }}>
             {sections.map((section, idx) => (
-              <Card key={idx} padding={16}>
-                <div className={styles.sectionRow}>
-                  <span className={`t-mono ${styles.sectionIdx}`}>
-                    {String(idx + 1).padStart(2, "0")}
-                  </span>
-                  <div className={styles.sectionInfo}>
-                    <span className={`t-body ${styles.sectionTitle}`}>{section.title}</span>
-                    {section.tokens > 0 && (
-                      <span className={`t-mono t-small muted`}>
-                        {section.tokens} {lang === "ru" ? "токенов" : "tokens"}
-                      </span>
-                    )}
-                  </div>
-                  <div>{statusChip(section)}</div>
+              <div key={idx} className={styles.sectionRow} style={{
+                borderTop: idx === 0 ? "none" : "1px solid var(--line)",
+              }}>
+                <span className={`t-mono ${styles.sectionIdx}`}>
+                  {String(idx + 1).padStart(2, "0")}
+                </span>
+                <div className={styles.sectionInfo}>
+                  <span className={`t-body ${styles.sectionTitle}`}>{section.title}</span>
+                  {section.tokens > 0 && (
+                    <span className={`t-mono ${styles.sectionTokens}`}>
+                      {section.tokens.toLocaleString()} {lang === "ru" ? "токенов" : "tokens"}
+                    </span>
+                  )}
                 </div>
-              </Card>
+                <div>{statusChip(section)}</div>
+                <button
+                  className={styles.regenBtn}
+                  title={t.kp.regenerate_section}
+                  type="button"
+                >
+                  <SparkIcon />
+                </button>
+              </div>
             ))}
-          </div>
+          </Card>
         </div>
       </div>
 
       {/* Right column */}
       <div className={styles.rightCol}>
-        {/* Actions */}
-        <Card padding={18}>
-          <Button variant="brand" size="lg" icon={<DownloadIcon />} onClick={() => {
-            if (!result.docx) return;
-            const bytes = Uint8Array.from(atob(result.docx), (c) => c.charCodeAt(0));
-            const blob = new Blob([bytes], {
-              type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            });
-            downloadBlob(blob, "proposal.docx");
-          }}>
-            {t.kp.download}
-          </Button>
-        </Card>
-
-        {/* Uploaded files */}
+        {/* Context files */}
         <Card padding={18}>
           <p className={`t-micro ${styles.cardLabel}`}>{t.kp.context_used}</p>
-          <div className={styles.fileList}>
-            {fileInfos.map((file, i) => (
-              <div key={i} className={styles.fileRow}>
-                <DocIcon />
-                <span className={`t-small ${styles.fileName}`}>{file.name}</span>
-                <span className={`t-mono t-small muted`}>{formatFileSize(file.size)}</span>
-              </div>
-            ))}
+          <div className={styles.contextList}>
+            {fileInfos.map((file, i) => {
+              const isTpl = i === 0; // first file is template
+              return (
+                <div key={i} className={styles.contextRow}>
+                  <div className={`${styles.contextIcon} ${isTpl ? styles.contextIconTpl : styles.contextIconCtx}`}>
+                    <DocIcon />
+                  </div>
+                  <div className={styles.contextInfo}>
+                    <span className={`t-small ${styles.contextName}`}>{file.name}</span>
+                    <span className={`t-mono ${styles.contextMeta}`}>
+                      {isTpl
+                        ? (lang === "ru" ? "шаблон" : "template")
+                        : (lang === "ru" ? "контекст" : "context")
+                      } · {formatFileSize(file.size)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
+
+        {/* Changelog */}
+        {logEntries.length > 0 && (
+          <Card padding={18}>
+            <p className={`t-micro ${styles.cardLabel}`}>{t.kp.changelog}</p>
+            <div className={styles.logList}>
+              {logEntries.map((entry, i) => (
+                <div key={i} className={styles.logRow}>
+                  <span className={`t-mono ${styles.logTime}`}>{String(i + 1).padStart(2, "0")}</span>
+                  <span className={`t-small ${styles.logMsg}`}>{entry.msg}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Stats with donut */}
         <Card padding={18}>

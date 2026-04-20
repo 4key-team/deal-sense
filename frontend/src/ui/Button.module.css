@@ -58,10 +58,10 @@
 
 .outline {
   background: transparent;
-  color: var(--ink-1);
-  border-color: var(--ink-1);
+  color: var(--ink-3);
+  border-color: var(--line-strong);
 }
-.outline:hover:not(:disabled) { background: var(--ink-1); color: var(--bg); }
+.outline:hover:not(:disabled) { border-color: var(--ink-3); color: var(--ink-1); }
 
 .danger {
   background: var(--surface);

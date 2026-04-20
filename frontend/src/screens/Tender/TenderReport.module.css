@@ -115,11 +115,18 @@
   white-space: nowrap;
 }
 
+.fileInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
 .fileMeta {
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-family: var(--font-mono);
-  flex-shrink: 0;
 }
 
 /* Effort card */
@@ -201,26 +208,44 @@
 }
 
 /* Verdict hero */
-.verdictHeader {
-  margin-bottom: 4px;
+.verdictWrap {
+  padding: 32px;
 }
 
-.fitLabel {
-  color: var(--ink-3);
+.verdictLayout {
+  display: flex;
+  align-items: flex-end;
+  gap: 32px;
+}
+
+.verdictLeft {
+  flex: 0 0 auto;
 }
 
 .verdictTitle {
   font-family: var(--font-serif);
-  font-size: 56px;
+  font-size: 80px;
   font-weight: 500;
-  line-height: 1;
-  color: var(--ink-1);
-  margin-bottom: 8px;
+  line-height: 0.88;
+  letter-spacing: -0.02em;
+  margin-top: 10px;
+}
+
+.verdictRight {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 6px;
 }
 
 .verdictSub {
-  color: var(--ink-2);
-  margin-bottom: 16px;
+  color: var(--ink-1);
+  font-weight: 500;
+  margin-bottom: 14px;
+}
+
+.verdictNote {
+  color: var(--ink-3);
+  margin-top: 6px;
 }
 
 .scoreBar {
@@ -232,7 +257,6 @@
 
 .scoreFill {
   height: 100%;
-  background: var(--go);
   border-radius: 4px;
   transition: width 0.4s ease;
 }

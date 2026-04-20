@@ -85,10 +85,17 @@ export interface ProposalSection {
   tokens: number;
 }
 
+export interface ProposalLogEntry {
+  time: string;
+  msg: string;
+}
+
 export interface ProposalResult {
   template: string;
   summary: string;
+  meta: Record<string, string>;
   sections: ProposalSection[];
+  log: ProposalLogEntry[];
   docx: string; // base64 encoded .docx
 }
 
