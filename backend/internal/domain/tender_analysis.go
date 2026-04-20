@@ -28,8 +28,11 @@ type ProCon struct {
 	desc  string
 }
 
-func NewProCon(title, desc string) ProCon {
-	return ProCon{title: title, desc: desc}
+func NewProCon(title, desc string) (ProCon, error) {
+	if title == "" {
+		return ProCon{}, ErrEmptyTitle
+	}
+	return ProCon{title: title, desc: desc}, nil
 }
 
 func (p ProCon) Title() string { return p.title }
@@ -41,8 +44,11 @@ type Requirement struct {
 	status RequirementStatus
 }
 
-func NewRequirement(label string, status RequirementStatus) Requirement {
-	return Requirement{label: label, status: status}
+func NewRequirement(label string, status RequirementStatus) (Requirement, error) {
+	if label == "" {
+		return Requirement{}, ErrEmptyLabel
+	}
+	return Requirement{label: label, status: status}, nil
 }
 
 func (r Requirement) Label() string            { return r.label }
@@ -74,7 +80,7 @@ func NewDocument(name string, fileType FileType, content string) (*Document, err
 		return nil, ErrEmptyContent
 	}
 	if name == "" {
-		return nil, ErrEmptyContent
+		return nil, ErrEmptyName
 	}
 	return &Document{
 		name:     name,

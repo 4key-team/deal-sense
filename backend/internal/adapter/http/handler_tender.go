@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -24,14 +23,7 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 		companyProfile = "Software development company"
 	}
 
-	langCode := r.FormValue("lang")
-	if langCode == "" {
-		langCode = "ru"
-	}
-	langName := "Russian"
-	if langCode == "en" {
-		langName = "English"
-	}
+	langName := resolveLang(r)
 
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
@@ -67,7 +59,7 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	uc := usecase.NewAnalyzeTender(h.resolveLLM(r), h.parser, llm.TenderAnalysisPrompt(langName))
+	uc := usecase.NewAnalyzeTender(h.resolveLLM(r), h.parser, h.tenderPrompt(langName))
 	result, err := uc.Execute(r.Context(), inputs, companyProfile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

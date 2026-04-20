@@ -123,21 +123,33 @@ func (uc *AnalyzeTender) Execute(
 	}
 
 	analysis.SetResult(verdict, risk, score, resp.Summary)
-	pros := make([]domain.ProCon, len(resp.Pros))
-	for i, p := range resp.Pros {
-		pros[i] = domain.NewProCon(p.Title, p.Desc)
+	pros := make([]domain.ProCon, 0, len(resp.Pros))
+	for _, p := range resp.Pros {
+		pc, err := domain.NewProCon(p.Title, p.Desc)
+		if err != nil {
+			continue
+		}
+		pros = append(pros, pc)
 	}
-	cons := make([]domain.ProCon, len(resp.Cons))
-	for i, c := range resp.Cons {
-		cons[i] = domain.NewProCon(c.Title, c.Desc)
+	cons := make([]domain.ProCon, 0, len(resp.Cons))
+	for _, c := range resp.Cons {
+		pc, err := domain.NewProCon(c.Title, c.Desc)
+		if err != nil {
+			continue
+		}
+		cons = append(cons, pc)
 	}
 	reqs := make([]domain.Requirement, 0, len(resp.Requirements))
 	for _, r := range resp.Requirements {
 		st, err := domain.ParseRequirementStatus(r.Status)
 		if err != nil {
-			continue // skip invalid statuses from LLM
+			continue
 		}
-		reqs = append(reqs, domain.NewRequirement(r.Label, st))
+		req, err := domain.NewRequirement(r.Label, st)
+		if err != nil {
+			continue
+		}
+		reqs = append(reqs, req)
 	}
 	analysis.SetExtras(pros, cons, reqs, resp.Effort)
 	return analysis, nil

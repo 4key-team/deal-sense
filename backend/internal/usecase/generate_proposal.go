@@ -23,14 +23,21 @@ func NewGenerateProposal(llm LLMProvider, parser DocumentParser, template Templa
 
 type proposalLLMResponse struct {
 	Params   map[string]string      `json:"params"`
+	Meta     map[string]string      `json:"meta"`
 	Sections []proposalLLMSection   `json:"sections"`
 	Summary  string                 `json:"summary"`
+	Log      []proposalLLMLog       `json:"log"`
 }
 
 type proposalLLMSection struct {
 	Title  string `json:"title"`
 	Status string `json:"status"`
 	Tokens int    `json:"tokens"`
+}
+
+type proposalLLMLog struct {
+	Time string `json:"time"`
+	Msg  string `json:"msg"`
 }
 
 func (uc *GenerateProposal) Execute(
@@ -93,9 +100,24 @@ func (uc *GenerateProposal) Execute(
 		if err != nil {
 			st = domain.SectionAI
 		}
-		sections = append(sections, domain.NewProposalSection(s.Title, st, s.Tokens))
+		sec, err := domain.NewProposalSection(s.Title, st, s.Tokens)
+		if err != nil {
+			continue
+		}
+		sections = append(sections, sec)
 	}
 	proposal.SetSections(sections, resp.Summary)
+	proposal.SetMeta(resp.Meta)
+
+	logEntries := make([]domain.LogEntry, 0, len(resp.Log))
+	for _, l := range resp.Log {
+		entry, err := domain.NewLogEntry(l.Time, l.Msg)
+		if err != nil {
+			continue
+		}
+		logEntries = append(logEntries, entry)
+	}
+	proposal.SetLog(logEntries)
 
 	return proposal, nil
 }

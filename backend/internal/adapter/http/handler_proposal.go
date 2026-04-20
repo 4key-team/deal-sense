@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -64,16 +63,9 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	langCode := r.FormValue("lang")
-	if langCode == "" {
-		langCode = "ru"
-	}
-	langName := "Russian"
-	if langCode == "en" {
-		langName = "English"
-	}
+	langName := resolveLang(r)
 
-	uc := usecase.NewGenerateProposal(h.resolveLLM(r), h.parser, h.template, llm.ProposalGenerationPrompt(langName))
+	uc := usecase.NewGenerateProposal(h.resolveLLM(r), h.parser, h.template, h.proposalPrompt(langName))
 	result, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -94,16 +86,19 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		docxBase64 = base64.StdEncoding.EncodeToString(result.Result())
 	}
 
+	logEntries := make([]map[string]string, len(result.Log()))
+	for i, l := range result.Log() {
+		logEntries[i] = map[string]string{"time": l.Time(), "msg": l.Msg()}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"template": result.TemplateName(),
 		"summary":  result.Summary(),
+		"meta":     result.Meta(),
 		"sections": sections,
+		"log":      logEntries,
 		"docx":     docxBase64,
 	})
 }
 
 // HandleDownloadProposal serves the generated .docx file.
-func (h *Handler) HandleDownloadProposal(w http.ResponseWriter, r *http.Request) {
-	// For now redirect to generate — in production would use a stored result
-	writeError(w, http.StatusNotImplemented, "download not yet implemented separately")
-}

@@ -44,7 +44,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader())
 	docxTemplate := parser.NewDocxTemplate()
 
-	h := apphttp.NewHandler(provider, llm.Factory{}, docParser, docxTemplate)
+	h := apphttp.NewHandler(provider, llm.Factory{}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux

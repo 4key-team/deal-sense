@@ -10,7 +10,7 @@ func (h *Handler) HandleListModels(w http.ResponseWriter, r *http.Request) {
 	uc := usecase.NewListModels(h.resolveLLM(r))
 	models, err := uc.Execute(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
+		writeJSON(w, http.StatusBadGateway, map[string]any{
 			"models": []string{},
 			"error":  err.Error(),
 		})

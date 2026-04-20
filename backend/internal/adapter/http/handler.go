@@ -7,16 +7,32 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
+// PromptResolver returns a system prompt for a given language name (e.g. "Russian").
+type PromptResolver func(langName string) string
+
 // Handler holds use cases and exposes HTTP endpoints.
 type Handler struct {
-	llm        usecase.LLMProvider
-	llmFactory usecase.LLMProviderFactory
-	parser     usecase.DocumentParser
-	template   usecase.TemplateEngine
+	llm            usecase.LLMProvider
+	llmFactory     usecase.LLMProviderFactory
+	parser         usecase.DocumentParser
+	template       usecase.TemplateEngine
+	tenderPrompt   PromptResolver
+	proposalPrompt PromptResolver
 }
 
-func NewHandler(llm usecase.LLMProvider, factory usecase.LLMProviderFactory, parser usecase.DocumentParser, template usecase.TemplateEngine) *Handler {
-	return &Handler{llm: llm, llmFactory: factory, parser: parser, template: template}
+func NewHandler(
+	llm usecase.LLMProvider,
+	factory usecase.LLMProviderFactory,
+	parser usecase.DocumentParser,
+	template usecase.TemplateEngine,
+	tenderPrompt PromptResolver,
+	proposalPrompt PromptResolver,
+) *Handler {
+	return &Handler{
+		llm: llm, llmFactory: factory,
+		parser: parser, template: template,
+		tenderPrompt: tenderPrompt, proposalPrompt: proposalPrompt,
+	}
 }
 
 // resolveLLM returns an LLMProvider from request headers, or the default one.
@@ -37,10 +53,17 @@ func (h *Handler) resolveLLM(r *http.Request) usecase.LLMProvider {
 	return p
 }
 
+func resolveLang(r *http.Request) string {
+	if r.FormValue("lang") == "en" {
+		return "English"
+	}
+	return "Russian"
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
