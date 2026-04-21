@@ -1,9 +1,11 @@
 package parser
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -23,8 +25,10 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 		return nil, fmt.Errorf("fill template: %w", domain.ErrEmptyTemplate)
 	}
 
+	// Normalize split placeholder runs before go-docx processes the file.
+	template = normalizeDocxRuns(template)
+
 	// go-docx requires a file path — write to temp file.
-	// MkdirTemp/WriteFile on /tmp are infra-level ops; ignoring errors is safe.
 	tmpDir, _ := os.MkdirTemp("", "deal-sense-tmpl-*")
 	defer os.RemoveAll(tmpDir)
 
@@ -47,4 +51,35 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 	doc.Write(&buf)
 
 	return buf.Bytes(), nil
+}
+
+// normalizeDocxRuns opens a DOCX (ZIP), merges split placeholder runs
+// in word/document.xml, and returns the modified DOCX bytes.
+func normalizeDocxRuns(data []byte) []byte {
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return data
+	}
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	for _, f := range r.File {
+		rc, err := f.Open()
+		if err != nil {
+			return data
+		}
+		content, _ := io.ReadAll(rc)
+		rc.Close()
+
+		if f.Name == "word/document.xml" {
+			content = []byte(mergePlaceholderRuns(string(content)))
+		}
+
+		fw, _ := w.Create(f.Name)
+		fw.Write(content)
+	}
+
+	w.Close()
+	return buf.Bytes()
 }
