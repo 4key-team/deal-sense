@@ -164,6 +164,19 @@ func TestAnthropic_NoTextBlock(t *testing.T) {
 	}
 }
 
+func TestAnthropic_ListModels(t *testing.T) {
+	p := llm.NewAnthropic(llm.AnthropicConfig{
+		BaseURL: "http://localhost", APIKey: "sk", Model: "m",
+	})
+	models, err := p.ListModels(t.Context())
+	if err != nil {
+		t.Errorf("ListModels() error = %v", err)
+	}
+	if models != nil {
+		t.Errorf("ListModels() = %v, want nil", models)
+	}
+}
+
 func TestAnthropic_CheckConnection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{

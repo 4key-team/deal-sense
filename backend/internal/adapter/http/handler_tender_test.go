@@ -3,6 +3,7 @@ package http_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -135,5 +136,84 @@ func TestHandleAnalyzeTender(t *testing.T) {
 				t.Errorf("status = %d, want %d, body: %s", rec.Code, tt.wantStatus, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestHandleAnalyzeTender_FullResponse(t *testing.T) {
+	llmResp := `{
+		"verdict":"go","risk":"medium","score":72,"summary":"Decent fit",
+		"pros":[{"title":"Strong team","desc":"10 engineers"}],
+		"cons":[{"title":"No ISO","desc":"Missing cert"}],
+		"requirements":[{"label":"Go experience","status":"met"},{"label":"ISO 27001","status":"partial"}],
+		"effort":"~40 hours"
+	}`
+	llm := &stubLLM{response: llmResp, name: "test"}
+	p := &stubParser{content: "requirements text"}
+	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil)
+
+	req := makeMultipartRequest(t, map[string][]byte{"spec.pdf": []byte("data")}, map[string]string{"company_profile": "Acme"})
+	rec := httptest.NewRecorder()
+	h.HandleAnalyzeTender(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+
+	// Check all fields present
+	if resp["verdict"] != "go" {
+		t.Errorf("verdict = %v, want go", resp["verdict"])
+	}
+	if resp["risk"] != "medium" {
+		t.Errorf("risk = %v, want medium", resp["risk"])
+	}
+	if resp["effort"] != "~40 hours" {
+		t.Errorf("effort = %v, want ~40 hours", resp["effort"])
+	}
+	pros := resp["pros"].([]any)
+	if len(pros) != 1 {
+		t.Errorf("pros len = %d, want 1", len(pros))
+	}
+	cons := resp["cons"].([]any)
+	if len(cons) != 1 {
+		t.Errorf("cons len = %d, want 1", len(cons))
+	}
+	reqs := resp["requirements"].([]any)
+	if len(reqs) != 2 {
+		t.Errorf("requirements len = %d, want 2", len(reqs))
+	}
+
+	usage, ok := resp["usage"].(map[string]any)
+	if !ok {
+		t.Error("expected usage object")
+	} else if usage["total_tokens"] == nil {
+		t.Error("expected total_tokens in usage")
+	}
+}
+
+func TestHandleAnalyzeTender_WithDocx(t *testing.T) {
+	llmResp := `{"verdict":"no-go","risk":"high","score":30,"summary":"Bad fit"}`
+	llm := &stubLLM{response: llmResp, name: "test"}
+	p := &stubParser{content: "text"}
+	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil)
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	fw, _ := w.CreateFormFile("files", "spec.docx")
+	fw.Write([]byte("docx data"))
+	w.WriteField("company_profile", "Acme Corp")
+	w.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/tender/analyze", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.HandleAnalyzeTender(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 }

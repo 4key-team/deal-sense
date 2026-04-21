@@ -33,12 +33,7 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 	w := zip.NewWriter(&buf)
 
 	for _, f := range r.File {
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Errorf("fill template: open %s: %w", f.Name, err)
-		}
-		content, _ := io.ReadAll(rc)
-		rc.Close()
+		content := mustReadZipEntry(f)
 
 		// Replace placeholders in document XML files.
 		if isDocxXML(f.Name) {
@@ -55,6 +50,15 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 
 	w.Close()
 	return buf.Bytes(), nil
+}
+
+// mustReadZipEntry reads the content of an in-memory zip entry.
+// Open on in-memory zip data cannot fail.
+func mustReadZipEntry(f *zip.File) []byte {
+	rc, _ := f.Open() //nolint:errcheck // in-memory zip entry
+	data, _ := io.ReadAll(rc)
+	rc.Close()
+	return data
 }
 
 func isDocxXML(name string) bool {

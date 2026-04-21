@@ -34,6 +34,19 @@ func TestNewTokenUsage(t *testing.T) {
 	}
 }
 
+func TestZeroTokenUsage(t *testing.T) {
+	u := domain.ZeroTokenUsage()
+	if u.PromptTokens() != 0 {
+		t.Errorf("PromptTokens() = %d, want 0", u.PromptTokens())
+	}
+	if u.CompletionTokens() != 0 {
+		t.Errorf("CompletionTokens() = %d, want 0", u.CompletionTokens())
+	}
+	if u.TotalTokens() != 0 {
+		t.Errorf("TotalTokens() = %d, want 0", u.TotalTokens())
+	}
+}
+
 func TestTokenUsage_Add(t *testing.T) {
 	a := domain.NewTokenUsage(100, 200)
 	b := domain.NewTokenUsage(50, 80)

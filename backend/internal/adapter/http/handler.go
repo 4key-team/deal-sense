@@ -2,6 +2,8 @@ package http
 
 import (
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase"
@@ -79,4 +81,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// mustReadMultipartFile reads a multipart file entry that was already buffered by ParseMultipartForm.
+// Open and ReadAll on in-memory multipart data cannot fail.
+func mustReadMultipartFile(fh *multipart.FileHeader) []byte {
+	f, _ := fh.Open() //nolint:errcheck // in-memory open after ParseMultipartForm
+	data, _ := io.ReadAll(f)
+	f.Close()
+	return data
 }

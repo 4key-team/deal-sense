@@ -112,6 +112,62 @@ func TestTenderAnalysis_SetResult(t *testing.T) {
 	}
 }
 
+func TestTenderAnalysis_SetExtras(t *testing.T) {
+	doc, _ := domain.NewDocument("spec.pdf", domain.FileTypePDF, "content")
+	ta, err := domain.NewTenderAnalysis([]domain.Document{*doc}, "Acme Corp")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Initially empty
+	if len(ta.Pros()) != 0 {
+		t.Errorf("Pros() len = %d, want 0", len(ta.Pros()))
+	}
+	if len(ta.Cons()) != 0 {
+		t.Errorf("Cons() len = %d, want 0", len(ta.Cons()))
+	}
+	if len(ta.Requirements()) != 0 {
+		t.Errorf("Requirements() len = %d, want 0", len(ta.Requirements()))
+	}
+	if ta.Effort() != "" {
+		t.Errorf("Effort() = %q, want empty", ta.Effort())
+	}
+
+	// SetExtras
+	pro, _ := domain.NewProCon("Fast team", "We deliver quickly")
+	con, _ := domain.NewProCon("No ISO", "Missing certification")
+	req, _ := domain.NewRequirement("Go experience", domain.ReqMet)
+
+	ta.SetExtras(
+		[]domain.ProCon{pro},
+		[]domain.ProCon{con},
+		[]domain.Requirement{req},
+		"~40 hours",
+	)
+
+	if len(ta.Pros()) != 1 {
+		t.Errorf("Pros() len = %d, want 1", len(ta.Pros()))
+	}
+	if ta.Pros()[0].Title() != "Fast team" {
+		t.Errorf("Pros()[0].Title() = %q, want Fast team", ta.Pros()[0].Title())
+	}
+	if len(ta.Cons()) != 1 {
+		t.Errorf("Cons() len = %d, want 1", len(ta.Cons()))
+	}
+	if ta.Cons()[0].Desc() != "Missing certification" {
+		t.Errorf("Cons()[0].Desc() = %q", ta.Cons()[0].Desc())
+	}
+	if len(ta.Requirements()) != 1 {
+		t.Errorf("Requirements() len = %d, want 1", len(ta.Requirements()))
+	}
+	if ta.Requirements()[0].Label() != "Go experience" {
+		t.Errorf("Requirements()[0].Label() = %q", ta.Requirements()[0].Label())
+	}
+	if ta.Effort() != "~40 hours" {
+		t.Errorf("Effort() = %q, want ~40 hours", ta.Effort())
+	}
+}
+
 func TestParseRequirementStatus(t *testing.T) {
 	tests := []struct {
 		input string

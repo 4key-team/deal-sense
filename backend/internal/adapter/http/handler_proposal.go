@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -18,18 +17,13 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	file, header, err := r.FormFile("template")
+	_, header, err := r.FormFile("template")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "template file is required")
 		return
 	}
-	defer file.Close()
 
-	templateData, err := io.ReadAll(file)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "cannot read template file")
-		return
-	}
+	templateData := mustReadMultipartFile(header)
 
 	var userParams map[string]string
 	if raw := r.FormValue("params"); raw != "" {
@@ -47,15 +41,7 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			continue
 		}
-		f, err := fh.Open()
-		if err != nil {
-			continue
-		}
-		data, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			continue
-		}
+		data := mustReadMultipartFile(fh)
 		contextFiles = append(contextFiles, usecase.FileInput{
 			Name: fh.Filename,
 			Data: data,

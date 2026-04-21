@@ -133,3 +133,70 @@ func TestAnalyzeTender_Execute(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyzeTender_ProsConsRequirements(t *testing.T) {
+	llmResp := `{
+		"verdict":"go","risk":"medium","score":72,"summary":"Decent fit",
+		"pros":[{"title":"Strong team","desc":"10 engineers"},{"title":"","desc":"skip me"}],
+		"cons":[{"title":"No ISO","desc":"Missing cert"},{"title":"","desc":"bad"}],
+		"requirements":[
+			{"label":"Go experience","status":"met"},
+			{"label":"ISO 27001","status":"partial"},
+			{"label":"Track record","status":"miss"},
+			{"label":"","status":"met"},
+			{"label":"Bad status","status":"unknown"}
+		],
+		"effort":"~40 hours"
+	}`
+
+	parser := &stubParser{content: "requirements text"}
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(50, 100)}
+
+	uc := usecase.NewAnalyzeTender(llm, parser, "test prompt")
+	files := []usecase.FileInput{{Name: "spec.pdf", Data: []byte("data"), Type: domain.FileTypePDF}}
+	result, _, err := uc.Execute(t.Context(), files, "Acme Corp")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Pros: 1 valid (empty title skipped)
+	if len(result.Pros()) != 1 {
+		t.Errorf("Pros() len = %d, want 1", len(result.Pros()))
+	}
+	if result.Pros()[0].Title() != "Strong team" {
+		t.Errorf("Pros()[0].Title() = %q", result.Pros()[0].Title())
+	}
+
+	// Cons: 1 valid (empty title skipped)
+	if len(result.Cons()) != 1 {
+		t.Errorf("Cons() len = %d, want 1", len(result.Cons()))
+	}
+
+	// Requirements: 3 valid (empty label and unknown status skipped)
+	if len(result.Requirements()) != 3 {
+		t.Errorf("Requirements() len = %d, want 3", len(result.Requirements()))
+	}
+
+	if result.Effort() != "~40 hours" {
+		t.Errorf("Effort() = %q, want ~40 hours", result.Effort())
+	}
+}
+
+func TestAnalyzeTender_MultipleFiles(t *testing.T) {
+	llmResp := `{"verdict":"no-go","risk":"high","score":30,"summary":"Bad fit"}`
+	parser := &stubParser{content: "text"}
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(50, 100)}
+
+	uc := usecase.NewAnalyzeTender(llm, parser, "test prompt")
+	files := []usecase.FileInput{
+		{Name: "spec.pdf", Data: []byte("data1"), Type: domain.FileTypePDF},
+		{Name: "req.docx", Data: []byte("data2"), Type: domain.FileTypeDOCX},
+	}
+	result, _, err := uc.Execute(t.Context(), files, "Acme Corp")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Documents()) != 2 {
+		t.Errorf("Documents() len = %d, want 2", len(result.Documents()))
+	}
+}

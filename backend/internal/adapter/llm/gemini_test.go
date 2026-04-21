@@ -163,6 +163,19 @@ func TestGemini_EmptyParts(t *testing.T) {
 	}
 }
 
+func TestGemini_ListModels(t *testing.T) {
+	p := llm.NewGemini(llm.GeminiConfig{
+		BaseURL: "http://localhost", APIKey: "k", Model: "m",
+	})
+	models, err := p.ListModels(t.Context())
+	if err != nil {
+		t.Errorf("ListModels() error = %v", err)
+	}
+	if models != nil {
+		t.Errorf("ListModels() = %v, want nil", models)
+	}
+}
+
 func TestGemini_CheckConnection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{

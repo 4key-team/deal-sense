@@ -1,6 +1,7 @@
 package llm_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
@@ -32,6 +33,48 @@ func TestFactory_Create(t *testing.T) {
 			}
 			if err != nil { t.Fatalf("unexpected error: %v", err) }
 			if p.Name() != tt.wantName { t.Errorf("name = %q, want %q", p.Name(), tt.wantName) }
+		})
+	}
+}
+
+func TestTenderAnalysisPrompt(t *testing.T) {
+	tests := []struct {
+		lang     string
+		wantLang string
+	}{
+		{"Russian", "Russian"},
+		{"English", "English"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.lang, func(t *testing.T) {
+			prompt := llm.TenderAnalysisPrompt(tt.lang)
+			if !strings.Contains(prompt, tt.wantLang) {
+				t.Errorf("prompt does not contain %q", tt.wantLang)
+			}
+			if !strings.Contains(prompt, "verdict") {
+				t.Error("prompt missing expected structure (verdict)")
+			}
+		})
+	}
+}
+
+func TestProposalGenerationPrompt(t *testing.T) {
+	tests := []struct {
+		lang     string
+		wantLang string
+	}{
+		{"Russian", "Russian"},
+		{"English", "English"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.lang, func(t *testing.T) {
+			prompt := llm.ProposalGenerationPrompt(tt.lang)
+			if !strings.Contains(prompt, tt.wantLang) {
+				t.Errorf("prompt does not contain %q", tt.wantLang)
+			}
+			if !strings.Contains(prompt, "params") {
+				t.Error("prompt missing expected structure (params)")
+			}
 		})
 	}
 }

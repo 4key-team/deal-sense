@@ -131,6 +131,60 @@ func TestNewLogEntry(t *testing.T) {
 	}
 }
 
+func TestProposal_SetSections_Meta_Log_Summary(t *testing.T) {
+	p, err := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Initially empty
+	if len(p.Sections()) != 0 {
+		t.Errorf("Sections() len = %d, want 0", len(p.Sections()))
+	}
+	if p.Summary() != "" {
+		t.Errorf("Summary() = %q, want empty", p.Summary())
+	}
+	if p.Meta() != nil {
+		t.Errorf("Meta() = %v, want nil", p.Meta())
+	}
+	if len(p.Log()) != 0 {
+		t.Errorf("Log() len = %d, want 0", len(p.Log()))
+	}
+
+	// SetSections + Summary
+	sec, _ := domain.NewProposalSection("Intro", domain.SectionAI, 100)
+	p.SetSections([]domain.ProposalSection{sec}, "All done")
+	if len(p.Sections()) != 1 {
+		t.Errorf("Sections() len = %d, want 1", len(p.Sections()))
+	}
+	if p.Sections()[0].Title() != "Intro" {
+		t.Errorf("Sections()[0].Title() = %q, want Intro", p.Sections()[0].Title())
+	}
+	if p.Summary() != "All done" {
+		t.Errorf("Summary() = %q, want %q", p.Summary(), "All done")
+	}
+
+	// SetMeta
+	meta := map[string]string{"client": "Acme", "project": "Portal"}
+	p.SetMeta(meta)
+	if len(p.Meta()) != 2 {
+		t.Errorf("Meta() len = %d, want 2", len(p.Meta()))
+	}
+	if p.Meta()["client"] != "Acme" {
+		t.Errorf("Meta()[client] = %q, want Acme", p.Meta()["client"])
+	}
+
+	// SetLog
+	entry, _ := domain.NewLogEntry("14:00", "started")
+	p.SetLog([]domain.LogEntry{entry})
+	if len(p.Log()) != 1 {
+		t.Errorf("Log() len = %d, want 1", len(p.Log()))
+	}
+	if p.Log()[0].Msg() != "started" {
+		t.Errorf("Log()[0].Msg() = %q, want started", p.Log()[0].Msg())
+	}
+}
+
 func TestNewProposalSection(t *testing.T) {
 	tests := []struct {
 		name    string

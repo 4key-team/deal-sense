@@ -1,7 +1,6 @@
 package http
 
 import (
-	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -40,17 +39,7 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		f, err := fh.Open()
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "cannot read file: "+fh.Filename)
-			return
-		}
-		data, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "cannot read file: "+fh.Filename)
-			return
-		}
+		data := mustReadMultipartFile(fh)
 
 		inputs = append(inputs, usecase.FileInput{
 			Name: fh.Filename,

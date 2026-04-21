@@ -159,6 +159,93 @@ func TestOpenAICompatible_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatible_ListModels(t *testing.T) {
+	t.Run("successful list", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				t.Errorf("method = %s, want GET", r.Method)
+			}
+			if r.URL.Path != "/models" {
+				t.Errorf("path = %s, want /models", r.URL.Path)
+			}
+			if r.Header.Get("Authorization") != "Bearer sk-test" {
+				t.Errorf("auth header missing or wrong")
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{"id": "gpt-4o"},
+					{"id": "gpt-3.5-turbo"},
+				},
+			})
+		}))
+		defer srv.Close()
+
+		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
+			BaseURL: srv.URL, APIKey: "sk-test", Model: "gpt-4o", Name: "openai",
+		})
+		models, err := p.ListModels(t.Context())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(models) != 2 {
+			t.Errorf("got %d models, want 2", len(models))
+		}
+		if models[0] != "gpt-4o" {
+			t.Errorf("models[0] = %q, want gpt-4o", models[0])
+		}
+	})
+
+	t.Run("server error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
+			BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
+		})
+		_, err := p.ListModels(t.Context())
+		if err == nil {
+			t.Error("expected error")
+		}
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("not json"))
+		}))
+		defer srv.Close()
+
+		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
+			BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
+		})
+		_, err := p.ListModels(t.Context())
+		if err == nil {
+			t.Error("expected parse error")
+		}
+	})
+
+	t.Run("connection refused", func(t *testing.T) {
+		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
+			BaseURL: "http://127.0.0.1:1", APIKey: "sk", Model: "m", Name: "test",
+		})
+		_, err := p.ListModels(t.Context())
+		if err == nil {
+			t.Error("expected connection error")
+		}
+	})
+
+	t.Run("invalid base URL", func(t *testing.T) {
+		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
+			BaseURL: "://bad\x7furl", APIKey: "sk", Model: "m", Name: "test",
+		})
+		_, err := p.ListModels(t.Context())
+		if err == nil {
+			t.Error("expected URL parse error")
+		}
+	})
+}
+
 func TestOpenAICompatible_CheckConnection(t *testing.T) {
 	t.Run("healthy", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

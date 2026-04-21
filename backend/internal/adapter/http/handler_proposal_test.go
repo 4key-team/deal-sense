@@ -3,6 +3,7 @@ package http_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"mime/multipart"
 	"net/http"
@@ -126,6 +127,131 @@ func TestHandleGenerateProposal(t *testing.T) {
 
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("full response with sections, meta, log, and docx", func(t *testing.T) {
+		llmResp := `{
+			"params":{"company_name":"Acme"},
+			"meta":{"client":"ClientCo","project":"Portal"},
+			"sections":[
+				{"title":"Intro","status":"filled","tokens":50},
+				{"title":"Body","status":"ai","tokens":200}
+			],
+			"summary":"КП сгенерировано",
+			"log":[{"time":"14:00:01","msg":"started"},{"time":"14:00:02","msg":"done"}]
+		}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("filled document bytes")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		fw, _ := w.CreateFormFile("template", "offer.docx")
+		fw.Write([]byte("template data"))
+		w.WriteField("params", `{"company":"Acme"}`)
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var resp map[string]any
+		json.NewDecoder(rec.Body).Decode(&resp)
+
+		// Check sections
+		sections, ok := resp["sections"].([]any)
+		if !ok || len(sections) != 2 {
+			t.Errorf("sections len = %v, want 2", len(sections))
+		}
+
+		// Check meta
+		if resp["meta"] == nil {
+			t.Error("expected meta in response")
+		}
+
+		// Check log
+		logEntries, ok := resp["log"].([]any)
+		if !ok || len(logEntries) != 2 {
+			t.Errorf("log len = %v, want 2", len(logEntries))
+		}
+
+		// Check docx base64
+		if resp["docx"] == nil || resp["docx"] == "" {
+			t.Error("expected non-empty docx base64")
+		}
+
+		// Check usage
+		usage, ok := resp["usage"].(map[string]any)
+		if !ok {
+			t.Error("expected usage object")
+		} else if usage["total_tokens"] == nil {
+			t.Error("expected total_tokens in usage")
+		}
+	})
+
+	t.Run("with context files", func(t *testing.T) {
+		llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("doc")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		// template file
+		fw, _ := w.CreateFormFile("template", "offer.docx")
+		fw.Write([]byte("template"))
+		// context file (pdf)
+		cw, _ := w.CreateFormFile("context", "brief.pdf")
+		cw.Write([]byte("brief data"))
+		// context file (unsupported - should be skipped)
+		cw2, _ := w.CreateFormFile("context", "notes.txt")
+		cw2.Write([]byte("notes"))
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+	})
+
+	t.Run("with lang=en", func(t *testing.T) {
+		llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
+		var capturedLang string
+		promptFn := func(lang string) string {
+			capturedLang = lang
+			return "test prompt"
+		}
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("doc")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, promptFn, promptFn, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		fw, _ := w.CreateFormFile("template", "offer.docx")
+		fw.Write([]byte("template"))
+		w.WriteField("lang", "en")
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if capturedLang != "English" {
+			t.Errorf("lang = %q, want English", capturedLang)
 		}
 	})
 }
