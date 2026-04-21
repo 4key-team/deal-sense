@@ -22,7 +22,7 @@ func TestNewProposal(t *testing.T) {
 		{name: "nil params is ok", tmplName: "offer.docx", content: validContent, params: nil},
 		{name: "empty content", tmplName: "offer.docx", content: []byte{}, params: validParams, wantErr: domain.ErrEmptyTemplate},
 		{name: "nil content", tmplName: "offer.docx", content: nil, params: validParams, wantErr: domain.ErrEmptyTemplate},
-		{name: "empty name", tmplName: "", content: validContent, params: validParams, wantErr: domain.ErrEmptyTemplate},
+		{name: "empty name", tmplName: "", content: validContent, params: validParams, wantErr: domain.ErrEmptyName},
 	}
 
 	for _, tt := range tests {

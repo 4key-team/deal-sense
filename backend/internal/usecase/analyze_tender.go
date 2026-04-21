@@ -93,9 +93,10 @@ func (uc *AnalyzeTender) Execute(
 		fmt.Fprintf(&allText, "=== %s ===\n%s\n\n", f.Name, text)
 	}
 
-	// NewTenderAnalysis cannot fail here: docs is non-empty (populated in the loop above)
-	// and companyProfile is non-empty (validated at function entry).
-	analysis, _ := domain.NewTenderAnalysis(docs, companyProfile)
+	analysis, err := domain.NewTenderAnalysis(docs, companyProfile)
+	if err != nil {
+		return nil, noUsage, fmt.Errorf("create analysis: %w", err)
+	}
 
 	userPrompt := fmt.Sprintf("Company profile:\n%s\n\nTender documents:\n%s", companyProfile, allText.String())
 

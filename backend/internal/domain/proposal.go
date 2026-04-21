@@ -72,7 +72,7 @@ func NewProposal(templateName string, templateContent []byte, parameters map[str
 		return nil, ErrEmptyTemplate
 	}
 	if templateName == "" {
-		return nil, ErrEmptyTemplate
+		return nil, ErrEmptyName
 	}
 	return &Proposal{
 		templateName:    templateName,
