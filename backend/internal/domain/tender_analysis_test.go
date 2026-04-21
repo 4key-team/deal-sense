@@ -168,6 +168,21 @@ func TestTenderAnalysis_SetExtras(t *testing.T) {
 	}
 }
 
+func TestTenderAnalysis_SetExtras_Nil(t *testing.T) {
+	doc, _ := domain.NewDocument("spec.pdf", domain.FileTypePDF, "content")
+	ta, _ := domain.NewTenderAnalysis([]domain.Document{*doc}, "Acme")
+	ta.SetExtras(nil, nil, nil, "")
+	if ta.Pros() == nil {
+		t.Error("SetExtras(nil pros) should set empty slice")
+	}
+	if ta.Cons() == nil {
+		t.Error("SetExtras(nil cons) should set empty slice")
+	}
+	if ta.Requirements() == nil {
+		t.Error("SetExtras(nil reqs) should set empty slice")
+	}
+}
+
 func TestParseRequirementStatus(t *testing.T) {
 	tests := []struct {
 		input string

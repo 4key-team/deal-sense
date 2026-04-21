@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
@@ -14,6 +15,16 @@ type FileInput struct {
 	Name string
 	Data []byte
 	Type domain.FileType
+}
+
+// NewFileInput creates a FileInput, parsing the file extension into a domain FileType.
+func NewFileInput(name string, data []byte) (FileInput, error) {
+	ext := strings.TrimPrefix(path.Ext(name), ".")
+	ft, err := domain.ParseFileType(ext)
+	if err != nil {
+		return FileInput{}, err
+	}
+	return FileInput{Name: name, Data: data, Type: ft}, nil
 }
 
 type AnalyzeTender struct {

@@ -200,3 +200,38 @@ func TestAnalyzeTender_MultipleFiles(t *testing.T) {
 		t.Errorf("Documents() len = %d, want 2", len(result.Documents()))
 	}
 }
+
+func TestNewFileInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		fname   string
+		wantErr bool
+		wantFT  domain.FileType
+	}{
+		{name: "pdf", fname: "spec.pdf", wantFT: domain.FileTypePDF},
+		{name: "docx", fname: "offer.docx", wantFT: domain.FileTypeDOCX},
+		{name: "unsupported", fname: "notes.txt", wantErr: true},
+		{name: "no extension", fname: "readme", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fi, err := usecase.NewFileInput(tt.fname, []byte("data"))
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if fi.Name != tt.fname {
+				t.Errorf("Name = %q, want %q", fi.Name, tt.fname)
+			}
+			if fi.Type != tt.wantFT {
+				t.Errorf("Type = %v, want %v", fi.Type, tt.wantFT)
+			}
+		})
+	}
+}

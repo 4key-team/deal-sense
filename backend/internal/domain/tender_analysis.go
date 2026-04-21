@@ -126,6 +126,15 @@ func (t *TenderAnalysis) SetResult(verdict Verdict, risk Risk, score MatchScore,
 }
 
 func (t *TenderAnalysis) SetExtras(pros, cons []ProCon, reqs []Requirement, effort string) {
+	if pros == nil {
+		pros = []ProCon{}
+	}
+	if cons == nil {
+		cons = []ProCon{}
+	}
+	if reqs == nil {
+		reqs = []Requirement{}
+	}
 	t.pros = pros
 	t.cons = cons
 	t.requirements = reqs

@@ -99,5 +99,16 @@ func (p *Proposal) SetSections(sections []ProposalSection, summary string) {
 	p.summary = summary
 }
 
-func (p *Proposal) SetMeta(meta map[string]string) { p.meta = meta }
-func (p *Proposal) SetLog(log []LogEntry)           { p.log = log }
+func (p *Proposal) SetMeta(meta map[string]string) {
+	if meta == nil {
+		meta = map[string]string{}
+	}
+	p.meta = meta
+}
+
+func (p *Proposal) SetLog(log []LogEntry) {
+	if log == nil {
+		log = []LogEntry{}
+	}
+	p.log = log
+}

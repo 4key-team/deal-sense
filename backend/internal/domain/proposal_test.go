@@ -185,6 +185,28 @@ func TestProposal_SetSections_Meta_Log_Summary(t *testing.T) {
 	}
 }
 
+func TestProposal_SetMeta_Nil(t *testing.T) {
+	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+	p.SetMeta(nil)
+	if p.Meta() == nil {
+		t.Error("SetMeta(nil) should set empty map, not nil")
+	}
+	if len(p.Meta()) != 0 {
+		t.Errorf("Meta() len = %d, want 0", len(p.Meta()))
+	}
+}
+
+func TestProposal_SetLog_Nil(t *testing.T) {
+	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+	p.SetLog(nil)
+	if p.Log() == nil {
+		t.Error("SetLog(nil) should set empty slice, not nil")
+	}
+	if len(p.Log()) != 0 {
+		t.Errorf("Log() len = %d, want 0", len(p.Log()))
+	}
+}
+
 func TestNewProposalSection(t *testing.T) {
 	tests := []struct {
 		name    string

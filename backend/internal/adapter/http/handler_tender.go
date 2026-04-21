@@ -2,10 +2,8 @@ package http
 
 import (
 	"net/http"
-	"path/filepath"
 	"strings"
 
-	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
@@ -32,20 +30,12 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 
 	var inputs []usecase.FileInput
 	for _, fh := range files {
-		ext := strings.TrimPrefix(filepath.Ext(fh.Filename), ".")
-		ft, err := domain.ParseFileType(ext)
+		fi, err := usecase.NewFileInput(fh.Filename, mustReadMultipartFile(fh))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "unsupported file type: "+fh.Filename)
 			return
 		}
-
-		data := mustReadMultipartFile(fh)
-
-		inputs = append(inputs, usecase.FileInput{
-			Name: fh.Filename,
-			Data: data,
-			Type: ft,
-		})
+		inputs = append(inputs, fi)
 	}
 
 	uc := usecase.NewAnalyzeTender(h.resolveLLM(r), h.parser, h.tenderPrompt(langName))

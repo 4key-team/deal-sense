@@ -4,10 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
-	"strings"
 
-	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
@@ -33,20 +30,14 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Parse context files
+	// Parse context files (skip unsupported types)
 	var contextFiles []usecase.FileInput
 	for _, fh := range r.MultipartForm.File["context"] {
-		ext := strings.TrimPrefix(filepath.Ext(fh.Filename), ".")
-		ft, err := domain.ParseFileType(ext)
+		fi, err := usecase.NewFileInput(fh.Filename, mustReadMultipartFile(fh))
 		if err != nil {
 			continue
 		}
-		data := mustReadMultipartFile(fh)
-		contextFiles = append(contextFiles, usecase.FileInput{
-			Name: fh.Filename,
-			Data: data,
-			Type: ft,
-		})
+		contextFiles = append(contextFiles, fi)
 	}
 
 	langName := resolveLang(r)
