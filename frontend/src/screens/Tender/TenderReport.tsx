@@ -294,6 +294,11 @@ export function TenderReport() {
           <span className={`t-micro ${styles.cardHeader}`}>{t.tender.effort}</span>
           <span className={styles.effortValue}>{result.effort || "—"}</span>
           <p className="t-small dim">{result.summary}</p>
+          {result.usage && (
+            <p className="t-micro dim" style={{ marginTop: 8 }}>
+              {lang === "ru" ? "Токены" : "Tokens"}: {result.usage.prompt_tokens.toLocaleString()} prompt + {result.usage.completion_tokens.toLocaleString()} completion = {result.usage.total_tokens.toLocaleString()}
+            </p>
+          )}
         </Card>
 
         {/* Stats summary */}

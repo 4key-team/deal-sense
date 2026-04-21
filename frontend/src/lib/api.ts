@@ -12,6 +12,12 @@ export interface TenderRequirement {
   status: "met" | "partial" | "miss";
 }
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface TenderResult {
   verdict: string;
   risk: string;
@@ -21,6 +27,7 @@ export interface TenderResult {
   cons: TenderProCon[];
   requirements: TenderRequirement[];
   effort: string;
+  usage?: TokenUsage;
 }
 
 export interface CheckResult {
@@ -97,6 +104,7 @@ export interface ProposalResult {
   sections: ProposalSection[];
   log: ProposalLogEntry[];
   docx: string; // base64 encoded .docx
+  usage?: TokenUsage;
 }
 
 export async function generateProposal(

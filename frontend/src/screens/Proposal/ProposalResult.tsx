@@ -174,7 +174,8 @@ export function ProposalResult() {
 
   const meta = result.meta ?? {};
   const logEntries = result.log ?? [];
-  const totalTokens = sections.reduce((sum, s) => sum + s.tokens, 0);
+  const usage = result.usage;
+  const totalTokens = usage?.total_tokens ?? sections.reduce((sum, s) => sum + s.tokens, 0);
 
   return (
     <div className={`screen-enter ${styles.layout}`}>
