@@ -6,14 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
-	"github.com/lukasjarosch/go-docx"
 )
 
-// DocxTemplate fills DOCX templates with placeholder values using go-docx.
+// DocxTemplate fills DOCX templates with placeholder values.
+// Placeholders use {{key}} syntax in the document text.
 type DocxTemplate struct{}
 
 func NewDocxTemplate() *DocxTemplate {
@@ -25,40 +24,9 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 		return nil, fmt.Errorf("fill template: %w", domain.ErrEmptyTemplate)
 	}
 
-	// Normalize split placeholder runs before go-docx processes the file.
-	template = normalizeDocxRuns(template)
-
-	// go-docx requires a file path — write to temp file.
-	tmpDir, _ := os.MkdirTemp("", "deal-sense-tmpl-*")
-	defer os.RemoveAll(tmpDir)
-
-	inputPath := filepath.Join(tmpDir, "input.docx")
-	os.WriteFile(inputPath, template, 0o600)
-
-	doc, err := docx.Open(inputPath)
+	r, err := zip.NewReader(bytes.NewReader(template), int64(len(template)))
 	if err != nil {
 		return nil, fmt.Errorf("fill template: %w", err)
-	}
-
-	replaceMap := docx.PlaceholderMap{}
-	for k, v := range params {
-		replaceMap[k] = v
-	}
-
-	doc.ReplaceAll(replaceMap)
-
-	var buf bytes.Buffer
-	doc.Write(&buf)
-
-	return buf.Bytes(), nil
-}
-
-// normalizeDocxRuns opens a DOCX (ZIP), merges split placeholder runs
-// in word/document.xml, and returns the modified DOCX bytes.
-func normalizeDocxRuns(data []byte) []byte {
-	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return data
 	}
 
 	var buf bytes.Buffer
@@ -67,13 +35,18 @@ func normalizeDocxRuns(data []byte) []byte {
 	for _, f := range r.File {
 		rc, err := f.Open()
 		if err != nil {
-			return data
+			return nil, fmt.Errorf("fill template: open %s: %w", f.Name, err)
 		}
 		content, _ := io.ReadAll(rc)
 		rc.Close()
 
-		if f.Name == "word/document.xml" {
-			content = []byte(mergePlaceholderRuns(string(content)))
+		// Replace placeholders in document XML files.
+		if isDocxXML(f.Name) {
+			xml := mergePlaceholderRuns(string(content))
+			for k, v := range params {
+				xml = strings.ReplaceAll(xml, "{{"+k+"}}", escapeXML(v))
+			}
+			content = []byte(xml)
 		}
 
 		fw, _ := w.Create(f.Name)
@@ -81,5 +54,24 @@ func normalizeDocxRuns(data []byte) []byte {
 	}
 
 	w.Close()
-	return buf.Bytes()
+	return buf.Bytes(), nil
+}
+
+func isDocxXML(name string) bool {
+	return name == "word/document.xml" ||
+		name == "word/header1.xml" ||
+		name == "word/header2.xml" ||
+		name == "word/header3.xml" ||
+		name == "word/footer1.xml" ||
+		name == "word/footer2.xml" ||
+		name == "word/footer3.xml"
+}
+
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&apos;")
+	return s
 }
