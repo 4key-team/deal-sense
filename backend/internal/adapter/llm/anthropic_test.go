@@ -93,7 +93,7 @@ func TestAnthropic_GenerateCompletion(t *testing.T) {
 				Model:   "claude-sonnet-4-5",
 			})
 
-			result, err := p.GenerateCompletion(t.Context(), "system", "user")
+			result, _, err := p.GenerateCompletion(t.Context(), "system", "user")
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -114,7 +114,7 @@ func TestAnthropic_ConnectionRefused(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: "http://127.0.0.1:1", APIKey: "sk", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected connection error")
 	}
@@ -124,7 +124,7 @@ func TestAnthropic_InvalidBaseURL(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: "://bad\x7furl", APIKey: "sk", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected URL parse error")
 	}
@@ -139,7 +139,7 @@ func TestAnthropic_InvalidJSON(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected parse error")
 	}
@@ -158,7 +158,7 @@ func TestAnthropic_NoTextBlock(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected error for no text block")
 	}

@@ -92,7 +92,7 @@ func TestGemini_GenerateCompletion(t *testing.T) {
 				Model:   "gemini-2.5-pro",
 			})
 
-			result, err := p.GenerateCompletion(t.Context(), "system", "user prompt")
+			result, _, err := p.GenerateCompletion(t.Context(), "system", "user prompt")
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -113,7 +113,7 @@ func TestGemini_ConnectionRefused(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: "http://127.0.0.1:1", APIKey: "k", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected connection error")
 	}
@@ -123,7 +123,7 @@ func TestGemini_InvalidBaseURL(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: "://bad\x7furl", APIKey: "k", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected URL parse error")
 	}
@@ -138,7 +138,7 @@ func TestGemini_InvalidJSON(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: srv.URL, APIKey: "k", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected parse error")
 	}
@@ -157,7 +157,7 @@ func TestGemini_EmptyParts(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: srv.URL, APIKey: "k", Model: "m",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected error for empty parts")
 	}

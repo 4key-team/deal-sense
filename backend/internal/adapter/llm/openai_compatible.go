@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/daniil/deal-sense/backend/internal/domain"
 )
 
 // OpenAIConfig holds configuration for OpenAI-compatible providers.
@@ -46,6 +48,7 @@ type chatMessage struct {
 
 type chatResponse struct {
 	Choices []chatChoice `json:"choices"`
+	Usage   chatUsage    `json:"usage"`
 	Error   *apiError    `json:"error,omitempty"`
 }
 
@@ -53,11 +56,16 @@ type chatChoice struct {
 	Message chatMessage `json:"message"`
 }
 
+type chatUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
 type apiError struct {
 	Message string `json:"message"`
 }
 
-func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
 	body, _ := json.Marshal(chatRequest{
 		Model: p.config.Model,
 		Messages: []chatMessage{
@@ -68,14 +76,14 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.config.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -88,23 +96,24 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
 		}
-		return "", fmt.Errorf("llm %s: %s (status %d)", p.config.Name, msg, resp.StatusCode)
+		return "", domain.TokenUsage{}, fmt.Errorf("llm %s: %s (status %d)", p.config.Name, msg, resp.StatusCode)
 	}
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("parse response: %w", err)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("llm %s: no choices in response", p.config.Name)
+		return "", domain.TokenUsage{}, fmt.Errorf("llm %s: no choices in response", p.config.Name)
 	}
 
-	return chatResp.Choices[0].Message.Content, nil
+	usage := domain.NewTokenUsage(chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens)
+	return chatResp.Choices[0].Message.Content, usage, nil
 }
 
 func (p *OpenAICompatible) CheckConnection(ctx context.Context) error {
-	_, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
+	_, _, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
 	return err
 }
 

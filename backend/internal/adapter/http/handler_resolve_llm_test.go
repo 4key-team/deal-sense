@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	handler "github.com/daniil/deal-sense/backend/internal/adapter/http"
+	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
@@ -24,8 +25,8 @@ type stubLLMForResolve struct {
 	name string
 }
 
-func (s *stubLLMForResolve) GenerateCompletion(_ context.Context, _, _ string) (string, error) {
-	return "", nil
+func (s *stubLLMForResolve) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
+	return "", domain.TokenUsage{}, nil
 }
 func (s *stubLLMForResolve) CheckConnection(_ context.Context) error        { return nil }
 func (s *stubLLMForResolve) ListModels(_ context.Context) ([]string, error) { return nil, nil }

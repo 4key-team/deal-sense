@@ -60,7 +60,7 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uc := usecase.NewAnalyzeTender(h.resolveLLM(r), h.parser, h.tenderPrompt(langName))
-	result, err := uc.Execute(r.Context(), inputs, companyProfile)
+	result, usage, err := uc.Execute(r.Context(), inputs, companyProfile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -88,5 +88,10 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 		"cons":         cons,
 		"requirements": reqs,
 		"effort":       result.Effort(),
+		"usage": map[string]int{
+			"prompt_tokens":     usage.PromptTokens(),
+			"completion_tokens": usage.CompletionTokens(),
+			"total_tokens":      usage.TotalTokens(),
+		},
 	})
 }

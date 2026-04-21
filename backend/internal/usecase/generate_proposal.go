@@ -46,10 +46,11 @@ func (uc *GenerateProposal) Execute(
 	templateData []byte,
 	contextFiles []FileInput,
 	userParams map[string]string,
-) (*domain.Proposal, error) {
+) (*domain.Proposal, domain.TokenUsage, error) {
+	var noUsage domain.TokenUsage
 	proposal, err := domain.NewProposal(templateName, templateData, userParams)
 	if err != nil {
-		return nil, err
+		return nil, noUsage, err
 	}
 
 	// Parse context files
@@ -70,15 +71,15 @@ func (uc *GenerateProposal) Execute(
 		templateName, templateText, contextText.String(), userParams,
 	)
 
-	llmResp, err := uc.llm.GenerateCompletion(ctx, uc.systemPrompt, userPrompt)
+	llmResp, usage, err := uc.llm.GenerateCompletion(ctx, uc.systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("llm completion: %w", err)
+		return nil, noUsage, fmt.Errorf("llm completion: %w", err)
 	}
 
 	cleaned := extractJSON(llmResp)
 	var resp proposalLLMResponse
 	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
-		return nil, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
+		return nil, noUsage, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
 	}
 
 	// Merge: user params override LLM params
@@ -88,7 +89,7 @@ func (uc *GenerateProposal) Execute(
 
 	filled, err := uc.template.Fill(ctx, templateData, mergedParams)
 	if err != nil {
-		return nil, fmt.Errorf("template fill: %w", err)
+		return nil, noUsage, fmt.Errorf("template fill: %w", err)
 	}
 
 	proposal.SetResult(filled)
@@ -119,5 +120,5 @@ func (uc *GenerateProposal) Execute(
 	}
 	proposal.SetLog(logEntries)
 
-	return proposal, nil
+	return proposal, usage, nil
 }

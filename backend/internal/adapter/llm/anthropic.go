@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/daniil/deal-sense/backend/internal/domain"
 )
 
 type AnthropicConfig struct {
@@ -38,7 +40,13 @@ type anthropicRequest struct {
 
 type anthropicResponse struct {
 	Content []anthropicBlock `json:"content"`
+	Usage   anthropicUsage   `json:"usage"`
 	Error   *apiError        `json:"error,omitempty"`
+}
+
+type anthropicUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }
 
 type anthropicBlock struct {
@@ -46,7 +54,7 @@ type anthropicBlock struct {
 	Text string `json:"text"`
 }
 
-func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
 	reqBody := anthropicRequest{
 		Model:     p.config.Model,
 		MaxTokens: 4096,
@@ -60,7 +68,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.config.BaseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.config.APIKey)
@@ -68,7 +76,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -81,29 +89,30 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
 		}
-		return "", fmt.Errorf("anthropic: %s (status %d)", msg, resp.StatusCode)
+		return "", domain.TokenUsage{}, fmt.Errorf("anthropic: %s (status %d)", msg, resp.StatusCode)
 	}
 
 	var antResp anthropicResponse
 	if err := json.Unmarshal(respBody, &antResp); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("parse response: %w", err)
 	}
 
 	if len(antResp.Content) == 0 {
-		return "", fmt.Errorf("anthropic: no content blocks in response")
+		return "", domain.TokenUsage{}, fmt.Errorf("anthropic: no content blocks in response")
 	}
 
+	usage := domain.NewTokenUsage(antResp.Usage.InputTokens, antResp.Usage.OutputTokens)
 	for _, block := range antResp.Content {
 		if block.Type == "text" {
-			return block.Text, nil
+			return block.Text, usage, nil
 		}
 	}
 
-	return "", fmt.Errorf("anthropic: no text block in response")
+	return "", domain.TokenUsage{}, fmt.Errorf("anthropic: no text block in response")
 }
 
 func (p *Anthropic) CheckConnection(ctx context.Context) error {
-	_, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
+	_, _, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
 	return err
 }
 

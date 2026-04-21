@@ -68,12 +68,13 @@ func (uc *AnalyzeTender) Execute(
 	ctx context.Context,
 	files []FileInput,
 	companyProfile string,
-) (*domain.TenderAnalysis, error) {
+) (*domain.TenderAnalysis, domain.TokenUsage, error) {
+	var noUsage domain.TokenUsage
 	if len(files) == 0 {
-		return nil, domain.ErrEmptyContent
+		return nil, noUsage, domain.ErrEmptyContent
 	}
 	if companyProfile == "" {
-		return nil, domain.ErrEmptyCompany
+		return nil, noUsage, domain.ErrEmptyCompany
 	}
 
 	var docs []domain.Document
@@ -82,44 +83,42 @@ func (uc *AnalyzeTender) Execute(
 	for _, f := range files {
 		text, err := uc.parser.Parse(ctx, f.Name, f.Data)
 		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", f.Name, err)
+			return nil, noUsage, fmt.Errorf("parse %s: %w", f.Name, err)
 		}
 		doc, err := domain.NewDocument(f.Name, f.Type, text)
 		if err != nil {
-			return nil, fmt.Errorf("document %s: %w", f.Name, err)
+			return nil, noUsage, fmt.Errorf("document %s: %w", f.Name, err)
 		}
 		docs = append(docs, *doc)
 		fmt.Fprintf(&allText, "=== %s ===\n%s\n\n", f.Name, text)
 	}
 
-	// docs is guaranteed non-empty (we return early on parse errors above)
-	// companyProfile is guaranteed non-empty (checked at L43)
 	analysis, _ := domain.NewTenderAnalysis(docs, companyProfile)
 
 	userPrompt := fmt.Sprintf("Company profile:\n%s\n\nTender documents:\n%s", companyProfile, allText.String())
 
-	llmResp, err := uc.llm.GenerateCompletion(ctx, uc.systemPrompt, userPrompt)
+	llmResp, usage, err := uc.llm.GenerateCompletion(ctx, uc.systemPrompt, userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("llm analysis: %w", err)
+		return nil, noUsage, fmt.Errorf("llm analysis: %w", err)
 	}
 
 	var resp analysisResponse
 	cleaned := extractJSON(llmResp)
 	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
-		return nil, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
+		return nil, noUsage, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
 	}
 
 	verdict, err := domain.ParseVerdict(resp.Verdict)
 	if err != nil {
-		return nil, fmt.Errorf("parse verdict: %w", err)
+		return nil, noUsage, fmt.Errorf("parse verdict: %w", err)
 	}
 	risk, err := domain.ParseRisk(resp.Risk)
 	if err != nil {
-		return nil, fmt.Errorf("parse risk: %w", err)
+		return nil, noUsage, fmt.Errorf("parse risk: %w", err)
 	}
 	score, err := domain.NewMatchScore(resp.Score)
 	if err != nil {
-		return nil, fmt.Errorf("parse score: %w", err)
+		return nil, noUsage, fmt.Errorf("parse score: %w", err)
 	}
 
 	analysis.SetResult(verdict, risk, score, resp.Summary)
@@ -152,5 +151,5 @@ func (uc *AnalyzeTender) Execute(
 		reqs = append(reqs, req)
 	}
 	analysis.SetExtras(pros, cons, reqs, resp.Effort)
-	return analysis, nil
+	return analysis, usage, nil
 }

@@ -8,7 +8,7 @@ import (
 
 // LLMProvider generates text completions from a prompt.
 type LLMProvider interface {
-	GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error)
 	CheckConnection(ctx context.Context) error
 	ListModels(ctx context.Context) ([]string, error)
 	Name() string

@@ -91,7 +91,7 @@ func TestOpenAICompatible_GenerateCompletion(t *testing.T) {
 				Name:    "openai",
 			})
 
-			result, err := p.GenerateCompletion(t.Context(), "system prompt", "user prompt")
+			result, _, err := p.GenerateCompletion(t.Context(), "system prompt", "user prompt")
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -112,7 +112,7 @@ func TestOpenAICompatible_ConnectionRefused(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: "http://127.0.0.1:1", APIKey: "sk", Model: "m", Name: "test",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected connection error")
 	}
@@ -122,7 +122,7 @@ func TestOpenAICompatible_InvalidBaseURL(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: "://bad\x7furl", APIKey: "sk", Model: "m", Name: "test",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected URL parse error")
 	}
@@ -138,7 +138,7 @@ func TestOpenAICompatible_ServerErrorNoMessage(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected error")
 	}
@@ -153,7 +153,7 @@ func TestOpenAICompatible_InvalidJSON(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
 	})
-	_, err := p.GenerateCompletion(t.Context(), "s", "u")
+	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected parse error")
 	}

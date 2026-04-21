@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	handler "github.com/daniil/deal-sense/backend/internal/adapter/http"
+	"github.com/daniil/deal-sense/backend/internal/domain"
 )
 
 type stubLLM struct {
@@ -17,8 +18,8 @@ type stubLLM struct {
 	name     string
 }
 
-func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, error) {
-	return s.response, s.err
+func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
+	return s.response, domain.TokenUsage{}, s.err
 }
 func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
 func (s *stubLLM) ListModels(_ context.Context) ([]string, error)     { return nil, nil }

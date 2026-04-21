@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/daniil/deal-sense/backend/internal/domain"
 )
 
 type GeminiConfig struct {
@@ -43,15 +45,21 @@ type geminiPart struct {
 }
 
 type geminiResponse struct {
-	Candidates []geminiCandidate `json:"candidates"`
-	Error      *apiError         `json:"error,omitempty"`
+	Candidates    []geminiCandidate `json:"candidates"`
+	UsageMetadata geminiUsage       `json:"usageMetadata"`
+	Error         *apiError         `json:"error,omitempty"`
 }
 
 type geminiCandidate struct {
 	Content geminiContent `json:"content"`
 }
 
-func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+type geminiUsage struct {
+	PromptTokenCount     int `json:"promptTokenCount"`
+	CandidatesTokenCount int `json:"candidatesTokenCount"`
+}
+
+func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
 	reqBody := geminiRequest{
 		SystemInstruction: geminiContent{
 			Parts: []geminiPart{{Text: systemPrompt}},
@@ -66,13 +74,13 @@ func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPromp
 	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", p.config.BaseURL, p.config.Model, p.config.APIKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -85,28 +93,29 @@ func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPromp
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
 		}
-		return "", fmt.Errorf("gemini: %s (status %d)", msg, resp.StatusCode)
+		return "", domain.TokenUsage{}, fmt.Errorf("gemini: %s (status %d)", msg, resp.StatusCode)
 	}
 
 	var gemResp geminiResponse
 	if err := json.Unmarshal(respBody, &gemResp); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
+		return "", domain.TokenUsage{}, fmt.Errorf("parse response: %w", err)
 	}
 
 	if len(gemResp.Candidates) == 0 {
-		return "", fmt.Errorf("gemini: no candidates in response")
+		return "", domain.TokenUsage{}, fmt.Errorf("gemini: no candidates in response")
 	}
 
 	parts := gemResp.Candidates[0].Content.Parts
 	if len(parts) == 0 {
-		return "", fmt.Errorf("gemini: no parts in response")
+		return "", domain.TokenUsage{}, fmt.Errorf("gemini: no parts in response")
 	}
 
-	return parts[0].Text, nil
+	usage := domain.NewTokenUsage(gemResp.UsageMetadata.PromptTokenCount, gemResp.UsageMetadata.CandidatesTokenCount)
+	return parts[0].Text, usage, nil
 }
 
 func (p *Gemini) CheckConnection(ctx context.Context) error {
-	_, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
+	_, _, err := p.GenerateCompletion(ctx, "You are a test.", "Say OK.")
 	return err
 }
 

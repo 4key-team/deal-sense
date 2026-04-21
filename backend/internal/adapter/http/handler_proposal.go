@@ -66,7 +66,7 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 	langName := resolveLang(r)
 
 	uc := usecase.NewGenerateProposal(h.resolveLLM(r), h.parser, h.template, h.proposalPrompt(langName))
-	result, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
+	result, usage, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -98,6 +98,11 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		"sections": sections,
 		"log":      logEntries,
 		"docx":     docxBase64,
+		"usage": map[string]int{
+			"prompt_tokens":     usage.PromptTokens(),
+			"completion_tokens": usage.CompletionTokens(),
+			"total_tokens":      usage.TotalTokens(),
+		},
 	})
 }
 
