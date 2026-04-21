@@ -82,8 +82,21 @@ func (uc *GenerateProposal) Execute(
 		return nil, noUsage, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
 	}
 
-	// Merge: user params override LLM params
+	// Merge: meta → params → user params (later overrides earlier).
 	mergedParams := make(map[string]string)
+	// Map meta keys to common template placeholders.
+	if resp.Meta != nil {
+		for k, v := range resp.Meta {
+			mergedParams[k] = v
+		}
+		// Common aliases: meta "client" → template "client_name", etc.
+		if v, ok := resp.Meta["client"]; ok {
+			mergedParams["client_name"] = v
+		}
+		if v, ok := resp.Meta["project"]; ok {
+			mergedParams["project_name"] = v
+		}
+	}
 	maps.Copy(mergedParams, resp.Params)
 	maps.Copy(mergedParams, userParams)
 
