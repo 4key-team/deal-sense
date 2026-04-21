@@ -24,7 +24,7 @@ func ProposalGenerationPrompt(langName string) string {
 Respond ONLY with a JSON object (no markdown, no code fences):
 {
   "params": {"placeholder_key": "generated text value", ...},
-  "meta": {"client":"client name","project":"project name","price":"price with currency","timeline":"timeline"},
+  "meta": {"client":"client name","project":"project name","price":"price with currency","timeline":"timeline","date":"DD.MM.YYYY"},
   "sections": [{"title":"section name","status":"ai|filled","tokens":123}, ...],
   "summary": "1-2 sentence description of what was generated",
   "log": [{"time":"HH:MM:SS","msg":"step description"}, ...]
