@@ -16,7 +16,7 @@ var textRe = regexp.MustCompile(`<w:t[^>]*>([\s\S]*?)</w:t>`)
 //
 // Word/LibreOffice may arbitrarily split text like "{{name}}" into
 // multiple runs: "<w:r><w:t>{{</w:t></w:r><w:r><w:t>name}}</w:t></w:r>".
-// go-docx cannot match these — this function normalizes them first.
+// This function normalizes them before string replacement.
 func mergePlaceholderRuns(xml string) string {
 	runs := runRe.FindAllStringIndex(xml, -1)
 	if len(runs) < 2 {
