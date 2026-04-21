@@ -74,13 +74,13 @@ func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPromp
 	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", p.config.BaseURL, p.config.Model, p.config.APIKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("create request: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("send request: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -93,21 +93,21 @@ func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPromp
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
 		}
-		return "", domain.TokenUsage{}, fmt.Errorf("gemini: %s (status %d)", msg, resp.StatusCode)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("gemini: %s (status %d)", msg, resp.StatusCode)
 	}
 
 	var gemResp geminiResponse
 	if err := json.Unmarshal(respBody, &gemResp); err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
 	}
 
 	if len(gemResp.Candidates) == 0 {
-		return "", domain.TokenUsage{}, fmt.Errorf("gemini: no candidates in response")
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("gemini: no candidates in response")
 	}
 
 	parts := gemResp.Candidates[0].Content.Parts
 	if len(parts) == 0 {
-		return "", domain.TokenUsage{}, fmt.Errorf("gemini: no parts in response")
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("gemini: no parts in response")
 	}
 
 	usage := domain.NewTokenUsage(gemResp.UsageMetadata.PromptTokenCount, gemResp.UsageMetadata.CandidatesTokenCount)

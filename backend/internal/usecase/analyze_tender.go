@@ -69,7 +69,7 @@ func (uc *AnalyzeTender) Execute(
 	files []FileInput,
 	companyProfile string,
 ) (*domain.TenderAnalysis, domain.TokenUsage, error) {
-	var noUsage domain.TokenUsage
+	noUsage := domain.ZeroTokenUsage()
 	if len(files) == 0 {
 		return nil, noUsage, domain.ErrEmptyContent
 	}
@@ -93,7 +93,10 @@ func (uc *AnalyzeTender) Execute(
 		fmt.Fprintf(&allText, "=== %s ===\n%s\n\n", f.Name, text)
 	}
 
-	analysis, _ := domain.NewTenderAnalysis(docs, companyProfile)
+	analysis, err := domain.NewTenderAnalysis(docs, companyProfile)
+	if err != nil {
+		return nil, noUsage, fmt.Errorf("create analysis: %w", err)
+	}
 
 	userPrompt := fmt.Sprintf("Company profile:\n%s\n\nTender documents:\n%s", companyProfile, allText.String())
 

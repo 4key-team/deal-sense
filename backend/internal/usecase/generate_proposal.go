@@ -47,7 +47,7 @@ func (uc *GenerateProposal) Execute(
 	contextFiles []FileInput,
 	userParams map[string]string,
 ) (*domain.Proposal, domain.TokenUsage, error) {
-	var noUsage domain.TokenUsage
+	noUsage := domain.ZeroTokenUsage()
 	proposal, err := domain.NewProposal(templateName, templateData, userParams)
 	if err != nil {
 		return nil, noUsage, err

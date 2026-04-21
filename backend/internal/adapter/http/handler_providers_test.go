@@ -10,7 +10,14 @@ import (
 )
 
 func TestHandleListProviders(t *testing.T) {
-	h := handler.NewHandler(&stubLLM{name: "test"}, nil, nil, nil, stubPrompt, stubPrompt)
+	testProviders := []handler.ProviderInfo{
+		{ID: "openai", Name: "OpenAI", Models: []string{"gpt-4o"}},
+		{ID: "anthropic", Name: "Anthropic", Models: []string{"claude-sonnet-4-5"}},
+		{ID: "gemini", Name: "Gemini", Models: []string{"gemini-2.5-pro"}},
+		{ID: "groq", Name: "Groq", Models: []string{"llama-3.3-70b"}},
+		{ID: "ollama", Name: "Ollama", Models: []string{"llama3.1:70b"}},
+	}
+	h := handler.NewHandler(&stubLLM{name: "test"}, nil, nil, nil, stubPrompt, stubPrompt, testProviders)
 	req := httptest.NewRequest(http.MethodGet, "/api/llm/providers", nil)
 	rec := httptest.NewRecorder()
 

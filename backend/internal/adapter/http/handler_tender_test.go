@@ -109,7 +109,7 @@ func TestHandleAnalyzeTender(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler.NewHandler(tt.llm, nil, tt.parser, nil, stubPrompt, stubPrompt)
+			h := handler.NewHandler(tt.llm, nil, tt.parser, nil, stubPrompt, stubPrompt, nil)
 
 			var req *http.Request
 			if tt.useRawBody {

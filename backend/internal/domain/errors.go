@@ -15,4 +15,5 @@ var (
 	ErrEmptyName            = errors.New("name is empty")
 	ErrEmptyMsg             = errors.New("message is empty")
 	ErrEmptyCompany         = errors.New("company profile is empty")
+	ErrInvalidScore         = errors.New("invalid match score")
 )

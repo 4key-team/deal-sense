@@ -44,7 +44,15 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader())
 	docxTemplate := parser.NewDocxTemplate()
 
-	h := apphttp.NewHandler(provider, llm.Factory{}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt)
+	providers := []apphttp.ProviderInfo{
+		{ID: "anthropic", Name: "Anthropic", Models: []string{"claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"}},
+		{ID: "openai", Name: "OpenAI", Models: []string{"gpt-4o", "gpt-4o-mini", "o3-mini"}},
+		{ID: "gemini", Name: "Google Gemini", Models: []string{"gemini-2.5-pro", "gemini-2.5-flash"}},
+		{ID: "groq", Name: "Groq", Models: []string{"llama-3.3-70b", "mixtral-8x7b"}},
+		{ID: "ollama", Name: "Ollama (local)", Models: []string{"llama3.1:70b", "qwen2.5:32b"}},
+		{ID: "custom", Name: "Custom", Models: []string{}},
+	}
+	h := apphttp.NewHandler(provider, llm.Factory{}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux

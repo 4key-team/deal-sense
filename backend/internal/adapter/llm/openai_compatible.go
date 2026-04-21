@@ -76,14 +76,14 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.config.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("create request: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("send request: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -96,16 +96,16 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
 		}
-		return "", domain.TokenUsage{}, fmt.Errorf("llm %s: %s (status %d)", p.config.Name, msg, resp.StatusCode)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("llm %s: %s (status %d)", p.config.Name, msg, resp.StatusCode)
 	}
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", domain.TokenUsage{}, fmt.Errorf("llm %s: no choices in response", p.config.Name)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("llm %s: no choices in response", p.config.Name)
 	}
 
 	usage := domain.NewTokenUsage(chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens)

@@ -11,6 +11,14 @@ import (
 type PromptResolver func(langName string) string
 
 // Handler holds use cases and exposes HTTP endpoints.
+// ProviderInfo describes an LLM provider for the frontend.
+type ProviderInfo struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Models []string `json:"models"`
+}
+
+// Handler holds use cases and exposes HTTP endpoints.
 type Handler struct {
 	llm            usecase.LLMProvider
 	llmFactory     usecase.LLMProviderFactory
@@ -18,6 +26,7 @@ type Handler struct {
 	template       usecase.TemplateEngine
 	tenderPrompt   PromptResolver
 	proposalPrompt PromptResolver
+	providers      []ProviderInfo
 }
 
 func NewHandler(
@@ -27,11 +36,13 @@ func NewHandler(
 	template usecase.TemplateEngine,
 	tenderPrompt PromptResolver,
 	proposalPrompt PromptResolver,
+	providers []ProviderInfo,
 ) *Handler {
 	return &Handler{
 		llm: llm, llmFactory: factory,
 		parser: parser, template: template,
 		tenderPrompt: tenderPrompt, proposalPrompt: proposalPrompt,
+		providers: providers,
 	}
 }
 

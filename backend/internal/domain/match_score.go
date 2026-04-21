@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"errors"
-	"fmt"
-)
+import "fmt"
 
 // MatchScore represents a 0–100 compatibility score.
 type MatchScore struct {
@@ -18,5 +15,3 @@ func NewMatchScore(v int) (MatchScore, error) {
 }
 
 func (s MatchScore) Value() int { return s.value }
-
-var ErrInvalidScore = errors.New("invalid match score")

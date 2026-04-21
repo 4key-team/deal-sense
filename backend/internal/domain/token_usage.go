@@ -6,6 +6,8 @@ type TokenUsage struct {
 	completionTokens int
 }
 
+func ZeroTokenUsage() TokenUsage { return TokenUsage{} }
+
 func NewTokenUsage(prompt, completion int) TokenUsage {
 	return TokenUsage{promptTokens: prompt, completionTokens: completion}
 }

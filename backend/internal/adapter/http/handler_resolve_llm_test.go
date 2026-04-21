@@ -26,7 +26,7 @@ type stubLLMForResolve struct {
 }
 
 func (s *stubLLMForResolve) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
-	return "", domain.TokenUsage{}, nil
+	return "", domain.ZeroTokenUsage(), nil
 }
 func (s *stubLLMForResolve) CheckConnection(_ context.Context) error        { return nil }
 func (s *stubLLMForResolve) ListModels(_ context.Context) ([]string, error) { return nil, nil }
@@ -72,7 +72,7 @@ func TestResolveLLM(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler.NewHandler(tt.defaultLLM, tt.factory, nil, nil, stubPrompt, stubPrompt)
+			h := handler.NewHandler(tt.defaultLLM, tt.factory, nil, nil, stubPrompt, stubPrompt, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/llm/check", nil)
 			for k, v := range tt.headers {

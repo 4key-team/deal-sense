@@ -68,7 +68,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.config.BaseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("create request: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.config.APIKey)
@@ -76,7 +76,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("send request: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -89,16 +89,16 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
 		}
-		return "", domain.TokenUsage{}, fmt.Errorf("anthropic: %s (status %d)", msg, resp.StatusCode)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("anthropic: %s (status %d)", msg, resp.StatusCode)
 	}
 
 	var antResp anthropicResponse
 	if err := json.Unmarshal(respBody, &antResp); err != nil {
-		return "", domain.TokenUsage{}, fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
 	}
 
 	if len(antResp.Content) == 0 {
-		return "", domain.TokenUsage{}, fmt.Errorf("anthropic: no content blocks in response")
+		return "", domain.ZeroTokenUsage(), fmt.Errorf("anthropic: no content blocks in response")
 	}
 
 	usage := domain.NewTokenUsage(antResp.Usage.InputTokens, antResp.Usage.OutputTokens)
@@ -108,7 +108,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 		}
 	}
 
-	return "", domain.TokenUsage{}, fmt.Errorf("anthropic: no text block in response")
+	return "", domain.ZeroTokenUsage(), fmt.Errorf("anthropic: no text block in response")
 }
 
 func (p *Anthropic) CheckConnection(ctx context.Context) error {
