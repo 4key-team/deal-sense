@@ -110,10 +110,10 @@ func TestAnalyzeTender_Execute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser := &stubParser{content: tt.parseText, err: tt.parseErr}
-			llm := &stubLLM{response: tt.llmResp, err: tt.llmErr, name: "test"}
+			llm := &stubLLM{response: tt.llmResp, err: tt.llmErr, name: "test", usage: domain.NewTokenUsage(50, 100)}
 
 			uc := usecase.NewAnalyzeTender(llm, parser, "test prompt")
-			result, err := uc.Execute(t.Context(), tt.files, tt.profile)
+			result, usage, err := uc.Execute(t.Context(), tt.files, tt.profile)
 
 			if tt.wantErr {
 				if err == nil {
@@ -126,6 +126,9 @@ func TestAnalyzeTender_Execute(t *testing.T) {
 			}
 			if result == nil {
 				t.Fatal("expected non-nil result")
+			}
+			if usage.TotalTokens() != 150 {
+				t.Errorf("usage.TotalTokens() = %d, want 150", usage.TotalTokens())
 			}
 		})
 	}

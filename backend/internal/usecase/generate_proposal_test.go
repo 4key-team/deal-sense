@@ -20,12 +20,13 @@ func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]stri
 
 type stubLLM struct {
 	response string
+	usage    domain.TokenUsage
 	err      error
 	name     string
 }
 
-func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, error) {
-	return s.response, s.err
+func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
+	return s.response, s.usage, s.err
 }
 
 func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
@@ -118,12 +119,12 @@ func TestGenerateProposal_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			llm := &stubLLM{response: tt.llmResp, err: tt.llmErr, name: "test"}
+			llm := &stubLLM{response: tt.llmResp, err: tt.llmErr, name: "test", usage: domain.NewTokenUsage(100, 200)}
 			parser := &stubParser{content: "parsed text"}
 			tmplEng := &stubTemplateEngine{result: tt.tmplResult, err: tt.tmplErr}
 
 			uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "test prompt")
-			result, err := uc.Execute(t.Context(), tt.tmplName, tt.tmplData, tt.context, tt.params)
+			result, usage, err := uc.Execute(t.Context(), tt.tmplName, tt.tmplData, tt.context, tt.params)
 
 			if tt.wantErr {
 				if err == nil {
@@ -145,6 +146,9 @@ func TestGenerateProposal_Execute(t *testing.T) {
 			}
 			if tt.wantSecs > 0 && result.Summary() == "" {
 				t.Error("expected non-empty summary")
+			}
+			if usage.TotalTokens() != 300 {
+				t.Errorf("usage.TotalTokens() = %d, want 300", usage.TotalTokens())
 			}
 		})
 	}
