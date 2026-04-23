@@ -135,7 +135,7 @@ export function ProposalResult() {
   if (phase === "generating") {
     return (
       <div className={`screen-enter ${styles.uploadScreen}`}>
-        <Spinner />
+        <Spinner size="lg" />
         <p className="t-body muted">{t.kp.generating}</p>
       </div>
     );

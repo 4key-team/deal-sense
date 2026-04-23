@@ -98,6 +98,7 @@ export function TenderReport() {
             onFiles={setFiles}
             label={t.dropzone.tender_label}
             hint={t.dropzone.tender_hint}
+            accept=".pdf,.docx,.zip"
           />
         </div>
         <Button
@@ -117,7 +118,7 @@ export function TenderReport() {
   if (phase === "analyzing") {
     return (
       <div className={`screen-enter ${styles.uploadScreen}`}>
-        <Spinner />
+        <Spinner size="lg" />
         <p className="t-body muted">{t.tender.analyzing}</p>
       </div>
     );

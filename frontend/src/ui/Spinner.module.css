@@ -1,9 +1,22 @@
-.spinner {
-  width: 12px;
-  height: 12px;
+.base {
   border-radius: 99px;
-  border: 1.5px solid var(--line-strong);
+  border-style: solid;
+  border-color: var(--line-strong);
   border-top-color: var(--ink-1);
   animation: ds-spin 700ms linear infinite;
   display: inline-block;
+}
+
+.spinner {
+  composes: base;
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.spinnerLg {
+  composes: base;
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
 }

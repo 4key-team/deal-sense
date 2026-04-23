@@ -12,9 +12,9 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { id: "profile", label: (t) => t.tabs.profile },
   { id: "kp",      label: (t) => t.tabs.kp },
   { id: "tender",  label: (t) => t.tabs.tender },
-  { id: "profile", label: (t) => t.tabs.profile },
 ];
 
 export function Tabs({ tab, setTab }: TabsProps) {
