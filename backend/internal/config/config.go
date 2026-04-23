@@ -3,6 +3,7 @@ package config
 import (
 	"cmp"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -11,6 +12,7 @@ type Config struct {
 	LLMBaseURL  string
 	LLMAPIKey   string
 	LLMModel    string
+	LogLevel    string
 }
 
 func Load() Config {
@@ -20,5 +22,6 @@ func Load() Config {
 		LLMBaseURL:  os.Getenv("LLM_BASE_URL"),
 		LLMAPIKey:   os.Getenv("LLM_API_KEY"),
 		LLMModel:    cmp.Or(os.Getenv("LLM_MODEL"), "claude-sonnet-4-5"),
+		LogLevel:    strings.ToLower(cmp.Or(os.Getenv("LOG_LEVEL"), "info")),
 	}
 }
