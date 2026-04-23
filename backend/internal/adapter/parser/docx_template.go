@@ -44,7 +44,9 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 			content = []byte(xml)
 		}
 
-		fw, _ := w.Create(f.Name)
+		header := f.FileHeader
+		header.UncompressedSize64 = uint64(len(content))
+		fw, _ := w.CreateHeader(&header)
 		fw.Write(content)
 	}
 

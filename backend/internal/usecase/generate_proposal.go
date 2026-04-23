@@ -10,6 +10,8 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/domain"
 )
 
+const templateParseFallback = "(template could not be parsed as text — generate content based on context documents and typical proposal structure)"
+
 type GenerateProposal struct {
 	llm          LLMProvider
 	parser       DocumentParser
@@ -63,8 +65,11 @@ func (uc *GenerateProposal) Execute(
 		fmt.Fprintf(&contextText, "=== %s ===\n%s\n\n", f.Name, text)
 	}
 
-	// Read template text for LLM
-	templateText, _ := uc.parser.Parse(ctx, templateName, templateData)
+	// Read template text for LLM (best-effort — complex templates may fail to parse as text)
+	templateText, parseErr := uc.parser.Parse(ctx, templateName, templateData)
+	if parseErr != nil || templateText == "" {
+		templateText = templateParseFallback
+	}
 
 	userPrompt := fmt.Sprintf(
 		"Template placeholders from file %s:\n%s\n\nContext documents:\n%s\n\nUser parameters: %v\n\nGenerate values for ALL placeholders based on the context.",
