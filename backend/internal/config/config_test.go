@@ -6,6 +6,28 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/config"
 )
 
+func TestLoad_LogLevel(t *testing.T) {
+	tests := []struct {
+		env  string
+		want string
+	}{
+		{"", "info"},
+		{"debug", "debug"},
+		{"warn", "warn"},
+		{"error", "error"},
+		{"DEBUG", "debug"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			t.Setenv("LOG_LEVEL", tt.env)
+			cfg := config.Load()
+			if cfg.LogLevel != tt.want {
+				t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, tt.want)
+			}
+		})
+	}
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("LLM_PROVIDER", "")
