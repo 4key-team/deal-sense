@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
@@ -20,12 +21,14 @@ type GeminiConfig struct {
 type Gemini struct {
 	config GeminiConfig
 	client *http.Client
+	logger *slog.Logger
 }
 
-func NewGemini(cfg GeminiConfig) *Gemini {
+func NewGemini(cfg GeminiConfig, logger *slog.Logger) *Gemini {
 	return &Gemini{
 		config: cfg,
 		client: &http.Client{},
+		logger: logger.With("component", "llm.gemini"),
 	}
 }
 
@@ -60,6 +63,7 @@ type geminiUsage struct {
 }
 
 func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
+	p.logger.Debug("generating completion", "model", p.config.Model, "prompt_len", len(userPrompt))
 	reqBody := geminiRequest{
 		SystemInstruction: geminiContent{
 			Parts: []geminiPart{{Text: systemPrompt}},

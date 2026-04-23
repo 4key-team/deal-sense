@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
@@ -23,12 +24,14 @@ type OpenAIConfig struct {
 type OpenAICompatible struct {
 	config OpenAIConfig
 	client *http.Client
+	logger *slog.Logger
 }
 
-func NewOpenAICompatible(cfg OpenAIConfig) *OpenAICompatible {
+func NewOpenAICompatible(cfg OpenAIConfig, logger *slog.Logger) *OpenAICompatible {
 	return &OpenAICompatible{
 		config: cfg,
 		client: &http.Client{},
+		logger: logger.With("component", "llm."+cfg.Name),
 	}
 }
 
@@ -66,6 +69,7 @@ type apiError struct {
 }
 
 func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
+	p.logger.Debug("generating completion", "model", p.config.Model, "prompt_len", len(userPrompt))
 	body, _ := json.Marshal(chatRequest{
 		Model: p.config.Model,
 		Messages: []chatMessage{
@@ -109,6 +113,11 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 	}
 
 	usage := domain.NewTokenUsage(chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens)
+	p.logger.Debug("completion done",
+		"prompt_tokens", usage.PromptTokens(),
+		"completion_tokens", usage.CompletionTokens(),
+		"response_len", len(chatResp.Choices[0].Message.Content),
+	)
 	return chatResp.Choices[0].Message.Content, usage, nil
 }
 

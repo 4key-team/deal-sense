@@ -89,6 +89,7 @@ just docker-up        # Docker Compose
 | LLM_BASE_URL | — | URL API провайдера |
 | LLM_API_KEY | — | API-ключ |
 | LLM_MODEL | claude-sonnet-4-5 | Модель |
+| LOG_LEVEL | info | Уровень логирования: debug, info, warn, error |
 
 ## Статус
 

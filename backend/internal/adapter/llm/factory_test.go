@@ -9,7 +9,7 @@ import (
 )
 
 func TestFactory_Create(t *testing.T) {
-	factory := llm.Factory{}
+	factory := llm.Factory{Logger: testLogger}
 	tests := []struct {
 		provider string
 		wantName string

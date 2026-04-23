@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -53,7 +55,7 @@ func TestHandleCheckConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			llm := &stubLLM{err: tt.llmErr, name: tt.llmName}
-			h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil)
+			h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil, testLogger)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/llm/check", nil)
 			rec := httptest.NewRecorder()
@@ -79,6 +81,8 @@ func TestHandleCheckConnection(t *testing.T) {
 
 func stubPrompt(_ string) string { return "test prompt" }
 
+var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
 type stubLLMWithModels struct {
 	stubLLM
 	models []string
@@ -95,7 +99,7 @@ func TestHandleListModels(t *testing.T) {
 			stubLLM: stubLLM{name: "test"},
 			models:  []string{"gpt-4o", "gpt-3.5-turbo"},
 		}
-		h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil, testLogger)
 		req := httptest.NewRequest(http.MethodGet, "/api/llm/models", nil)
 		rec := httptest.NewRecorder()
 		h.HandleListModels(rec, req)
@@ -116,7 +120,7 @@ func TestHandleListModels(t *testing.T) {
 			stubLLM: stubLLM{name: "test"},
 			modErr:  errors.New("network error"),
 		}
-		h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil, testLogger)
 		req := httptest.NewRequest(http.MethodGet, "/api/llm/models", nil)
 		rec := httptest.NewRecorder()
 		h.HandleListModels(rec, req)
@@ -136,7 +140,7 @@ func TestHandleListModels(t *testing.T) {
 			stubLLM: stubLLM{name: "test"},
 			models:  nil,
 		}
-		h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, nil, nil, stubPrompt, stubPrompt, nil, testLogger)
 		req := httptest.NewRequest(http.MethodGet, "/api/llm/models", nil)
 		rec := httptest.NewRecorder()
 		h.HandleListModels(rec, req)
@@ -182,7 +186,7 @@ func TestResolveLang(t *testing.T) {
 		return "test prompt"
 	}
 	p := &stubParser{content: "text"}
-	h := handler.NewHandler(llm, nil, p, nil, promptFn, promptFn, nil)
+	h := handler.NewHandler(llm, nil, p, nil, promptFn, promptFn, nil, testLogger)
 
 	// Test with lang=en
 	req := makeMultipartRequestWithLang(t, map[string][]byte{"spec.pdf": []byte("data")}, "en")

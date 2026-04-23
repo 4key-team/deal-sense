@@ -72,7 +72,7 @@ func TestResolveLLM(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler.NewHandler(tt.defaultLLM, tt.factory, nil, nil, stubPrompt, stubPrompt, nil)
+			h := handler.NewHandler(tt.defaultLLM, tt.factory, nil, nil, stubPrompt, stubPrompt, nil, testLogger)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/llm/check", nil)
 			for k, v := range tt.headers {

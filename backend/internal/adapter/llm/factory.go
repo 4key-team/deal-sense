@@ -2,6 +2,7 @@ package llm
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -15,19 +16,21 @@ type ProviderConfig struct {
 }
 
 // Factory implements usecase.LLMProviderFactory.
-type Factory struct{}
+type Factory struct {
+	Logger *slog.Logger
+}
 
-func (Factory) Create(cfg usecase.LLMProviderConfig) (usecase.LLMProvider, error) {
+func (f Factory) Create(cfg usecase.LLMProviderConfig) (usecase.LLMProvider, error) {
 	return NewLLMProvider(ProviderConfig{
 		Provider: cfg.Provider,
 		BaseURL:  cfg.BaseURL,
 		APIKey:   cfg.APIKey,
 		Model:    cfg.Model,
-	})
+	}, f.Logger)
 }
 
 // NewLLMProvider creates an LLMProvider based on the provider name.
-func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
+func NewLLMProvider(cfg ProviderConfig, logger *slog.Logger) (usecase.LLMProvider, error) {
 	switch cfg.Provider {
 	case "openai", "groq", "ollama", "custom":
 		return NewOpenAICompatible(OpenAIConfig{
@@ -35,21 +38,21 @@ func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
 			APIKey:  cfg.APIKey,
 			Model:   cfg.Model,
 			Name:    cfg.Provider,
-		}), nil
+		}, logger), nil
 
 	case "anthropic":
 		return NewAnthropic(AnthropicConfig{
 			BaseURL: cfg.BaseURL,
 			APIKey:  cfg.APIKey,
 			Model:   cfg.Model,
-		}), nil
+		}, logger), nil
 
 	case "gemini":
 		return NewGemini(GeminiConfig{
 			BaseURL: cfg.BaseURL,
 			APIKey:  cfg.APIKey,
 			Model:   cfg.Model,
-		}), nil
+		}, logger), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", cfg.Provider)
