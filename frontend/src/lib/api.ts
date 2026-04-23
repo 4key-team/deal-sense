@@ -1,6 +1,8 @@
 import { getItem } from "./storage";
 
-const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+const BASE =
+  import.meta.env.VITE_API_URL ??
+  `${location.protocol}//${location.hostname}:8080`;
 
 export interface TenderProCon {
   title: string;
