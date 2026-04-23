@@ -38,7 +38,7 @@ describe("analyzeTender", () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("http://localhost:8080/api/tender/analyze");
+    expect(url).toBe("/api/tender/analyze");
     expect(opts.method).toBe("POST");
 
     const form = opts.body as FormData;
@@ -138,7 +138,7 @@ describe("checkConnection", () => {
     expect(result.provider).toBe("openai");
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("http://localhost:8080/api/llm/check");
+    expect(url).toBe("/api/llm/check");
     expect(opts.method).toBe("POST");
   });
 
@@ -167,7 +167,7 @@ describe("listProviders", () => {
     expect(result.providers[0].id).toBe("openai");
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("http://localhost:8080/api/llm/providers");
+    expect(url).toBe("/api/llm/providers");
     expect(opts.method).toBe("GET");
   });
 
