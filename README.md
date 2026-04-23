@@ -89,6 +89,7 @@ just docker-up        # Docker Compose
 | LLM_BASE_URL | — | URL API провайдера |
 | LLM_API_KEY | — | API-ключ |
 | LLM_MODEL | claude-sonnet-4-5 | Модель |
+| LLM_SOCKS5_PROXY | — | SOCKS5/SOCKS5H прокси для исходящих LLM-запросов, например `socks5://127.0.0.1:1080` |
 
 ## Статус
 

@@ -37,6 +37,20 @@ func TestFactory_Create(t *testing.T) {
 	}
 }
 
+func TestFactory_Create_InvalidSOCKS5Proxy(t *testing.T) {
+	factory := llm.Factory{SOCKS5Proxy: "http://127.0.0.1:1080"}
+
+	_, err := factory.Create(usecase.LLMProviderConfig{
+		Provider: "openai",
+		BaseURL:  "http://localhost",
+		APIKey:   "key",
+		Model:    "model",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid proxy scheme")
+	}
+}
+
 func TestTenderAnalysisPrompt(t *testing.T) {
 	tests := []struct {
 		lang     string

@@ -6,19 +6,21 @@ import (
 )
 
 type Config struct {
-	Port        string
-	LLMProvider string
-	LLMBaseURL  string
-	LLMAPIKey   string
-	LLMModel    string
+	Port            string
+	LLMProvider     string
+	LLMBaseURL      string
+	LLMAPIKey       string
+	LLMModel        string
+	LLMSOCKS5Proxy  string
 }
 
 func Load() Config {
 	return Config{
-		Port:        cmp.Or(os.Getenv("PORT"), "8080"),
-		LLMProvider: cmp.Or(os.Getenv("LLM_PROVIDER"), "anthropic"),
-		LLMBaseURL:  os.Getenv("LLM_BASE_URL"),
-		LLMAPIKey:   os.Getenv("LLM_API_KEY"),
-		LLMModel:    cmp.Or(os.Getenv("LLM_MODEL"), "claude-sonnet-4-5"),
+		Port:           cmp.Or(os.Getenv("PORT"), "8080"),
+		LLMProvider:    cmp.Or(os.Getenv("LLM_PROVIDER"), "anthropic"),
+		LLMBaseURL:     os.Getenv("LLM_BASE_URL"),
+		LLMAPIKey:      os.Getenv("LLM_API_KEY"),
+		LLMModel:       cmp.Or(os.Getenv("LLM_MODEL"), "claude-sonnet-4-5"),
+		LLMSOCKS5Proxy: os.Getenv("LLM_SOCKS5_PROXY"),
 	}
 }

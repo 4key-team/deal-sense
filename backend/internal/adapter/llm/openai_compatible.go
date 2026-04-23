@@ -13,22 +13,29 @@ import (
 
 // OpenAIConfig holds configuration for OpenAI-compatible providers.
 type OpenAIConfig struct {
-	BaseURL string
-	APIKey  string
-	Model   string
-	Name    string
+	BaseURL     string
+	APIKey      string
+	Model       string
+	Name        string
+	SOCKS5Proxy string
 }
 
 // OpenAICompatible works with any OpenAI-compatible API (OpenAI, Groq, Ollama).
 type OpenAICompatible struct {
-	config OpenAIConfig
-	client *http.Client
+	config    OpenAIConfig
+	client    *http.Client
+	clientErr error
 }
 
 func NewOpenAICompatible(cfg OpenAIConfig) *OpenAICompatible {
+	client, err := newHTTPClient(cfg.SOCKS5Proxy)
+	if err != nil {
+		client = &http.Client{}
+	}
 	return &OpenAICompatible{
-		config: cfg,
-		client: &http.Client{},
+		config:    cfg,
+		client:    client,
+		clientErr: err,
 	}
 }
 
@@ -66,6 +73,10 @@ type apiError struct {
 }
 
 func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
+	if p.clientErr != nil {
+		return "", domain.ZeroTokenUsage(), p.clientErr
+	}
+
 	body, _ := json.Marshal(chatRequest{
 		Model: p.config.Model,
 		Messages: []chatMessage{
@@ -126,6 +137,10 @@ type modelEntry struct {
 }
 
 func (p *OpenAICompatible) ListModels(ctx context.Context) ([]string, error) {
+	if p.clientErr != nil {
+		return nil, p.clientErr
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.config.BaseURL+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

@@ -11,6 +11,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.anthropic.com}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5}
+      - LLM_SOCKS5_PROXY=${LLM_SOCKS5_PROXY:-}
     restart: unless-stopped
 
   frontend:

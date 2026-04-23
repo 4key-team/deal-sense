@@ -31,10 +31,11 @@ func main() {
 
 func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	provider, err := llm.NewLLMProvider(llm.ProviderConfig{
-		Provider: cfg.LLMProvider,
-		BaseURL:  cfg.LLMBaseURL,
-		APIKey:   cfg.LLMAPIKey,
-		Model:    cfg.LLMModel,
+		Provider:    cfg.LLMProvider,
+		BaseURL:     cfg.LLMBaseURL,
+		APIKey:      cfg.LLMAPIKey,
+		Model:       cfg.LLMModel,
+		SOCKS5Proxy: cfg.LLMSOCKS5Proxy,
 	})
 	if err != nil {
 		return fmt.Errorf("init llm provider: %w", err)
@@ -52,7 +53,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "ollama", Name: "Ollama (local)", Models: []string{"llama3.1:70b", "qwen2.5:32b"}},
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
-	h := apphttp.NewHandler(provider, llm.Factory{}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers)
+	h := apphttp.NewHandler(provider, llm.Factory{SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux

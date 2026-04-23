@@ -12,20 +12,27 @@ import (
 )
 
 type GeminiConfig struct {
-	BaseURL string
-	APIKey  string
-	Model   string
+	BaseURL     string
+	APIKey      string
+	Model       string
+	SOCKS5Proxy string
 }
 
 type Gemini struct {
-	config GeminiConfig
-	client *http.Client
+	config    GeminiConfig
+	client    *http.Client
+	clientErr error
 }
 
 func NewGemini(cfg GeminiConfig) *Gemini {
+	client, err := newHTTPClient(cfg.SOCKS5Proxy)
+	if err != nil {
+		client = &http.Client{}
+	}
 	return &Gemini{
-		config: cfg,
-		client: &http.Client{},
+		config:    cfg,
+		client:    client,
+		clientErr: err,
 	}
 }
 
@@ -60,6 +67,10 @@ type geminiUsage struct {
 }
 
 func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
+	if p.clientErr != nil {
+		return "", domain.ZeroTokenUsage(), p.clientErr
+	}
+
 	reqBody := geminiRequest{
 		SystemInstruction: geminiContent{
 			Parts: []geminiPart{{Text: systemPrompt}},

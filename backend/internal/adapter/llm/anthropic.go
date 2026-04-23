@@ -12,20 +12,27 @@ import (
 )
 
 type AnthropicConfig struct {
-	BaseURL string
-	APIKey  string
-	Model   string
+	BaseURL     string
+	APIKey      string
+	Model       string
+	SOCKS5Proxy string
 }
 
 type Anthropic struct {
-	config AnthropicConfig
-	client *http.Client
+	config    AnthropicConfig
+	client    *http.Client
+	clientErr error
 }
 
 func NewAnthropic(cfg AnthropicConfig) *Anthropic {
+	client, err := newHTTPClient(cfg.SOCKS5Proxy)
+	if err != nil {
+		client = &http.Client{}
+	}
 	return &Anthropic{
-		config: cfg,
-		client: &http.Client{},
+		config:    cfg,
+		client:    client,
+		clientErr: err,
 	}
 }
 
@@ -55,6 +62,10 @@ type anthropicBlock struct {
 }
 
 func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
+	if p.clientErr != nil {
+		return "", domain.ZeroTokenUsage(), p.clientErr
+	}
+
 	reqBody := anthropicRequest{
 		Model:     p.config.Model,
 		MaxTokens: 4096,
