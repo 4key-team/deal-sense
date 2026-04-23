@@ -108,7 +108,7 @@ export const ru: Copy = {
   },
   dropzone: {
     tender_label: "Загрузите тендерную документацию",
-    tender_hint: "PDF или DOCX · можно несколько файлов",
+    tender_hint: "PDF, DOCX или ZIP-архив · можно несколько файлов",
     proposal_tpl_label: "Шаблон КП (.docx)",
     proposal_tpl_hint: "DOCX-шаблон с плейсхолдерами",
     proposal_ctx_label: "Контекст (бриф, кейсы, прайс)",

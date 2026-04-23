@@ -3,16 +3,26 @@ import { UploadIcon } from "../icons/Icons";
 import { XIcon, DocIcon } from "../icons/Icons";
 import styles from "./Dropzone.module.css";
 
-const ACCEPT = ".pdf,.docx";
-const ACCEPT_TYPES = [
+const DEFAULT_ACCEPT = ".pdf,.docx";
+const DEFAULT_ACCEPT_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
+const DEFAULT_EXTS = ["pdf", "docx"];
 
-function isAccepted(file: File): boolean {
-  if (ACCEPT_TYPES.includes(file.type)) return true;
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  return ext === "pdf" || ext === "docx";
+function makeIsAccepted(accept?: string) {
+  if (!accept || accept === DEFAULT_ACCEPT) {
+    return (file: File): boolean => {
+      if (DEFAULT_ACCEPT_TYPES.includes(file.type)) return true;
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      return ext !== undefined && DEFAULT_EXTS.includes(ext);
+    };
+  }
+  const exts = accept.split(",").map((s) => s.trim().replace(/^\./, "").toLowerCase());
+  return (file: File): boolean => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    return ext !== undefined && exts.includes(ext);
+  };
 }
 
 function formatSize(bytes: number): string {
@@ -27,9 +37,11 @@ export interface DropzoneProps {
   label: string;
   hint?: string;
   multiple?: boolean;
+  accept?: string;
 }
 
-export function Dropzone({ files, onFiles, label, hint, multiple = true }: DropzoneProps) {
+export function Dropzone({ files, onFiles, label, hint, multiple = true, accept }: DropzoneProps) {
+  const isAccepted = makeIsAccepted(accept);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -45,7 +57,7 @@ export function Dropzone({ files, onFiles, label, hint, multiple = true }: Dropz
         onFiles([valid[0]]);
       }
     },
-    [files, onFiles, multiple],
+    [files, onFiles, multiple, accept],
   );
 
   function handleDrop(e: React.DragEvent) {
@@ -100,7 +112,7 @@ export function Dropzone({ files, onFiles, label, hint, multiple = true }: Dropz
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT}
+          accept={accept ?? DEFAULT_ACCEPT}
           multiple={multiple}
           onChange={handleInputChange}
           className={styles.hidden}

@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase"
@@ -30,7 +31,20 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 
 	var inputs []usecase.FileInput
 	for _, fh := range files {
-		fi, err := usecase.NewFileInput(fh.Filename, mustReadMultipartFile(fh))
+		data := mustReadMultipartFile(fh)
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+
+		if ext == ".zip" {
+			extracted, err := usecase.ExtractZip(data)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			inputs = append(inputs, extracted...)
+			continue
+		}
+
+		fi, err := usecase.NewFileInput(fh.Filename, data)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "unsupported file type: "+fh.Filename)
 			return
