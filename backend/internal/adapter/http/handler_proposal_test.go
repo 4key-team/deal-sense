@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	handler "github.com/daniil/deal-sense/backend/internal/adapter/http"
+	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
 type stubTemplateEngine struct {
@@ -20,6 +21,24 @@ type stubTemplateEngine struct {
 }
 
 func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]string) ([]byte, error) {
+	return s.result, s.err
+}
+
+type stubGenerativeEngine struct {
+	result []byte
+	err    error
+}
+
+func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.GenerativeSection) ([]byte, error) {
+	return s.result, s.err
+}
+
+type stubPDFGenerator struct {
+	result []byte
+	err    error
+}
+
+func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.PDFInput) ([]byte, error) {
 	return s.result, s.err
 }
 
@@ -221,6 +240,40 @@ func TestHandleGenerateProposal(t *testing.T) {
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+	})
+
+	t.Run("response contains pdf and mode fields", func(t *testing.T) {
+		llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":100}],"summary":"Done"}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("filled")}
+		pdfGen := &stubPDFGenerator{result: []byte("%PDF-1.4 test content")}
+		genEng := &stubGenerativeEngine{result: []byte("gen")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, genEng, stubPrompt)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		fw, _ := w.CreateFormFile("template", "offer.docx")
+		fw.Write([]byte("template data"))
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var resp map[string]any
+		json.NewDecoder(rec.Body).Decode(&resp)
+
+		if resp["pdf"] == nil || resp["pdf"] == "" {
+			t.Error("expected non-empty pdf in response")
+		}
+		if resp["mode"] == nil {
+			t.Error("expected mode in response")
 		}
 	})
 
