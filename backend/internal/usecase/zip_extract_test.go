@@ -40,6 +40,15 @@ func TestExtractZip(t *testing.T) {
 			wantCount: 2,
 		},
 		{
+			name: "md files extracted",
+			data: makeZip(t, map[string][]byte{
+				"spec.pdf":   []byte("pdf-data"),
+				"brief.md":   []byte("# Brief"),
+				"notes.docx": []byte("docx-data"),
+			}),
+			wantCount: 3,
+		},
+		{
 			name: "unsupported files skipped",
 			data: makeZip(t, map[string][]byte{
 				"spec.pdf":   []byte("pdf-data"),
