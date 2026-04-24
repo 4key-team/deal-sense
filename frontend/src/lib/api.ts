@@ -106,6 +106,8 @@ export interface ProposalResult {
   sections: ProposalSection[];
   log: ProposalLogEntry[];
   docx: string; // base64 encoded .docx
+  pdf?: string; // base64 encoded .pdf
+  mode?: string; // "placeholder" | "generative" | "automarkup"
   usage?: TokenUsage;
 }
 

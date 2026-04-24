@@ -25,6 +25,8 @@ export const en: Copy = {
     section_review: "needs review",
     section_ai: "generated",
     download: "Download .docx",
+    download_docx: "Download .docx",
+    download_pdf: "Download .pdf",
     re_generate: "Regenerate",
     open: "Open preview",
     regenerate_section: "Regenerate section",

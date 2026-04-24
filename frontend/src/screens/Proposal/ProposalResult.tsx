@@ -202,8 +202,17 @@ export function ProposalResult() {
                 });
                 downloadBlob(blob, "proposal.docx");
               }}>
-                {t.kp.download}
+                {t.kp.download_docx}
               </Button>
+              {result.pdf && (
+                <Button variant="secondary" icon={<DownloadIcon />} onClick={() => {
+                  const bytes = Uint8Array.from(atob(result.pdf!), (c) => c.charCodeAt(0));
+                  const blob = new Blob([bytes], { type: "application/pdf" });
+                  downloadBlob(blob, "proposal.pdf");
+                }}>
+                  {t.kp.download_pdf}
+                </Button>
+              )}
             </div>
           </div>
           <h1 className={styles.heroTitle}>{t.kp.title}</h1>

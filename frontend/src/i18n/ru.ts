@@ -25,6 +25,8 @@ export const ru: Copy = {
     section_review: "нужна проверка",
     section_ai: "сгенерировано",
     download: "Скачать .docx",
+    download_docx: "Скачать .docx",
+    download_pdf: "Скачать .pdf",
     re_generate: "Перегенерировать",
     open: "Открыть в предпросмотре",
     regenerate_section: "Перегенерировать секцию",
