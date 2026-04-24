@@ -327,6 +327,64 @@ func TestGenerateProposal_GenerativeMode(t *testing.T) {
 	}
 }
 
+func TestGenerateProposal_PDFGeneration(t *testing.T) {
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
+
+	tests := []struct {
+		name       string
+		pdfGen     *stubPDFGenerator
+		wantPDF    bool
+	}{
+		{
+			name:    "pdf generator produces output",
+			pdfGen:  &stubPDFGenerator{result: []byte("%PDF-1.4")},
+			wantPDF: true,
+		},
+		{
+			name:    "nil pdf generator — no PDF",
+			pdfGen:  nil,
+			wantPDF: false,
+		},
+		{
+			name:    "pdf generator error — DOCX still ok",
+			pdfGen:  &stubPDFGenerator{err: errors.New("pdf failed")},
+			wantPDF: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+			parser := &stubParser{content: "text"}
+			tmplEng := &stubTemplateEngine{result: []byte("filled-docx")}
+
+			uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+			if tt.pdfGen != nil {
+				uc.SetPDFGenerator(tt.pdfGen)
+			}
+			result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// DOCX always present
+			if len(result.Result()) == 0 {
+				t.Error("expected DOCX result")
+			}
+
+			// PDF conditionally present
+			hasPDF := len(result.PDFResult()) > 0
+			if hasPDF != tt.wantPDF {
+				t.Errorf("PDFResult present = %v, want %v", hasPDF, tt.wantPDF)
+			}
+
+			if tt.pdfGen != nil && tt.pdfGen.err == nil && !tt.pdfGen.called {
+				t.Error("expected PDF generator to be called")
+			}
+		})
+	}
+}
+
 func TestGenerateProposal_PlaceholderMode_WithGenerativeEngine(t *testing.T) {
 	// Build a DOCX WITH {{placeholders}} — should use placeholder mode.
 	docx := makeTestDocxForUsecase(`<w:document><w:body><w:p><w:r><w:t>Hello {{client_name}}</w:t></w:r></w:p></w:body></w:document>`)
