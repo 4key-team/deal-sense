@@ -6,7 +6,6 @@ type TemplateMode string
 const (
 	ModePlaceholder TemplateMode = "placeholder"
 	ModeGenerative  TemplateMode = "generative"
-	ModeAutoMarkup  TemplateMode = "automarkup"
 )
 
 func ParseTemplateMode(s string) (TemplateMode, error) {
@@ -15,8 +14,6 @@ func ParseTemplateMode(s string) (TemplateMode, error) {
 		return ModePlaceholder, nil
 	case "generative":
 		return ModeGenerative, nil
-	case "automarkup":
-		return ModeAutoMarkup, nil
 	default:
 		return "", ErrInvalidTemplateMode
 	}

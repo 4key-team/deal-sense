@@ -220,7 +220,6 @@ func TestProposal_SetMode(t *testing.T) {
 	}{
 		{domain.ModePlaceholder},
 		{domain.ModeGenerative},
-		{domain.ModeAutoMarkup},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {

@@ -127,17 +127,19 @@ func (uc *GenerateProposal) Execute(
 		return nil, noUsage, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
 	}
 
+	// Build content sections once — reused by generative fill, PDF, and MD.
+	contentSections := make([]ContentSection, 0, len(resp.Sections))
+	for _, s := range resp.Sections {
+		contentSections = append(contentSections, ContentSection{Title: s.Title, Content: s.Content})
+	}
+	contentInput := ContentInput{Meta: resp.Meta, Sections: contentSections, Summary: resp.Summary}
+
 	// Fill template based on mode.
 	var filled []byte
 	switch mode {
 	case domain.ModeGenerative:
-		genSections := make([]GenerativeSection, 0, len(resp.Sections))
-		for _, s := range resp.Sections {
-			genSections = append(genSections, GenerativeSection{Title: s.Title, Content: s.Content})
-		}
-		filled, err = uc.generative.GenerativeFill(ctx, templateData, genSections)
+		filled, err = uc.generative.GenerativeFill(ctx, templateData, contentSections)
 	default:
-		// Placeholder mode: merge params and fill template.
 		mergedParams := make(map[string]string)
 		if resp.Meta != nil {
 			maps.Copy(mergedParams, resp.Meta)
@@ -158,7 +160,7 @@ func (uc *GenerateProposal) Execute(
 
 	proposal.SetResult(filled)
 
-	// Map sections
+	// Map domain sections.
 	sections := make([]domain.ProposalSection, 0, len(resp.Sections))
 	for _, s := range resp.Sections {
 		st, err := domain.ParseSectionStatus(s.Status)
@@ -186,16 +188,7 @@ func (uc *GenerateProposal) Execute(
 
 	// Best-effort PDF generation.
 	if uc.pdfGen != nil {
-		pdfSections := make([]PDFSection, 0, len(resp.Sections))
-		for _, s := range resp.Sections {
-			pdfSections = append(pdfSections, PDFSection{Title: s.Title, Content: s.Content})
-		}
-		pdfInput := PDFInput{
-			Meta:     resp.Meta,
-			Sections: pdfSections,
-			Summary:  resp.Summary,
-		}
-		pdfBytes, pdfErr := uc.pdfGen.Generate(ctx, pdfInput)
+		pdfBytes, pdfErr := uc.pdfGen.Generate(ctx, contentInput)
 		if pdfErr == nil {
 			proposal.SetPDFResult(pdfBytes)
 		}
@@ -203,16 +196,7 @@ func (uc *GenerateProposal) Execute(
 
 	// Best-effort Markdown generation.
 	if uc.mdGen != nil {
-		mdSections := make([]MDSection, 0, len(resp.Sections))
-		for _, s := range resp.Sections {
-			mdSections = append(mdSections, MDSection{Title: s.Title, Content: s.Content})
-		}
-		mdInput := MDInput{
-			Meta:     resp.Meta,
-			Sections: mdSections,
-			Summary:  resp.Summary,
-		}
-		mdBytes, mdErr := uc.mdGen.Render(ctx, mdInput)
+		mdBytes, mdErr := uc.mdGen.Render(ctx, contentInput)
 		if mdErr == nil {
 			proposal.SetMDResult(mdBytes)
 		}

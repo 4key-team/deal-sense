@@ -29,7 +29,7 @@ type stubGenerativeEngine struct {
 	err    error
 }
 
-func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.GenerativeSection) ([]byte, error) {
+func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.ContentSection) ([]byte, error) {
 	return s.result, s.err
 }
 
@@ -38,7 +38,7 @@ type stubPDFGenerator struct {
 	err    error
 }
 
-func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.PDFInput) ([]byte, error) {
+func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
 	return s.result, s.err
 }
 
@@ -47,7 +47,7 @@ type stubMDGenerator struct {
 	err    error
 }
 
-func (s *stubMDGenerator) Render(_ context.Context, _ usecase.MDInput) ([]byte, error) {
+func (s *stubMDGenerator) Render(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
 	return s.result, s.err
 }
 

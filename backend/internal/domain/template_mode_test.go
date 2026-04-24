@@ -15,7 +15,6 @@ func TestParseTemplateMode(t *testing.T) {
 	}{
 		{"placeholder", domain.ModePlaceholder, nil},
 		{"generative", domain.ModeGenerative, nil},
-		{"automarkup", domain.ModeAutoMarkup, nil},
 		{"", "", domain.ErrInvalidTemplateMode},
 		{"unknown", "", domain.ErrInvalidTemplateMode},
 		{"PLACEHOLDER", "", domain.ErrInvalidTemplateMode},
@@ -47,7 +46,6 @@ func TestTemplateMode_String(t *testing.T) {
 	}{
 		{domain.ModePlaceholder, "placeholder"},
 		{domain.ModeGenerative, "generative"},
-		{domain.ModeAutoMarkup, "automarkup"},
 	}
 
 	for _, tt := range tests {

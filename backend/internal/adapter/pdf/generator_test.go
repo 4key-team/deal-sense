@@ -13,12 +13,12 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		input   usecase.PDFInput
+		input   usecase.ContentInput
 		wantErr bool
 	}{
 		{
 			name: "three sections",
-			input: usecase.PDFInput{
+			input: usecase.ContentInput{
 				Meta: map[string]string{
 					"client":   "Acme Corp",
 					"project":  "Portal Redesign",
@@ -26,7 +26,7 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 					"price":    "1 000 000 RUB",
 					"timeline": "3 months",
 				},
-				Sections: []usecase.PDFSection{
+				Sections: []usecase.ContentSection{
 					{Title: "About Us", Content: "We are a top engineering company specializing in web development."},
 					{Title: "Solution", Content: "We propose a React + Go architecture with CI/CD pipeline."},
 					{Title: "Pricing", Content: "Total: 1M RUB over 3 months."},
@@ -36,19 +36,19 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 		},
 		{
 			name: "empty sections",
-			input: usecase.PDFInput{
+			input: usecase.ContentInput{
 				Meta:    map[string]string{"client": "Acme"},
 				Summary: "Empty proposal",
 			},
 		},
 		{
 			name: "russian text",
-			input: usecase.PDFInput{
+			input: usecase.ContentInput{
 				Meta: map[string]string{
 					"client":  "ООО Рога и Копыта",
 					"project": "Редизайн портала",
 				},
-				Sections: []usecase.PDFSection{
+				Sections: []usecase.ContentSection{
 					{Title: "О компании", Content: "Мы — ведущая компания в сфере веб-разработки."},
 					{Title: "Решение", Content: "Предлагаем архитектуру React + Go с CI/CD."},
 				},
@@ -57,8 +57,8 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 		},
 		{
 			name: "nil meta",
-			input: usecase.PDFInput{
-				Sections: []usecase.PDFSection{
+			input: usecase.ContentInput{
+				Sections: []usecase.ContentSection{
 					{Title: "Section", Content: "Content"},
 				},
 				Summary: "Test",

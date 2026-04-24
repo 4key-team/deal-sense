@@ -25,51 +25,33 @@ type TemplateEngine interface {
 	Fill(ctx context.Context, template []byte, params map[string]string) ([]byte, error)
 }
 
-// GenerativeSection holds a section title and its generated content.
-type GenerativeSection struct {
+// ContentSection holds a section title and its generated content.
+// Used by GenerativeEngine, PDFGenerator, and MDGenerator.
+type ContentSection struct {
 	Title   string
 	Content string
+}
+
+// ContentInput holds all data needed to generate output (PDF, Markdown, etc.).
+type ContentInput struct {
+	Meta     map[string]string
+	Sections []ContentSection
+	Summary  string
 }
 
 // GenerativeEngine fills a template in generative mode (no placeholders).
 type GenerativeEngine interface {
-	GenerativeFill(ctx context.Context, template []byte, sections []GenerativeSection) ([]byte, error)
-}
-
-// PDFSection holds a section for PDF generation.
-type PDFSection struct {
-	Title   string
-	Content string
-}
-
-// PDFInput holds all data needed to generate a PDF proposal.
-type PDFInput struct {
-	Meta     map[string]string
-	Sections []PDFSection
-	Summary  string
+	GenerativeFill(ctx context.Context, template []byte, sections []ContentSection) ([]byte, error)
 }
 
 // PDFGenerator creates a PDF document from proposal data.
 type PDFGenerator interface {
-	Generate(ctx context.Context, input PDFInput) ([]byte, error)
-}
-
-// MDSection holds a section for Markdown generation.
-type MDSection struct {
-	Title   string
-	Content string
-}
-
-// MDInput holds all data needed to generate a Markdown proposal.
-type MDInput struct {
-	Meta     map[string]string
-	Sections []MDSection
-	Summary  string
+	Generate(ctx context.Context, input ContentInput) ([]byte, error)
 }
 
 // MDGenerator creates a Markdown document from proposal data.
 type MDGenerator interface {
-	Render(ctx context.Context, input MDInput) ([]byte, error)
+	Render(ctx context.Context, input ContentInput) ([]byte, error)
 }
 
 // LLMProviderConfig holds user-selected LLM settings from the request.

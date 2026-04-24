@@ -51,7 +51,7 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 	tests := []struct {
 		name     string
 		body     string
-		sections []usecase.GenerativeSection
+		sections []usecase.ContentSection
 		contains []string
 		wantErr  bool
 	}{
@@ -59,7 +59,7 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 			name: "replaces paragraph content with section text",
 			body: `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>About Us</w:t></w:r></w:p>` +
 				`<w:p><w:r><w:t>Old text here</w:t></w:r></w:p>`,
-			sections: []usecase.GenerativeSection{
+			sections: []usecase.ContentSection{
 				{Title: "About Us", Content: "We are the best company in the world."},
 			},
 			contains: []string{"We are the best company in the world."},
@@ -67,7 +67,7 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 		{
 			name: "preserves non-matching paragraphs",
 			body: `<w:p><w:r><w:t>Keep this text</w:t></w:r></w:p>`,
-			sections: []usecase.GenerativeSection{
+			sections: []usecase.ContentSection{
 				{Title: "Missing Section", Content: "This should be appended"},
 			},
 			contains: []string{"Keep this text", "This should be appended"},

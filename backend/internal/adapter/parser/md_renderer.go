@@ -15,7 +15,7 @@ func NewMarkdownRenderer() *MarkdownRenderer {
 	return &MarkdownRenderer{}
 }
 
-func (r *MarkdownRenderer) Render(_ context.Context, input usecase.MDInput) ([]byte, error) {
+func (r *MarkdownRenderer) Render(_ context.Context, input usecase.ContentInput) ([]byte, error) {
 	var b strings.Builder
 
 	title := "Коммерческое предложение"

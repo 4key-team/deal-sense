@@ -31,7 +31,7 @@ func NewMarotoPDFGenerator() *MarotoPDFGenerator {
 	return &MarotoPDFGenerator{}
 }
 
-func (g *MarotoPDFGenerator) Generate(_ context.Context, input usecase.PDFInput) ([]byte, error) {
+func (g *MarotoPDFGenerator) Generate(_ context.Context, input usecase.ContentInput) ([]byte, error) {
 	regularBytes, err := fontsFS.ReadFile("fonts/Roboto-Regular.ttf")
 	if err != nil {
 		return nil, fmt.Errorf("pdf: read regular font: %w", err)
@@ -100,7 +100,7 @@ func (g *MarotoPDFGenerator) Generate(_ context.Context, input usecase.PDFInput)
 	return doc.GetBytes(), nil
 }
 
-func (g *MarotoPDFGenerator) addHeader(m core.Maroto, input usecase.PDFInput) {
+func (g *MarotoPDFGenerator) addHeader(m core.Maroto, input usecase.ContentInput) {
 	meta := input.Meta
 	if meta == nil {
 		meta = map[string]string{}

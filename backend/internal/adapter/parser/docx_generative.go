@@ -19,7 +19,7 @@ func NewDocxGenerative() *DocxGenerative {
 	return &DocxGenerative{}
 }
 
-func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sections []usecase.GenerativeSection) ([]byte, error) {
+func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sections []usecase.ContentSection) ([]byte, error) {
 	if len(template) == 0 {
 		return nil, fmt.Errorf("generative fill: %w", domain.ErrEmptyTemplate)
 	}
@@ -51,13 +51,13 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 
 // injectSections finds headings in the document XML and replaces following paragraphs
 // with section content. Unmatched sections are appended before </w:body>.
-func (g *DocxGenerative) injectSections(xml string, sections []usecase.GenerativeSection) []byte {
+func (g *DocxGenerative) injectSections(xml string, sections []usecase.ContentSection) []byte {
 	if len(sections) == 0 {
 		return []byte(xml)
 	}
 
 	// Build a map for quick lookup (case-insensitive title match).
-	remaining := make(map[string]usecase.GenerativeSection, len(sections))
+	remaining := make(map[string]usecase.ContentSection, len(sections))
 	for _, s := range sections {
 		remaining[strings.ToLower(s.Title)] = s
 	}

@@ -14,19 +14,19 @@ func TestMarkdownRenderer_Render(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		input    usecase.MDInput
+		input    usecase.ContentInput
 		contains []string
 	}{
 		{
 			name: "full proposal",
-			input: usecase.MDInput{
+			input: usecase.ContentInput{
 				Meta: map[string]string{
 					"client":  "Acme Corp",
 					"project": "Portal",
 					"price":   "1M RUB",
 					"date":    "24.04.2026",
 				},
-				Sections: []usecase.MDSection{
+				Sections: []usecase.ContentSection{
 					{Title: "О компании", Content: "Мы лучшие."},
 					{Title: "Решение", Content: "React + Go."},
 				},
@@ -44,7 +44,7 @@ func TestMarkdownRenderer_Render(t *testing.T) {
 		},
 		{
 			name: "empty sections",
-			input: usecase.MDInput{
+			input: usecase.ContentInput{
 				Meta:    map[string]string{"client": "Test"},
 				Summary: "Empty",
 			},
@@ -52,8 +52,8 @@ func TestMarkdownRenderer_Render(t *testing.T) {
 		},
 		{
 			name: "nil meta",
-			input: usecase.MDInput{
-				Sections: []usecase.MDSection{{Title: "Sec", Content: "Text"}},
+			input: usecase.ContentInput{
+				Sections: []usecase.ContentSection{{Title: "Sec", Content: "Text"}},
 				Summary:  "Proposal",
 			},
 			contains: []string{"# Proposal", "## Sec", "Text"},
