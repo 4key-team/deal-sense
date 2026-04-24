@@ -27,6 +27,7 @@ export interface Copy {
     download: string;
     download_docx: string;
     download_pdf: string;
+    download_md: string;
     re_generate: string;
     open: string;
     regenerate_section: string;

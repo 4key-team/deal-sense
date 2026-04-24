@@ -109,6 +109,7 @@ export function ProposalResult() {
             onFiles={setTemplate}
             label={t.dropzone.proposal_tpl_label}
             hint={t.dropzone.proposal_tpl_hint}
+            accept=".docx,.pdf,.md"
             multiple={false}
           />
           <Dropzone
@@ -211,6 +212,14 @@ export function ProposalResult() {
                   downloadBlob(blob, "proposal.pdf");
                 }}>
                   {t.kp.download_pdf}
+                </Button>
+              )}
+              {result.md && (
+                <Button variant="secondary" icon={<DownloadIcon />} onClick={() => {
+                  const blob = new Blob([result.md!], { type: "text/markdown" });
+                  downloadBlob(blob, "proposal.md");
+                }}>
+                  {t.kp.download_md}
                 </Button>
               )}
             </div>
