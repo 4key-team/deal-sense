@@ -2,6 +2,7 @@ package llm
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -18,6 +19,7 @@ type ProviderConfig struct {
 // Factory implements usecase.LLMProviderFactory.
 type Factory struct {
 	SOCKS5Proxy string
+	Logger *slog.Logger
 }
 
 func (f Factory) Create(cfg usecase.LLMProviderConfig) (usecase.LLMProvider, error) {
@@ -27,15 +29,14 @@ func (f Factory) Create(cfg usecase.LLMProviderConfig) (usecase.LLMProvider, err
 		APIKey:      cfg.APIKey,
 		Model:       cfg.Model,
 		SOCKS5Proxy: f.SOCKS5Proxy,
-	})
+	}, f.Logger)
 }
 
 // NewLLMProvider creates an LLMProvider based on the provider name.
-func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
+func NewLLMProvider(cfg ProviderConfig, logger *slog.Logger) (usecase.LLMProvider, error) {
 	if err := validateSOCKS5ProxyURL(cfg.SOCKS5Proxy); err != nil {
 		return nil, err
 	}
-
 	switch cfg.Provider {
 	case "openai", "groq", "ollama", "custom":
 		return NewOpenAICompatible(OpenAIConfig{
@@ -44,7 +45,7 @@ func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
 			Model:       cfg.Model,
 			Name:        cfg.Provider,
 			SOCKS5Proxy: cfg.SOCKS5Proxy,
-		}), nil
+		}, logger), nil
 
 	case "anthropic":
 		return NewAnthropic(AnthropicConfig{
@@ -52,7 +53,7 @@ func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
 			APIKey:      cfg.APIKey,
 			Model:       cfg.Model,
 			SOCKS5Proxy: cfg.SOCKS5Proxy,
-		}), nil
+		}, logger), nil
 
 	case "gemini":
 		return NewGemini(GeminiConfig{
@@ -60,7 +61,7 @@ func NewLLMProvider(cfg ProviderConfig) (usecase.LLMProvider, error) {
 			APIKey:      cfg.APIKey,
 			Model:       cfg.Model,
 			SOCKS5Proxy: cfg.SOCKS5Proxy,
-		}), nil
+		}, logger), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", cfg.Provider)

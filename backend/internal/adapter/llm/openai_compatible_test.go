@@ -3,6 +3,7 @@ package llm_test
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,13 +11,15 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 )
 
+var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
 func TestOpenAICompatible_Name(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: "http://localhost",
 		APIKey:  "sk-test",
 		Model:   "gpt-4o",
 		Name:    "openai",
-	})
+	}, testLogger)
 
 	if got := p.Name(); got != "openai" {
 		t.Errorf("Name() = %q, want %q", got, "openai")
@@ -89,7 +92,7 @@ func TestOpenAICompatible_GenerateCompletion(t *testing.T) {
 				APIKey:  "sk-test",
 				Model:   "gpt-4o",
 				Name:    "openai",
-			})
+			}, testLogger)
 
 			result, _, err := p.GenerateCompletion(t.Context(), "system prompt", "user prompt")
 			if tt.wantErr {
@@ -111,7 +114,7 @@ func TestOpenAICompatible_GenerateCompletion(t *testing.T) {
 func TestOpenAICompatible_ConnectionRefused(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: "http://127.0.0.1:1", APIKey: "sk", Model: "m", Name: "test",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected connection error")
@@ -121,7 +124,7 @@ func TestOpenAICompatible_ConnectionRefused(t *testing.T) {
 func TestOpenAICompatible_InvalidBaseURL(t *testing.T) {
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: "://bad\x7furl", APIKey: "sk", Model: "m", Name: "test",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected URL parse error")
@@ -137,7 +140,7 @@ func TestOpenAICompatible_ServerErrorNoMessage(t *testing.T) {
 
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected error")
@@ -152,7 +155,7 @@ func TestOpenAICompatible_InvalidJSON(t *testing.T) {
 
 	p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected parse error")
@@ -182,7 +185,7 @@ func TestOpenAICompatible_ListModels(t *testing.T) {
 
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: srv.URL, APIKey: "sk-test", Model: "gpt-4o", Name: "openai",
-		})
+		}, testLogger)
 		models, err := p.ListModels(t.Context())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -203,7 +206,7 @@ func TestOpenAICompatible_ListModels(t *testing.T) {
 
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
-		})
+		}, testLogger)
 		_, err := p.ListModels(t.Context())
 		if err == nil {
 			t.Error("expected error")
@@ -218,7 +221,7 @@ func TestOpenAICompatible_ListModels(t *testing.T) {
 
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: srv.URL, APIKey: "sk", Model: "m", Name: "test",
-		})
+		}, testLogger)
 		_, err := p.ListModels(t.Context())
 		if err == nil {
 			t.Error("expected parse error")
@@ -228,7 +231,7 @@ func TestOpenAICompatible_ListModels(t *testing.T) {
 	t.Run("connection refused", func(t *testing.T) {
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: "http://127.0.0.1:1", APIKey: "sk", Model: "m", Name: "test",
-		})
+		}, testLogger)
 		_, err := p.ListModels(t.Context())
 		if err == nil {
 			t.Error("expected connection error")
@@ -238,7 +241,7 @@ func TestOpenAICompatible_ListModels(t *testing.T) {
 	t.Run("invalid base URL", func(t *testing.T) {
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: "://bad\x7furl", APIKey: "sk", Model: "m", Name: "test",
-		})
+		}, testLogger)
 		_, err := p.ListModels(t.Context())
 		if err == nil {
 			t.Error("expected URL parse error")
@@ -259,7 +262,7 @@ func TestOpenAICompatible_CheckConnection(t *testing.T) {
 
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: srv.URL, APIKey: "sk-test", Model: "gpt-4o", Name: "test",
-		})
+		}, testLogger)
 		if err := p.CheckConnection(t.Context()); err != nil {
 			t.Errorf("CheckConnection() error: %v", err)
 		}
@@ -274,7 +277,7 @@ func TestOpenAICompatible_CheckConnection(t *testing.T) {
 
 		p := llm.NewOpenAICompatible(llm.OpenAIConfig{
 			BaseURL: srv.URL, APIKey: "bad-key", Model: "gpt-4o", Name: "test",
-		})
+		}, testLogger)
 		if err := p.CheckConnection(t.Context()); err == nil {
 			t.Error("expected error for bad key")
 		}

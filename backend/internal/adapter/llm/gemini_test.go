@@ -16,7 +16,7 @@ func TestGemini_Name(t *testing.T) {
 		BaseURL: "http://localhost",
 		APIKey:  "test-key",
 		Model:   "gemini-2.5-pro",
-	})
+	}, testLogger)
 	if got := p.Name(); got != "gemini" {
 		t.Errorf("Name() = %q, want %q", got, "gemini")
 	}
@@ -90,7 +90,7 @@ func TestGemini_GenerateCompletion(t *testing.T) {
 				BaseURL: srv.URL,
 				APIKey:  "test-key",
 				Model:   "gemini-2.5-pro",
-			})
+			}, testLogger)
 
 			result, _, err := p.GenerateCompletion(t.Context(), "system", "user prompt")
 			if tt.wantErr {
@@ -112,7 +112,7 @@ func TestGemini_GenerateCompletion(t *testing.T) {
 func TestGemini_ConnectionRefused(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: "http://127.0.0.1:1", APIKey: "k", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected connection error")
@@ -122,7 +122,7 @@ func TestGemini_ConnectionRefused(t *testing.T) {
 func TestGemini_InvalidBaseURL(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: "://bad\x7furl", APIKey: "k", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected URL parse error")
@@ -137,7 +137,7 @@ func TestGemini_InvalidJSON(t *testing.T) {
 
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: srv.URL, APIKey: "k", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected parse error")
@@ -156,7 +156,7 @@ func TestGemini_EmptyParts(t *testing.T) {
 
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: srv.URL, APIKey: "k", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected error for empty parts")
@@ -166,7 +166,7 @@ func TestGemini_EmptyParts(t *testing.T) {
 func TestGemini_ListModels(t *testing.T) {
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: "http://localhost", APIKey: "k", Model: "m",
-	})
+	}, testLogger)
 	models, err := p.ListModels(t.Context())
 	if err != nil {
 		t.Errorf("ListModels() error = %v", err)
@@ -190,7 +190,7 @@ func TestGemini_CheckConnection(t *testing.T) {
 
 	p := llm.NewGemini(llm.GeminiConfig{
 		BaseURL: srv.URL, APIKey: "key", Model: "gemini-2.5-pro",
-	})
+	}, testLogger)
 	if err := p.CheckConnection(t.Context()); err != nil {
 		t.Errorf("CheckConnection() error: %v", err)
 	}

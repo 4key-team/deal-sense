@@ -108,7 +108,7 @@ export const en: Copy = {
   },
   dropzone: {
     tender_label: "Upload tender documentation",
-    tender_hint: "PDF or DOCX · multiple files OK",
+    tender_hint: "PDF, DOCX or ZIP archive · multiple files OK",
     proposal_tpl_label: "Proposal template (.docx)",
     proposal_tpl_hint: "DOCX template with placeholders",
     proposal_ctx_label: "Context (brief, cases, prices)",

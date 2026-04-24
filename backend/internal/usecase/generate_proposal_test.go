@@ -222,6 +222,26 @@ func TestGenerateProposal_MetaMerge(t *testing.T) {
 	}
 }
 
+func TestGenerateProposal_TemplateParseFallback(t *testing.T) {
+	llmResp := `{"params":{"x":"y"},"sections":[{"title":"Sec","status":"ai","tokens":50}],"summary":"ok"}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	// Parser returns error — simulates complex template that can't be read as text
+	parser := &stubParser{content: "", err: errors.New("unsupported format")}
+	tmplEng := &stubTemplateEngine{result: []byte("filled-docx")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "test prompt")
+	result, _, err := uc.Execute(t.Context(), "complex.docx", []byte("template-data"), nil, nil)
+	if err != nil {
+		t.Fatalf("expected no error with fallback, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result.Result()) == 0 {
+		t.Error("expected non-empty result bytes")
+	}
+}
+
 func TestGenerateProposal_ContextFileParseError(t *testing.T) {
 	llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
 	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}

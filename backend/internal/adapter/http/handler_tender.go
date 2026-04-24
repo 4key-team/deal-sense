@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase"
@@ -28,9 +29,26 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.logger.Debug("tender analysis request", "files", len(files), "lang", langName)
+
 	var inputs []usecase.FileInput
 	for _, fh := range files {
-		fi, err := usecase.NewFileInput(fh.Filename, mustReadMultipartFile(fh))
+		data := mustReadMultipartFile(fh)
+		ext := strings.ToLower(filepath.Ext(fh.Filename))
+
+		if ext == ".zip" {
+			extracted, err := usecase.ExtractZip(data)
+			if err != nil {
+				h.logger.Debug("zip extraction failed", "file", fh.Filename, "err", err)
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			h.logger.Debug("zip extracted", "file", fh.Filename, "extracted", len(extracted))
+			inputs = append(inputs, extracted...)
+			continue
+		}
+
+		fi, err := usecase.NewFileInput(fh.Filename, data)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "unsupported file type: "+fh.Filename)
 			return
@@ -38,12 +56,23 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 		inputs = append(inputs, fi)
 	}
 
-	uc := usecase.NewAnalyzeTender(h.resolveLLM(r), h.parser, h.tenderPrompt(langName))
+	llmProvider := h.resolveLLM(r)
+	h.logger.Debug("starting tender analysis", "provider", llmProvider.Name(), "documents", len(inputs))
+
+	uc := usecase.NewAnalyzeTender(llmProvider, h.parser, h.tenderPrompt(langName))
 	result, usage, err := uc.Execute(r.Context(), inputs, companyProfile)
 	if err != nil {
+		h.logger.Error("tender analysis failed", "err", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	h.logger.Info("tender analysis complete",
+		"verdict", string(result.Verdict()),
+		"score", result.Score().Value(),
+		"prompt_tokens", usage.PromptTokens(),
+		"completion_tokens", usage.CompletionTokens(),
+	)
 
 	pros := make([]map[string]string, len(result.Pros()))
 	for i, p := range result.Pros() {

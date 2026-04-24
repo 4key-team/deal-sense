@@ -42,12 +42,29 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 
 	langName := resolveLang(r)
 
-	uc := usecase.NewGenerateProposal(h.resolveLLM(r), h.parser, h.template, h.proposalPrompt(langName))
+	llmProvider := h.resolveLLM(r)
+	h.logger.Debug("proposal generation request",
+		"template", header.Filename,
+		"context_files", len(contextFiles),
+		"provider", llmProvider.Name(),
+		"lang", langName,
+	)
+
+	uc := usecase.NewGenerateProposal(llmProvider, h.parser, h.template, h.proposalPrompt(langName))
 	result, usage, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
 	if err != nil {
+		h.logger.Error("proposal generation failed", "err", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	h.logger.Info("proposal generated",
+		"template", header.Filename,
+		"sections", len(result.Sections()),
+		"docx_size", len(result.Result()),
+		"prompt_tokens", usage.PromptTokens(),
+		"completion_tokens", usage.CompletionTokens(),
+	)
 
 	sections := make([]map[string]any, len(result.Sections()))
 	for i, s := range result.Sections() {

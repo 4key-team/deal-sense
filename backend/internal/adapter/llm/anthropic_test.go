@@ -15,7 +15,7 @@ func TestAnthropic_Name(t *testing.T) {
 		BaseURL: "http://localhost",
 		APIKey:  "sk-ant-test",
 		Model:   "claude-sonnet-4-5",
-	})
+	}, testLogger)
 	if got := p.Name(); got != "anthropic" {
 		t.Errorf("Name() = %q, want %q", got, "anthropic")
 	}
@@ -91,7 +91,7 @@ func TestAnthropic_GenerateCompletion(t *testing.T) {
 				BaseURL: srv.URL,
 				APIKey:  "sk-ant-test",
 				Model:   "claude-sonnet-4-5",
-			})
+			}, testLogger)
 
 			result, _, err := p.GenerateCompletion(t.Context(), "system", "user")
 			if tt.wantErr {
@@ -113,7 +113,7 @@ func TestAnthropic_GenerateCompletion(t *testing.T) {
 func TestAnthropic_ConnectionRefused(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: "http://127.0.0.1:1", APIKey: "sk", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected connection error")
@@ -123,7 +123,7 @@ func TestAnthropic_ConnectionRefused(t *testing.T) {
 func TestAnthropic_InvalidBaseURL(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: "://bad\x7furl", APIKey: "sk", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected URL parse error")
@@ -138,7 +138,7 @@ func TestAnthropic_InvalidJSON(t *testing.T) {
 
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected parse error")
@@ -157,7 +157,7 @@ func TestAnthropic_NoTextBlock(t *testing.T) {
 
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "m",
-	})
+	}, testLogger)
 	_, _, err := p.GenerateCompletion(t.Context(), "s", "u")
 	if err == nil {
 		t.Error("expected error for no text block")
@@ -167,7 +167,7 @@ func TestAnthropic_NoTextBlock(t *testing.T) {
 func TestAnthropic_ListModels(t *testing.T) {
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: "http://localhost", APIKey: "sk", Model: "m",
-	})
+	}, testLogger)
 	models, err := p.ListModels(t.Context())
 	if err != nil {
 		t.Errorf("ListModels() error = %v", err)
@@ -189,7 +189,7 @@ func TestAnthropic_CheckConnection(t *testing.T) {
 
 	p := llm.NewAnthropic(llm.AnthropicConfig{
 		BaseURL: srv.URL, APIKey: "sk", Model: "claude-sonnet-4-5",
-	})
+	}, testLogger)
 	if err := p.CheckConnection(t.Context()); err != nil {
 		t.Errorf("CheckConnection() error: %v", err)
 	}

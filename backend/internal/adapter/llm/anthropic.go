@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
@@ -19,20 +20,22 @@ type AnthropicConfig struct {
 }
 
 type Anthropic struct {
-	config    AnthropicConfig
-	client    *http.Client
-	clientErr error
+	config AnthropicConfig
+	client *http.Client
+    clientErr error
+	logger *slog.Logger
 }
 
-func NewAnthropic(cfg AnthropicConfig) *Anthropic {
+func NewAnthropic(cfg AnthropicConfig, logger *slog.Logger) *Anthropic {
 	client, err := newHTTPClient(cfg.SOCKS5Proxy)
 	if err != nil {
 		client = &http.Client{}
 	}
 	return &Anthropic{
-		config:    cfg,
-		client:    client,
-		clientErr: err,
+		config: cfg,
+		client: client,
+        clientErr: err,
+		logger: logger.With("component", "llm.anthropic"),
 	}
 }
 
@@ -62,10 +65,10 @@ type anthropicBlock struct {
 }
 
 func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
-	if p.clientErr != nil {
+	p.logger.Debug("generating completion", "model", p.config.Model, "prompt_len", len(userPrompt))
+    if p.clientErr != nil {
 		return "", domain.ZeroTokenUsage(), p.clientErr
 	}
-
 	reqBody := anthropicRequest{
 		Model:     p.config.Model,
 		MaxTokens: 4096,

@@ -17,13 +17,28 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/config"
 )
 
+func parseLogLevel(s string) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	cfg := config.Load()
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: parseLogLevel(cfg.LogLevel)}))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, logger, config.Load()); err != nil {
+	if err := run(ctx, logger, cfg); err != nil {
 		logger.Error("fatal", "error", err)
 		os.Exit(1)
 	}
@@ -36,7 +51,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		APIKey:      cfg.LLMAPIKey,
 		Model:       cfg.LLMModel,
 		SOCKS5Proxy: cfg.LLMSOCKS5Proxy,
-	})
+	}, logger)
 	if err != nil {
 		return fmt.Errorf("init llm provider: %w", err)
 	}
@@ -53,7 +68,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "ollama", Name: "Ollama (local)", Models: []string{"llama3.1:70b", "qwen2.5:32b"}},
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
-	h := apphttp.NewHandler(provider, llm.Factory{SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers)
+	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux

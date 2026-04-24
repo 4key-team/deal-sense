@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
@@ -22,12 +23,13 @@ type OpenAIConfig struct {
 
 // OpenAICompatible works with any OpenAI-compatible API (OpenAI, Groq, Ollama).
 type OpenAICompatible struct {
-	config    OpenAIConfig
-	client    *http.Client
+	config OpenAIConfig
+	client *http.Client
 	clientErr error
+	logger *slog.Logger
 }
 
-func NewOpenAICompatible(cfg OpenAIConfig) *OpenAICompatible {
+func NewOpenAICompatible(cfg OpenAIConfig, logger *slog.Logger) *OpenAICompatible {
 	client, err := newHTTPClient(cfg.SOCKS5Proxy)
 	if err != nil {
 		client = &http.Client{}
@@ -36,6 +38,7 @@ func NewOpenAICompatible(cfg OpenAIConfig) *OpenAICompatible {
 		config:    cfg,
 		client:    client,
 		clientErr: err,
+		logger: logger.With("component", "llm."+cfg.Name),
 	}
 }
 
@@ -73,10 +76,10 @@ type apiError struct {
 }
 
 func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
+	p.logger.Debug("generating completion", "model", p.config.Model, "prompt_len", len(userPrompt))
 	if p.clientErr != nil {
 		return "", domain.ZeroTokenUsage(), p.clientErr
 	}
-
 	body, _ := json.Marshal(chatRequest{
 		Model: p.config.Model,
 		Messages: []chatMessage{
@@ -120,6 +123,11 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 	}
 
 	usage := domain.NewTokenUsage(chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens)
+	p.logger.Debug("completion done",
+		"prompt_tokens", usage.PromptTokens(),
+		"completion_tokens", usage.CompletionTokens(),
+		"response_len", len(chatResp.Choices[0].Message.Content),
+	)
 	return chatResp.Choices[0].Message.Content, usage, nil
 }
 

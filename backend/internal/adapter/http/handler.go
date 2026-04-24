@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 
@@ -29,6 +30,7 @@ type Handler struct {
 	tenderPrompt   PromptResolver
 	proposalPrompt PromptResolver
 	providers      []ProviderInfo
+	logger         *slog.Logger
 }
 
 func NewHandler(
@@ -39,12 +41,14 @@ func NewHandler(
 	tenderPrompt PromptResolver,
 	proposalPrompt PromptResolver,
 	providers []ProviderInfo,
+	logger *slog.Logger,
 ) *Handler {
 	return &Handler{
 		llm: llm, llmFactory: factory,
 		parser: parser, template: template,
 		tenderPrompt: tenderPrompt, proposalPrompt: proposalPrompt,
 		providers: providers,
+		logger:    logger.With("component", "handler"),
 	}
 }
 
