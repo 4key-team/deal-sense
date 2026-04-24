@@ -34,6 +34,7 @@ type Handler struct {
 	pdfGen            usecase.PDFGenerator
 	generativeEngine  usecase.GenerativeEngine
 	generativePrompt  PromptResolver
+	mdGen             usecase.MDGenerator
 }
 
 func NewHandler(
@@ -48,6 +49,7 @@ func NewHandler(
 	pdfGen usecase.PDFGenerator,
 	generativeEngine usecase.GenerativeEngine,
 	generativePrompt PromptResolver,
+	mdGen usecase.MDGenerator,
 ) *Handler {
 	return &Handler{
 		llm: llm, llmFactory: factory,
@@ -58,6 +60,7 @@ func NewHandler(
 		pdfGen:           pdfGen,
 		generativeEngine: generativeEngine,
 		generativePrompt: generativePrompt,
+		mdGen:            mdGen,
 	}
 }
 

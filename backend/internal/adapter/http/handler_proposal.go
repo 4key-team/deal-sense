@@ -57,6 +57,9 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 	if h.pdfGen != nil {
 		uc.SetPDFGenerator(h.pdfGen)
 	}
+	if h.mdGen != nil {
+		uc.SetMDGenerator(h.mdGen)
+	}
 	result, usage, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
 	if err != nil {
 		h.logger.Error("proposal generation failed", "err", err)
@@ -91,6 +94,11 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		pdfBase64 = base64.StdEncoding.EncodeToString(result.PDFResult())
 	}
 
+	mdContent := ""
+	if len(result.MDResult()) > 0 {
+		mdContent = string(result.MDResult())
+	}
+
 	logEntries := make([]map[string]string, len(result.Log()))
 	for i, l := range result.Log() {
 		logEntries[i] = map[string]string{"time": l.Time(), "msg": l.Msg()}
@@ -104,6 +112,7 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		"log":      logEntries,
 		"docx":     docxBase64,
 		"pdf":      pdfBase64,
+		"md":       mdContent,
 		"mode":     string(result.Mode()),
 		"usage": map[string]int{
 			"prompt_tokens":     usage.PromptTokens(),

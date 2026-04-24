@@ -57,7 +57,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	}
 	logger.Info("llm provider initialized", "provider", provider.Name(), "model", cfg.LLMModel)
 
-	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader())
+	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader(), parser.NewMDParser())
 	docxTemplate := parser.NewDocxTemplate()
 	docxGenerative := parser.NewDocxGenerative()
 	pdfGen := apppdf.NewMarotoPDFGenerator()
@@ -70,7 +70,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "ollama", Name: "Ollama (local)", Models: []string{"llama3.1:70b", "qwen2.5:32b"}},
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
-	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxGenerative, llm.GenerativeProposalPrompt)
+	mdRenderer := parser.NewMarkdownRenderer()
+	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux
