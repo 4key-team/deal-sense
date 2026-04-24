@@ -232,6 +232,17 @@ func TestProposal_SetMode(t *testing.T) {
 	}
 }
 
+func TestProposal_SetMDResult(t *testing.T) {
+	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+	if p.MDResult() != nil {
+		t.Error("MDResult() should be nil before SetMDResult")
+	}
+	p.SetMDResult([]byte("# Proposal\n\nContent here"))
+	if string(p.MDResult()) != "# Proposal\n\nContent here" {
+		t.Errorf("MDResult() = %q", p.MDResult())
+	}
+}
+
 func TestProposal_SetPDFResult(t *testing.T) {
 	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
 	if p.PDFResult() != nil {
