@@ -1,6 +1,8 @@
 package usecase_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -9,12 +11,44 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
+// makeTestDocxForUsecase builds a minimal DOCX (zip) with given XML as word/document.xml.
+func makeTestDocxForUsecase(documentXML string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, _ := w.Create("word/document.xml")
+	f.Write([]byte(documentXML))
+	w.Close()
+	return buf.Bytes()
+}
+
 type stubTemplateEngine struct {
 	result []byte
 	err    error
 }
 
 func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]string) ([]byte, error) {
+	return s.result, s.err
+}
+
+type stubGenerativeEngine struct {
+	result []byte
+	err    error
+	called bool
+}
+
+func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.GenerativeSection) ([]byte, error) {
+	s.called = true
+	return s.result, s.err
+}
+
+type stubPDFGenerator struct {
+	result []byte
+	err    error
+	called bool
+}
+
+func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.PDFInput) ([]byte, error) {
+	s.called = true
 	return s.result, s.err
 }
 
@@ -257,5 +291,63 @@ func TestGenerateProposal_ContextFileParseError(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestGenerateProposal_GenerativeMode(t *testing.T) {
+	// Build a DOCX without {{placeholders}} so DetectTemplateMode returns ModeGenerative.
+	docx := makeTestDocxForUsecase(`<w:document><w:body><w:p><w:r><w:t>Plain text</w:t></w:r></w:p></w:body></w:document>`)
+
+	llmResp := `{
+		"meta":{"client":"Acme","project":"Portal"},
+		"sections":[{"title":"Intro","content":"Generated intro text","status":"ai","tokens":50}],
+		"summary":"Generated proposal",
+		"log":[{"time":"14:00","msg":"done"}]
+	}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "parsed text"}
+	tmplEng := &stubTemplateEngine{result: []byte("should not be called")}
+	genEng := &stubGenerativeEngine{result: []byte("generative-output")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	result, _, err := uc.Execute(t.Context(), "offer.docx", docx, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !genEng.called {
+		t.Error("expected GenerativeFill to be called")
+	}
+	if result.Mode() != domain.ModeGenerative {
+		t.Errorf("Mode() = %q, want generative", result.Mode())
+	}
+	if string(result.Result()) != "generative-output" {
+		t.Errorf("Result() = %q, want generative-output", result.Result())
+	}
+}
+
+func TestGenerateProposal_PlaceholderMode_WithGenerativeEngine(t *testing.T) {
+	// Build a DOCX WITH {{placeholders}} — should use placeholder mode.
+	docx := makeTestDocxForUsecase(`<w:document><w:body><w:p><w:r><w:t>Hello {{client_name}}</w:t></w:r></w:p></w:body></w:document>`)
+
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "parsed text"}
+	tmplEng := &stubTemplateEngine{result: []byte("placeholder-filled")}
+	genEng := &stubGenerativeEngine{result: []byte("should-not-be-used")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	result, _, err := uc.Execute(t.Context(), "offer.docx", docx, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if genEng.called {
+		t.Error("GenerativeFill should NOT be called in placeholder mode")
+	}
+	if result.Mode() != domain.ModePlaceholder {
+		t.Errorf("Mode() = %q, want placeholder", result.Mode())
 	}
 }
