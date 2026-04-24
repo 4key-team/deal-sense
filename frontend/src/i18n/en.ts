@@ -111,11 +111,11 @@ export const en: Copy = {
   },
   dropzone: {
     tender_label: "Upload tender documentation",
-    tender_hint: "PDF, DOCX or ZIP archive · multiple files OK",
+    tender_hint: "PDF, DOCX, MD or ZIP archive · multiple files OK",
     proposal_tpl_label: "Proposal template (.docx)",
     proposal_tpl_hint: "DOCX, PDF, or MD template",
     proposal_ctx_label: "Context (brief, cases, prices)",
-    proposal_ctx_hint: "PDF or DOCX · up to 5 files",
+    proposal_ctx_hint: "PDF, DOCX or MD · up to 5 files",
   },
   settings: {
     title: "LLM provider",

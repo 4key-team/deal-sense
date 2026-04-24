@@ -111,11 +111,11 @@ export const ru: Copy = {
   },
   dropzone: {
     tender_label: "Загрузите тендерную документацию",
-    tender_hint: "PDF, DOCX или ZIP-архив · можно несколько файлов",
+    tender_hint: "PDF, DOCX, MD или ZIP-архив · можно несколько файлов",
     proposal_tpl_label: "Шаблон КП (.docx)",
     proposal_tpl_hint: "DOCX, PDF или MD шаблон",
     proposal_ctx_label: "Контекст (бриф, кейсы, прайс)",
-    proposal_ctx_hint: "PDF или DOCX · до 5 файлов",
+    proposal_ctx_hint: "PDF, DOCX или MD · до 5 файлов",
   },
   settings: {
     title: "LLM-провайдер",
