@@ -54,6 +54,24 @@ type PDFGenerator interface {
 	Generate(ctx context.Context, input PDFInput) ([]byte, error)
 }
 
+// MDSection holds a section for Markdown generation.
+type MDSection struct {
+	Title   string
+	Content string
+}
+
+// MDInput holds all data needed to generate a Markdown proposal.
+type MDInput struct {
+	Meta     map[string]string
+	Sections []MDSection
+	Summary  string
+}
+
+// MDGenerator creates a Markdown document from proposal data.
+type MDGenerator interface {
+	Render(ctx context.Context, input MDInput) ([]byte, error)
+}
+
 // LLMProviderConfig holds user-selected LLM settings from the request.
 type LLMProviderConfig struct {
 	Provider string
