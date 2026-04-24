@@ -13,14 +13,26 @@ import (
 const templateParseFallback = "(template could not be parsed as text — generate content based on context documents and typical proposal structure)"
 
 type GenerateProposal struct {
-	llm          LLMProvider
-	parser       DocumentParser
-	template     TemplateEngine
-	systemPrompt string
+	llm              LLMProvider
+	parser           DocumentParser
+	template         TemplateEngine
+	systemPrompt     string
+	generative       GenerativeEngine
+	generativePrompt string
+	pdfGen           PDFGenerator
 }
 
 func NewGenerateProposal(llm LLMProvider, parser DocumentParser, template TemplateEngine, systemPrompt string) *GenerateProposal {
 	return &GenerateProposal{llm: llm, parser: parser, template: template, systemPrompt: systemPrompt}
+}
+
+func (uc *GenerateProposal) SetGenerativeEngine(g GenerativeEngine, prompt string) {
+	uc.generative = g
+	uc.generativePrompt = prompt
+}
+
+func (uc *GenerateProposal) SetPDFGenerator(g PDFGenerator) {
+	uc.pdfGen = g
 }
 
 type proposalLLMResponse struct {
@@ -32,9 +44,10 @@ type proposalLLMResponse struct {
 }
 
 type proposalLLMSection struct {
-	Title  string `json:"title"`
-	Status string `json:"status"`
-	Tokens int    `json:"tokens"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+	Status  string `json:"status"`
+	Tokens  int    `json:"tokens"`
 }
 
 type proposalLLMLog struct {
@@ -71,12 +84,30 @@ func (uc *GenerateProposal) Execute(
 		templateText = templateParseFallback
 	}
 
+	// Detect template mode: placeholder (has {{...}}) or generative (no placeholders).
+	mode, detectErr := DetectTemplateMode(templateData)
+	if detectErr != nil {
+		// Non-DOCX or unreadable — default to placeholder mode.
+		mode = domain.ModePlaceholder
+	}
+	// Use generative mode only if we have a generative engine.
+	if mode == domain.ModeGenerative && uc.generative == nil {
+		mode = domain.ModePlaceholder
+	}
+	proposal.SetMode(mode)
+
+	// Select system prompt based on mode.
+	systemPrompt := uc.systemPrompt
+	if mode == domain.ModeGenerative {
+		systemPrompt = uc.generativePrompt
+	}
+
 	userPrompt := fmt.Sprintf(
-		"Template placeholders from file %s:\n%s\n\nContext documents:\n%s\n\nUser parameters: %v\n\nGenerate values for ALL placeholders based on the context.",
+		"Template from file %s:\n%s\n\nContext documents:\n%s\n\nUser parameters: %v\n\nGenerate content based on the context.",
 		templateName, templateText, contextText.String(), userParams,
 	)
 
-	llmResp, usage, err := uc.llm.GenerateCompletion(ctx, uc.systemPrompt, userPrompt)
+	llmResp, usage, err := uc.llm.GenerateCompletion(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, noUsage, fmt.Errorf("llm completion: %w", err)
 	}
@@ -87,25 +118,31 @@ func (uc *GenerateProposal) Execute(
 		return nil, noUsage, fmt.Errorf("parse llm response: %w (raw: %.200s)", err, llmResp)
 	}
 
-	// Merge: meta → params → user params (later overrides earlier).
-	mergedParams := make(map[string]string)
-	// Map meta keys to common template placeholders.
-	if resp.Meta != nil {
-		for k, v := range resp.Meta {
-			mergedParams[k] = v
+	// Fill template based on mode.
+	var filled []byte
+	switch mode {
+	case domain.ModeGenerative:
+		genSections := make([]GenerativeSection, 0, len(resp.Sections))
+		for _, s := range resp.Sections {
+			genSections = append(genSections, GenerativeSection{Title: s.Title, Content: s.Content})
 		}
-		// Common aliases: meta "client" → template "client_name", etc.
-		if v, ok := resp.Meta["client"]; ok {
-			mergedParams["client_name"] = v
+		filled, err = uc.generative.GenerativeFill(ctx, templateData, genSections)
+	default:
+		// Placeholder mode: merge params and fill template.
+		mergedParams := make(map[string]string)
+		if resp.Meta != nil {
+			maps.Copy(mergedParams, resp.Meta)
+			if v, ok := resp.Meta["client"]; ok {
+				mergedParams["client_name"] = v
+			}
+			if v, ok := resp.Meta["project"]; ok {
+				mergedParams["project_name"] = v
+			}
 		}
-		if v, ok := resp.Meta["project"]; ok {
-			mergedParams["project_name"] = v
-		}
+		maps.Copy(mergedParams, resp.Params)
+		maps.Copy(mergedParams, userParams)
+		filled, err = uc.template.Fill(ctx, templateData, mergedParams)
 	}
-	maps.Copy(mergedParams, resp.Params)
-	maps.Copy(mergedParams, userParams)
-
-	filled, err := uc.template.Fill(ctx, templateData, mergedParams)
 	if err != nil {
 		return nil, noUsage, fmt.Errorf("template fill: %w", err)
 	}
