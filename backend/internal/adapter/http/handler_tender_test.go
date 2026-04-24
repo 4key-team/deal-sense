@@ -110,7 +110,7 @@ func TestHandleAnalyzeTender(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler.NewHandler(tt.llm, nil, tt.parser, nil, stubPrompt, stubPrompt, nil, testLogger)
+			h := handler.NewHandler(tt.llm, nil, tt.parser, nil, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil)
 
 			var req *http.Request
 			if tt.useRawBody {
@@ -149,7 +149,7 @@ func TestHandleAnalyzeTender_FullResponse(t *testing.T) {
 	}`
 	llm := &stubLLM{response: llmResp, name: "test"}
 	p := &stubParser{content: "requirements text"}
-	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil, testLogger)
+	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil)
 
 	req := makeMultipartRequest(t, map[string][]byte{"spec.pdf": []byte("data")}, map[string]string{"company_profile": "Acme"})
 	rec := httptest.NewRecorder()
@@ -199,7 +199,7 @@ func TestHandleAnalyzeTender_WithDocx(t *testing.T) {
 	llmResp := `{"verdict":"no-go","risk":"high","score":30,"summary":"Bad fit"}`
 	llm := &stubLLM{response: llmResp, name: "test"}
 	p := &stubParser{content: "text"}
-	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil, testLogger)
+	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil)
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)

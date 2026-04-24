@@ -17,7 +17,7 @@ func TestHandleListProviders(t *testing.T) {
 		{ID: "groq", Name: "Groq", Models: []string{"llama-3.3-70b"}},
 		{ID: "ollama", Name: "Ollama", Models: []string{"llama3.1:70b"}},
 	}
-	h := handler.NewHandler(&stubLLM{name: "test"}, nil, nil, nil, stubPrompt, stubPrompt, testProviders, testLogger)
+	h := handler.NewHandler(&stubLLM{name: "test"}, nil, nil, nil, stubPrompt, stubPrompt, testProviders, testLogger, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/llm/providers", nil)
 	rec := httptest.NewRecorder()
 
