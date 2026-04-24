@@ -175,5 +175,22 @@ func (uc *GenerateProposal) Execute(
 	}
 	proposal.SetLog(logEntries)
 
+	// Best-effort PDF generation.
+	if uc.pdfGen != nil {
+		pdfSections := make([]PDFSection, 0, len(resp.Sections))
+		for _, s := range resp.Sections {
+			pdfSections = append(pdfSections, PDFSection{Title: s.Title, Content: s.Content})
+		}
+		pdfInput := PDFInput{
+			Meta:     resp.Meta,
+			Sections: pdfSections,
+			Summary:  resp.Summary,
+		}
+		pdfBytes, pdfErr := uc.pdfGen.Generate(ctx, pdfInput)
+		if pdfErr == nil {
+			proposal.SetPDFResult(pdfBytes)
+		}
+	}
+
 	return proposal, usage, nil
 }
