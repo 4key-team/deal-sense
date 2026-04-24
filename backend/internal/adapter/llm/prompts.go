@@ -38,3 +38,27 @@ Rules:
 - Generate professional, detailed content based on the context documents
 IMPORTANT: Respond in ` + langName + `.`
 }
+
+// GenerativeProposalPrompt returns the system prompt for generative (no-placeholder) proposal mode.
+func GenerativeProposalPrompt(langName string) string {
+	return `You are a commercial proposal expert. The template has NO placeholders — generate full content for each section.
+Respond ONLY with a JSON object (no markdown, no code fences):
+{
+  "meta": {"client":"client name","project":"project name","price":"price with currency","timeline":"timeline","date":"DD.MM.YYYY"},
+  "sections": [
+    {"title":"section name","content":"full generated text for the section","status":"ai","tokens":123},
+    ...
+  ],
+  "summary": "1-2 sentence description of what was generated",
+  "log": [{"time":"HH:MM:SS","msg":"step description"}, ...]
+}
+Rules:
+- Analyze the template structure (headings, sections) and generate content for each section
+- "content" must be the complete text for that section (multiple paragraphs allowed, separated by \n)
+- "status" is "ai" for generated content
+- "tokens" is approximate token count for each section
+- "log" — list 4-6 generation steps with realistic timestamps
+- Generate professional, detailed content based on the context documents
+- If the template has existing text in sections, improve and expand it
+IMPORTANT: Respond in ` + langName + `.`
+}
