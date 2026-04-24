@@ -20,6 +20,7 @@ type GenerateProposal struct {
 	generative       GenerativeEngine
 	generativePrompt string
 	pdfGen           PDFGenerator
+	mdGen            MDGenerator
 }
 
 func NewGenerateProposal(llm LLMProvider, parser DocumentParser, template TemplateEngine, systemPrompt string) *GenerateProposal {
@@ -33,6 +34,10 @@ func (uc *GenerateProposal) SetGenerativeEngine(g GenerativeEngine, prompt strin
 
 func (uc *GenerateProposal) SetPDFGenerator(g PDFGenerator) {
 	uc.pdfGen = g
+}
+
+func (uc *GenerateProposal) SetMDGenerator(g MDGenerator) {
+	uc.mdGen = g
 }
 
 type proposalLLMResponse struct {
@@ -87,8 +92,12 @@ func (uc *GenerateProposal) Execute(
 	// Detect template mode: placeholder (has {{...}}) or generative (no placeholders).
 	mode, detectErr := DetectTemplateMode(templateData)
 	if detectErr != nil {
-		// Non-DOCX or unreadable — default to placeholder mode.
-		mode = domain.ModePlaceholder
+		// Non-DOCX (PDF, MD) or unreadable — use generative if available, else placeholder.
+		if uc.generative != nil {
+			mode = domain.ModeGenerative
+		} else {
+			mode = domain.ModePlaceholder
+		}
 	}
 	// Use generative mode only if we have a generative engine.
 	if mode == domain.ModeGenerative && uc.generative == nil {
@@ -189,6 +198,23 @@ func (uc *GenerateProposal) Execute(
 		pdfBytes, pdfErr := uc.pdfGen.Generate(ctx, pdfInput)
 		if pdfErr == nil {
 			proposal.SetPDFResult(pdfBytes)
+		}
+	}
+
+	// Best-effort Markdown generation.
+	if uc.mdGen != nil {
+		mdSections := make([]MDSection, 0, len(resp.Sections))
+		for _, s := range resp.Sections {
+			mdSections = append(mdSections, MDSection{Title: s.Title, Content: s.Content})
+		}
+		mdInput := MDInput{
+			Meta:     resp.Meta,
+			Sections: mdSections,
+			Summary:  resp.Summary,
+		}
+		mdBytes, mdErr := uc.mdGen.Render(ctx, mdInput)
+		if mdErr == nil {
+			proposal.SetMDResult(mdBytes)
 		}
 	}
 
