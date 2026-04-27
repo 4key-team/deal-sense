@@ -33,6 +33,8 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 		return nil, fmt.Errorf("generative fill: %w", err)
 	}
 
+	needsBulletStyle := hasBulletContent(sections)
+
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
@@ -41,6 +43,9 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 
 		if f.Name == "word/document.xml" {
 			content = g.injectSections(string(content), sections)
+		}
+		if f.Name == "word/styles.xml" && needsBulletStyle {
+			content = ensureListBulletStyle(content)
 		}
 
 		header := f.FileHeader
@@ -163,8 +168,35 @@ func buildHeadingParagraph(title string) string {
 		escapeXML(title) + `</w:t></w:r></w:p>`
 }
 
-// mustReadZipEntry is reused from docx_template.go (same package).
-// escapeXML is reused from docx_template.go (same package).
+const listBulletStyleDef = `<w:style w:type="paragraph" w:styleId="ListBullet">` +
+	`<w:name w:val="List Bullet"/>` +
+	`<w:basedOn w:val="Normal"/>` +
+	`<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>` +
+	`</w:style>`
+
+func hasBulletContent(sections []usecase.ContentSection) bool {
+	for _, s := range sections {
+		for _, line := range strings.Split(s.Content, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func ensureListBulletStyle(stylesXML []byte) []byte {
+	s := string(stylesXML)
+	if strings.Contains(s, `w:styleId="ListBullet"`) {
+		return stylesXML
+	}
+	closeTag := strings.LastIndex(s, "</w:styles>")
+	if closeTag < 0 {
+		return stylesXML
+	}
+	return []byte(s[:closeTag] + listBulletStyleDef + s[closeTag:])
+}
 
 // Ensure DocxGenerative implements GenerativeEngine at compile time.
 var _ usecase.GenerativeEngine = (*DocxGenerative)(nil)
