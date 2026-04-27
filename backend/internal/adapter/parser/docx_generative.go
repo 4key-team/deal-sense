@@ -93,7 +93,7 @@ func (g *DocxGenerative) injectSections(xml string, sections []usecase.ContentSe
 		nextPEnd += nextPStart + len("</w:p>")
 
 		// Build replacement paragraph with generated content.
-		replacement := buildParagraph(sec.Content)
+		replacement := buildParagraphs(sec.Content)
 		result = result[:nextPStart] + replacement + result[nextPEnd:]
 	}
 
@@ -105,7 +105,7 @@ func (g *DocxGenerative) injectSections(xml string, sections []usecase.ContentSe
 				continue
 			}
 			appended.WriteString(buildHeadingParagraph(sec.Title))
-			appended.WriteString(buildParagraph(sec.Content))
+			appended.WriteString(buildParagraphs(sec.Content))
 		}
 
 		bodyEnd := strings.LastIndex(result, "</w:body>")
@@ -121,8 +121,24 @@ func caseInsensitiveIndex(s, substr string) int {
 	return strings.Index(strings.ToLower(s), strings.ToLower(substr))
 }
 
-func buildParagraph(content string) string {
-	return `<w:p><w:r><w:t xml:space="preserve">` + escapeXML(content) + `</w:t></w:r></w:p>`
+func buildParagraphs(content string) string {
+	lines := strings.Split(content, "\n")
+	var b strings.Builder
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
+			text := strings.TrimSpace(trimmed[2:])
+			b.WriteString(`<w:p><w:pPr><w:pStyle w:val="ListBullet"/></w:pPr>`)
+			b.WriteString(`<w:r><w:t xml:space="preserve">` + escapeXML(text) + `</w:t></w:r></w:p>`)
+		default:
+			b.WriteString(`<w:p><w:r><w:t xml:space="preserve">` + escapeXML(trimmed) + `</w:t></w:r></w:p>`)
+		}
+	}
+	return b.String()
 }
 
 func buildHeadingParagraph(title string) string {
