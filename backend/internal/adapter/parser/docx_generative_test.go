@@ -131,6 +131,69 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 	}
 }
 
+func TestDocxGenerative_GenerativeFill_SplitRuns(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		body        string
+		sections    []usecase.ContentSection
+		contains    []string
+		notContains []string
+	}{
+		{
+			name: "heading split across runs still matches section",
+			body: `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+				`<w:r><w:rPr><w:b/></w:rPr><w:t>О </w:t></w:r>` +
+				`<w:r><w:rPr><w:b/></w:rPr><w:t>компании</w:t></w:r></w:p>` +
+				`<w:p><w:r><w:t>Old description</w:t></w:r></w:p>`,
+			sections: []usecase.ContentSection{
+				{Title: "О компании", Content: "Мы лучшая компания."},
+			},
+			contains: []string{"Мы лучшая компания."},
+			notContains: []string{
+				`w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>О компании`,
+			},
+		},
+		{
+			name: "heading split into three runs matches",
+			body: `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+				`<w:r><w:t>Наши </w:t></w:r>` +
+				`<w:r><w:t>услу</w:t></w:r>` +
+				`<w:r><w:t>ги</w:t></w:r></w:p>` +
+				`<w:p><w:r><w:t>Placeholder</w:t></w:r></w:p>`,
+			sections: []usecase.ContentSection{
+				{Title: "Наши услуги", Content: "Список услуг."},
+			},
+			contains:    []string{"Список услуг."},
+			notContains: []string{"Placeholder"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			docx := makeDocxWithBody(tt.body)
+			g := parser.NewDocxGenerative()
+			result, err := g.GenerativeFill(ctx, docx, tt.sections)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			xml := readDocxXML(result)
+			for _, s := range tt.contains {
+				if !strings.Contains(xml, s) {
+					t.Errorf("output XML missing %q\ngot: %s", s, xml)
+				}
+			}
+			for _, s := range tt.notContains {
+				if strings.Contains(xml, s) {
+					t.Errorf("output XML should NOT contain %q\ngot: %s", s, xml)
+				}
+			}
+		})
+	}
+}
+
 func TestDocxGenerative_GenerativeFill_EmptyTemplate(t *testing.T) {
 	g := parser.NewDocxGenerative()
 	_, err := g.GenerativeFill(context.Background(), nil, nil)
