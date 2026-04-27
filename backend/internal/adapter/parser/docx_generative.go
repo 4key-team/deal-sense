@@ -117,9 +117,12 @@ func (g *DocxGenerative) injectSections(xml string, sections []usecase.ContentSe
 			appended.WriteString(buildHeadingParagraph(sec.Title))
 			appended.WriteString(buildParagraphs(sec.Content))
 		}
-		bodyEnd := strings.LastIndex(out, "</w:body>")
-		if bodyEnd >= 0 {
-			out = out[:bodyEnd] + appended.String() + out[bodyEnd:]
+		insertAt := strings.LastIndex(out, "<w:sectPr")
+		if insertAt < 0 {
+			insertAt = strings.LastIndex(out, "</w:body>")
+		}
+		if insertAt >= 0 {
+			out = out[:insertAt] + appended.String() + out[insertAt:]
 		}
 	}
 
