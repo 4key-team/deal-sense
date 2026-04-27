@@ -194,6 +194,35 @@ func TestDocxGenerative_GenerativeFill_SplitRuns(t *testing.T) {
 	}
 }
 
+func TestDocxGenerative_GenerativeFill_AppendBeforeSectPr(t *testing.T) {
+	ctx := context.Background()
+
+	body := `<w:p><w:r><w:t>Cover page</w:t></w:r></w:p>` +
+		`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`
+
+	docx := makeDocxWithBody(body)
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, docx, []usecase.ContentSection{
+		{Title: "Введение", Content: "Текст введения."},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	xml := readDocxXML(result)
+
+	// Content must appear BEFORE <w:sectPr>, not after it.
+	sectPrIdx := strings.Index(xml, "<w:sectPr")
+	contentIdx := strings.Index(xml, "Текст введения.")
+	if contentIdx < 0 {
+		t.Fatal("generated content not found in output")
+	}
+	if sectPrIdx >= 0 && contentIdx > sectPrIdx {
+		t.Errorf("content inserted AFTER <w:sectPr> — must be before it\ncontent at %d, sectPr at %d\nxml: %s",
+			contentIdx, sectPrIdx, xml)
+	}
+}
+
 func TestDocxGenerative_GenerativeFill_EmptyTemplate(t *testing.T) {
 	g := parser.NewDocxGenerative()
 	_, err := g.GenerativeFill(context.Background(), nil, nil)
