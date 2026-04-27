@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
+
+var paragraphRe = regexp.MustCompile(`<w:p\b[^>]*>[\s\S]*?</w:p>`)
+var textContentRe = regexp.MustCompile(`<w:t[^>]*>([\s\S]*?)</w:t>`)
 
 // DocxGenerative fills DOCX templates in generative mode — replacing paragraph content
 // by matching section titles to headings, and appending unmatched sections at the end.
@@ -56,48 +60,54 @@ func (g *DocxGenerative) injectSections(xml string, sections []usecase.ContentSe
 		return []byte(xml)
 	}
 
-	// Build a map for quick lookup (case-insensitive title match).
 	remaining := make(map[string]usecase.ContentSection, len(sections))
 	for _, s := range sections {
 		remaining[strings.ToLower(s.Title)] = s
 	}
 
-	// Simple approach: scan for heading paragraphs, replace the next body paragraph.
-	result := xml
-	for _, sec := range sections {
-		titleLower := strings.ToLower(sec.Title)
-		// Find a paragraph containing the title text.
-		titleIdx := caseInsensitiveIndex(result, sec.Title)
-		if titleIdx < 0 {
-			continue
-		}
-		delete(remaining, titleLower)
+	paras := paragraphRe.FindAllStringIndex(xml, -1)
 
-		// Find the next <w:p> after the title's </w:p>.
-		endOfTitleP := strings.Index(result[titleIdx:], "</w:p>")
-		if endOfTitleP < 0 {
-			continue
-		}
-		afterTitle := titleIdx + endOfTitleP + len("</w:p>")
-
-		// Find the next paragraph to replace.
-		nextPStart := strings.Index(result[afterTitle:], "<w:p")
-		if nextPStart < 0 {
-			continue
-		}
-		nextPStart += afterTitle
-		nextPEnd := strings.Index(result[nextPStart:], "</w:p>")
-		if nextPEnd < 0 {
-			continue
-		}
-		nextPEnd += nextPStart + len("</w:p>")
-
-		// Build replacement paragraph with generated content.
-		replacement := buildParagraphs(sec.Content)
-		result = result[:nextPStart] + replacement + result[nextPEnd:]
+	type paraInfo struct {
+		start, end int
+		text       string
+	}
+	infos := make([]paraInfo, len(paras))
+	for i, loc := range paras {
+		raw := xml[loc[0]:loc[1]]
+		infos[i] = paraInfo{start: loc[0], end: loc[1], text: extractParagraphText(raw)}
 	}
 
-	// Append unmatched sections before </w:body>.
+	replaced := make(map[int]string)
+
+	for _, sec := range sections {
+		titleLower := strings.ToLower(strings.TrimSpace(sec.Title))
+		for i, pi := range infos {
+			if strings.ToLower(strings.TrimSpace(pi.text)) != titleLower {
+				continue
+			}
+			delete(remaining, titleLower)
+			if i+1 < len(infos) {
+				replaced[i+1] = buildParagraphs(sec.Content)
+			}
+			break
+		}
+	}
+
+	var result strings.Builder
+	prev := 0
+	for i, pi := range infos {
+		result.WriteString(xml[prev:pi.start])
+		if repl, ok := replaced[i]; ok {
+			result.WriteString(repl)
+		} else {
+			result.WriteString(xml[pi.start:pi.end])
+		}
+		prev = pi.end
+	}
+	result.WriteString(xml[prev:])
+
+	out := result.String()
+
 	if len(remaining) > 0 {
 		var appended strings.Builder
 		for _, sec := range sections {
@@ -107,18 +117,22 @@ func (g *DocxGenerative) injectSections(xml string, sections []usecase.ContentSe
 			appended.WriteString(buildHeadingParagraph(sec.Title))
 			appended.WriteString(buildParagraphs(sec.Content))
 		}
-
-		bodyEnd := strings.LastIndex(result, "</w:body>")
+		bodyEnd := strings.LastIndex(out, "</w:body>")
 		if bodyEnd >= 0 {
-			result = result[:bodyEnd] + appended.String() + result[bodyEnd:]
+			out = out[:bodyEnd] + appended.String() + out[bodyEnd:]
 		}
 	}
 
-	return []byte(result)
+	return []byte(out)
 }
 
-func caseInsensitiveIndex(s, substr string) int {
-	return strings.Index(strings.ToLower(s), strings.ToLower(substr))
+func extractParagraphText(paraXML string) string {
+	matches := textContentRe.FindAllStringSubmatch(paraXML, -1)
+	var b strings.Builder
+	for _, m := range matches {
+		b.WriteString(m[1])
+	}
+	return b.String()
 }
 
 func buildParagraphs(content string) string {
