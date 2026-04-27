@@ -1,6 +1,8 @@
 package usecase_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -9,12 +11,55 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
+// makeTestDocxForUsecase builds a minimal DOCX (zip) with given XML as word/document.xml.
+func makeTestDocxForUsecase(documentXML string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, _ := w.Create("word/document.xml")
+	f.Write([]byte(documentXML))
+	w.Close()
+	return buf.Bytes()
+}
+
 type stubTemplateEngine struct {
 	result []byte
 	err    error
 }
 
 func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]string) ([]byte, error) {
+	return s.result, s.err
+}
+
+type stubGenerativeEngine struct {
+	result []byte
+	err    error
+	called bool
+}
+
+func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.ContentSection) ([]byte, error) {
+	s.called = true
+	return s.result, s.err
+}
+
+type stubPDFGenerator struct {
+	result []byte
+	err    error
+	called bool
+}
+
+func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	s.called = true
+	return s.result, s.err
+}
+
+type stubMDGenerator struct {
+	result []byte
+	err    error
+	called bool
+}
+
+func (s *stubMDGenerator) Render(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	s.called = true
 	return s.result, s.err
 }
 
@@ -257,5 +302,191 @@ func TestGenerateProposal_ContextFileParseError(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestGenerateProposal_GenerativeMode(t *testing.T) {
+	// Build a DOCX without {{placeholders}} so DetectTemplateMode returns ModeGenerative.
+	docx := makeTestDocxForUsecase(`<w:document><w:body><w:p><w:r><w:t>Plain text</w:t></w:r></w:p></w:body></w:document>`)
+
+	llmResp := `{
+		"meta":{"client":"Acme","project":"Portal"},
+		"sections":[{"title":"Intro","content":"Generated intro text","status":"ai","tokens":50}],
+		"summary":"Generated proposal",
+		"log":[{"time":"14:00","msg":"done"}]
+	}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "parsed text"}
+	tmplEng := &stubTemplateEngine{result: []byte("should not be called")}
+	genEng := &stubGenerativeEngine{result: []byte("generative-output")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	result, _, err := uc.Execute(t.Context(), "offer.docx", docx, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !genEng.called {
+		t.Error("expected GenerativeFill to be called")
+	}
+	if result.Mode() != domain.ModeGenerative {
+		t.Errorf("Mode() = %q, want generative", result.Mode())
+	}
+	if string(result.Result()) != "generative-output" {
+		t.Errorf("Result() = %q, want generative-output", result.Result())
+	}
+}
+
+func TestGenerateProposal_PDFGeneration(t *testing.T) {
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
+
+	tests := []struct {
+		name       string
+		pdfGen     *stubPDFGenerator
+		wantPDF    bool
+	}{
+		{
+			name:    "pdf generator produces output",
+			pdfGen:  &stubPDFGenerator{result: []byte("%PDF-1.4")},
+			wantPDF: true,
+		},
+		{
+			name:    "nil pdf generator — no PDF",
+			pdfGen:  nil,
+			wantPDF: false,
+		},
+		{
+			name:    "pdf generator error — DOCX still ok",
+			pdfGen:  &stubPDFGenerator{err: errors.New("pdf failed")},
+			wantPDF: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+			parser := &stubParser{content: "text"}
+			tmplEng := &stubTemplateEngine{result: []byte("filled-docx")}
+
+			uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+			if tt.pdfGen != nil {
+				uc.SetPDFGenerator(tt.pdfGen)
+			}
+			result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// DOCX always present
+			if len(result.Result()) == 0 {
+				t.Error("expected DOCX result")
+			}
+
+			// PDF conditionally present
+			hasPDF := len(result.PDFResult()) > 0
+			if hasPDF != tt.wantPDF {
+				t.Errorf("PDFResult present = %v, want %v", hasPDF, tt.wantPDF)
+			}
+
+			if tt.pdfGen != nil && tt.pdfGen.err == nil && !tt.pdfGen.called {
+				t.Error("expected PDF generator to be called")
+			}
+		})
+	}
+}
+
+func TestGenerateProposal_MDGeneration(t *testing.T) {
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","content":"Hello","status":"ai","tokens":50}],"summary":"ok"}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "text"}
+	tmplEng := &stubTemplateEngine{result: []byte("filled")}
+	mdGen := &stubMDGenerator{result: []byte("# Proposal\n\nContent")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+	uc.SetMDGenerator(mdGen)
+	result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mdGen.called {
+		t.Error("expected MD generator to be called")
+	}
+	if len(result.MDResult()) == 0 {
+		t.Error("expected non-empty MD result")
+	}
+}
+
+func TestGenerateProposal_MDGeneratorError_StillOk(t *testing.T) {
+	llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "text"}
+	tmplEng := &stubTemplateEngine{result: []byte("filled")}
+	mdGen := &stubMDGenerator{err: errors.New("md failed")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+	uc.SetMDGenerator(mdGen)
+	result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.MDResult()) != 0 {
+		t.Error("expected empty MD result on error")
+	}
+}
+
+func TestGenerateProposal_PDFTemplate_GenerativeMode(t *testing.T) {
+	// PDF шаблон — не DOCX, значит DetectTemplateMode вернёт ошибку,
+	// но у нас generative engine → должен сработать generative mode.
+	llmResp := `{
+		"meta":{"client":"Acme"},
+		"sections":[{"title":"About","content":"We are great","status":"ai","tokens":30}],
+		"summary":"PDF proposal",
+		"log":[]
+	}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "pdf text content"}
+	tmplEng := &stubTemplateEngine{result: []byte("should not be used")}
+	genEng := &stubGenerativeEngine{result: []byte("generative-pdf-output")}
+	pdfGen := &stubPDFGenerator{result: []byte("%PDF-1.4")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	uc.SetPDFGenerator(pdfGen)
+
+	// "report.pdf" — не DOCX, DetectTemplateMode вернёт ошибку → fallback к placeholder,
+	// НО у нас есть generative engine, нужно перейти в generative mode для не-DOCX.
+	result, _, err := uc.Execute(t.Context(), "report.pdf", []byte("pdf-data"), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Для не-DOCX шаблонов должен быть generative mode
+	if result.Mode() != domain.ModeGenerative {
+		t.Errorf("Mode() = %q, want generative", result.Mode())
+	}
+}
+
+func TestGenerateProposal_PlaceholderMode_WithGenerativeEngine(t *testing.T) {
+	// Build a DOCX WITH {{placeholders}} — should use placeholder mode.
+	docx := makeTestDocxForUsecase(`<w:document><w:body><w:p><w:r><w:t>Hello {{client_name}}</w:t></w:r></w:p></w:body></w:document>`)
+
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "parsed text"}
+	tmplEng := &stubTemplateEngine{result: []byte("placeholder-filled")}
+	genEng := &stubGenerativeEngine{result: []byte("should-not-be-used")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	result, _, err := uc.Execute(t.Context(), "offer.docx", docx, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if genEng.called {
+		t.Error("GenerativeFill should NOT be called in placeholder mode")
+	}
+	if result.Mode() != domain.ModePlaceholder {
+		t.Errorf("Mode() = %q, want placeholder", result.Mode())
 	}
 }

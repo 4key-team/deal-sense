@@ -14,6 +14,7 @@ import (
 	apphttp "github.com/daniil/deal-sense/backend/internal/adapter/http"
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 	"github.com/daniil/deal-sense/backend/internal/adapter/parser"
+	apppdf "github.com/daniil/deal-sense/backend/internal/adapter/pdf"
 	"github.com/daniil/deal-sense/backend/internal/config"
 )
 
@@ -57,8 +58,10 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	}
 	logger.Info("llm provider initialized", "provider", provider.Name(), "model", cfg.LLMModel)
 
-	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader())
+	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader(), parser.NewMDParser())
 	docxTemplate := parser.NewDocxTemplate()
+	docxGenerative := parser.NewDocxGenerative()
+	pdfGen := apppdf.NewMarotoPDFGenerator()
 
 	providers := []apphttp.ProviderInfo{
 		{ID: "anthropic", Name: "Anthropic", Models: []string{"claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"}},
@@ -68,7 +71,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "ollama", Name: "Ollama (local)", Models: []string{"llama3.1:70b", "qwen2.5:32b"}},
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
-	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger)
+	mdRenderer := parser.NewMarkdownRenderer()
+	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux

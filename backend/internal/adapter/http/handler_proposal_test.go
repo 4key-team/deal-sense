@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	handler "github.com/daniil/deal-sense/backend/internal/adapter/http"
+	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
 type stubTemplateEngine struct {
@@ -23,13 +24,40 @@ func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]stri
 	return s.result, s.err
 }
 
+type stubGenerativeEngine struct {
+	result []byte
+	err    error
+}
+
+func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.ContentSection) ([]byte, error) {
+	return s.result, s.err
+}
+
+type stubPDFGenerator struct {
+	result []byte
+	err    error
+}
+
+func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	return s.result, s.err
+}
+
+type stubMDGenerator struct {
+	result []byte
+	err    error
+}
+
+func (s *stubMDGenerator) Render(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	return s.result, s.err
+}
+
 func TestHandleGenerateProposal(t *testing.T) {
 	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Резюме","status":"ai","tokens":100}],"summary":"Done"}`
 
 	t.Run("successful generation returns JSON", func(t *testing.T) {
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("filled document")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -60,7 +88,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("missing template", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -78,7 +106,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("invalid params JSON", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -100,7 +128,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	t.Run("llm error returns 500", func(t *testing.T) {
 		llm := &stubLLM{err: errors.New("llm down"), name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -119,7 +147,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("invalid multipart", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", strings.NewReader("bad"))
 		req.Header.Set("Content-Type", "multipart/form-data; boundary=bad")
 		rec := httptest.NewRecorder()
@@ -143,7 +171,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}`
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("filled document bytes")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -199,7 +227,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -224,6 +252,102 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}
 	})
 
+	t.Run("response contains pdf and mode fields", func(t *testing.T) {
+		llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":100}],"summary":"Done"}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("filled")}
+		pdfGen := &stubPDFGenerator{result: []byte("%PDF-1.4 test content")}
+		genEng := &stubGenerativeEngine{result: []byte("gen")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, genEng, stubPrompt, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		fw, _ := w.CreateFormFile("template", "offer.docx")
+		fw.Write([]byte("template data"))
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var resp map[string]any
+		json.NewDecoder(rec.Body).Decode(&resp)
+
+		if resp["pdf"] == nil || resp["pdf"] == "" {
+			t.Error("expected non-empty pdf in response")
+		}
+		if resp["mode"] == nil {
+			t.Error("expected mode in response")
+		}
+	})
+
+	t.Run("response contains md field", func(t *testing.T) {
+		llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":100}],"summary":"Done"}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("filled")}
+		pdfGen := &stubPDFGenerator{result: []byte("%PDF")}
+		genEng := &stubGenerativeEngine{result: []byte("gen")}
+		mdGen := &stubMDGenerator{result: []byte("# Proposal")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, genEng, stubPrompt, mdGen)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		fw, _ := w.CreateFormFile("template", "offer.docx")
+		fw.Write([]byte("template data"))
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var resp map[string]any
+		json.NewDecoder(rec.Body).Decode(&resp)
+
+		if resp["md"] == nil || resp["md"] == "" {
+			t.Error("expected non-empty md in response")
+		}
+	})
+
+	t.Run("accepts pdf template", func(t *testing.T) {
+		llmResp := `{"meta":{"client":"Acme"},"sections":[{"title":"About","content":"Text","status":"ai","tokens":30}],"summary":"ok","log":[]}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("should-not-be-used")}
+		genEng := &stubGenerativeEngine{result: []byte("generative-output")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "pdf text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, genEng, stubPrompt, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		fw, _ := w.CreateFormFile("template", "report.pdf")
+		fw.Write([]byte("pdf-data"))
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var resp map[string]any
+		json.NewDecoder(rec.Body).Decode(&resp)
+
+		if resp["mode"] != "generative" {
+			t.Errorf("mode = %v, want generative", resp["mode"])
+		}
+	})
+
 	t.Run("with lang=en", func(t *testing.T) {
 		llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
 		var capturedLang string
@@ -233,7 +357,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, promptFn, promptFn, nil, testLogger)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, promptFn, promptFn, nil, testLogger, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)

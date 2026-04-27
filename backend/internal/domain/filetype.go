@@ -6,6 +6,7 @@ type FileType string
 const (
 	FileTypePDF  FileType = "pdf"
 	FileTypeDOCX FileType = "docx"
+	FileTypeMD   FileType = "md"
 )
 
 func ParseFileType(ext string) (FileType, error) {
@@ -14,6 +15,8 @@ func ParseFileType(ext string) (FileType, error) {
 		return FileTypePDF, nil
 	case "docx", ".docx":
 		return FileTypeDOCX, nil
+	case "md", ".md":
+		return FileTypeMD, nil
 	default:
 		return "", ErrInvalidFileType
 	}

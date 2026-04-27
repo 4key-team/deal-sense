@@ -109,6 +109,7 @@ export function ProposalResult() {
             onFiles={setTemplate}
             label={t.dropzone.proposal_tpl_label}
             hint={t.dropzone.proposal_tpl_hint}
+            accept=".docx,.pdf,.md"
             multiple={false}
           />
           <Dropzone
@@ -116,6 +117,7 @@ export function ProposalResult() {
             onFiles={setContextFiles}
             label={t.dropzone.proposal_ctx_label}
             hint={t.dropzone.proposal_ctx_hint}
+            accept=".pdf,.docx,.md"
           />
         </div>
         <Button
@@ -202,8 +204,25 @@ export function ProposalResult() {
                 });
                 downloadBlob(blob, "proposal.docx");
               }}>
-                {t.kp.download}
+                {t.kp.download_docx}
               </Button>
+              {result.pdf && (
+                <Button variant="secondary" icon={<DownloadIcon />} onClick={() => {
+                  const bytes = Uint8Array.from(atob(result.pdf!), (c) => c.charCodeAt(0));
+                  const blob = new Blob([bytes], { type: "application/pdf" });
+                  downloadBlob(blob, "proposal.pdf");
+                }}>
+                  {t.kp.download_pdf}
+                </Button>
+              )}
+              {result.md && (
+                <Button variant="secondary" icon={<DownloadIcon />} onClick={() => {
+                  const blob = new Blob([result.md!], { type: "text/markdown" });
+                  downloadBlob(blob, "proposal.md");
+                }}>
+                  {t.kp.download_md}
+                </Button>
+              )}
             </div>
           </div>
           <h1 className={styles.heroTitle}>{t.kp.title}</h1>

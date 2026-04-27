@@ -51,6 +51,15 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 	)
 
 	uc := usecase.NewGenerateProposal(llmProvider, h.parser, h.template, h.proposalPrompt(langName))
+	if h.generativeEngine != nil && h.generativePrompt != nil {
+		uc.SetGenerativeEngine(h.generativeEngine, h.generativePrompt(langName))
+	}
+	if h.pdfGen != nil {
+		uc.SetPDFGenerator(h.pdfGen)
+	}
+	if h.mdGen != nil {
+		uc.SetMDGenerator(h.mdGen)
+	}
 	result, usage, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
 	if err != nil {
 		h.logger.Error("proposal generation failed", "err", err)
@@ -80,6 +89,16 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		docxBase64 = base64.StdEncoding.EncodeToString(result.Result())
 	}
 
+	pdfBase64 := ""
+	if len(result.PDFResult()) > 0 {
+		pdfBase64 = base64.StdEncoding.EncodeToString(result.PDFResult())
+	}
+
+	mdContent := ""
+	if len(result.MDResult()) > 0 {
+		mdContent = string(result.MDResult())
+	}
+
 	logEntries := make([]map[string]string, len(result.Log()))
 	for i, l := range result.Log() {
 		logEntries[i] = map[string]string{"time": l.Time(), "msg": l.Msg()}
@@ -92,6 +111,9 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		"sections": sections,
 		"log":      logEntries,
 		"docx":     docxBase64,
+		"pdf":      pdfBase64,
+		"md":       mdContent,
+		"mode":     string(result.Mode()),
 		"usage": map[string]int{
 			"prompt_tokens":     usage.PromptTokens(),
 			"completion_tokens": usage.CompletionTokens(),

@@ -65,6 +65,9 @@ type Proposal struct {
 	meta            map[string]string
 	log             []LogEntry
 	summary         string
+	mode            TemplateMode
+	pdfResult       []byte
+	mdResult        []byte
 }
 
 func NewProposal(templateName string, templateContent []byte, parameters map[string]string) (*Proposal, error) {
@@ -89,6 +92,14 @@ func (p *Proposal) Sections() []ProposalSection   { return p.sections }
 func (p *Proposal) Meta() map[string]string       { return p.meta }
 func (p *Proposal) Log() []LogEntry               { return p.log }
 func (p *Proposal) Summary() string               { return p.summary }
+
+func (p *Proposal) Mode() TemplateMode     { return p.mode }
+func (p *Proposal) PDFResult() []byte       { return p.pdfResult }
+func (p *Proposal) MDResult() []byte        { return p.mdResult }
+
+func (p *Proposal) SetMode(m TemplateMode)      { p.mode = m }
+func (p *Proposal) SetPDFResult(data []byte)     { p.pdfResult = data }
+func (p *Proposal) SetMDResult(data []byte)      { p.mdResult = data }
 
 func (p *Proposal) SetResult(data []byte) {
 	p.result = data

@@ -10,7 +10,7 @@ import (
 )
 
 // ErrNoSupportedFiles is returned when a ZIP archive contains
-// no files with supported types (PDF, DOCX).
+// no files with supported types (PDF, DOCX, MD).
 var ErrNoSupportedFiles = errors.New("no supported files in archive")
 
 // maxZipEntrySize limits the decompressed size of a single file

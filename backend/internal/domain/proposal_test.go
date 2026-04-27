@@ -207,6 +207,52 @@ func TestProposal_SetLog_Nil(t *testing.T) {
 	}
 }
 
+func TestProposal_SetMode(t *testing.T) {
+	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+
+	// Initially zero value
+	if p.Mode() != "" {
+		t.Errorf("Mode() = %q, want empty", p.Mode())
+	}
+
+	tests := []struct {
+		mode domain.TemplateMode
+	}{
+		{domain.ModePlaceholder},
+		{domain.ModeGenerative},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			p.SetMode(tt.mode)
+			if p.Mode() != tt.mode {
+				t.Errorf("Mode() = %q, want %q", p.Mode(), tt.mode)
+			}
+		})
+	}
+}
+
+func TestProposal_SetMDResult(t *testing.T) {
+	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+	if p.MDResult() != nil {
+		t.Error("MDResult() should be nil before SetMDResult")
+	}
+	p.SetMDResult([]byte("# Proposal\n\nContent here"))
+	if string(p.MDResult()) != "# Proposal\n\nContent here" {
+		t.Errorf("MDResult() = %q", p.MDResult())
+	}
+}
+
+func TestProposal_SetPDFResult(t *testing.T) {
+	p, _ := domain.NewProposal("offer.docx", []byte("tmpl"), nil)
+	if p.PDFResult() != nil {
+		t.Error("PDFResult() should be nil before SetPDFResult")
+	}
+	p.SetPDFResult([]byte("%PDF-1.4"))
+	if string(p.PDFResult()) != "%PDF-1.4" {
+		t.Errorf("PDFResult() = %q, want %%PDF-1.4", p.PDFResult())
+	}
+}
+
 func TestNewProposalSection(t *testing.T) {
 	tests := []struct {
 		name    string

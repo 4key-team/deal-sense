@@ -16,4 +16,5 @@ var (
 	ErrEmptyMsg             = errors.New("message is empty")
 	ErrEmptyCompany         = errors.New("company profile is empty")
 	ErrInvalidScore         = errors.New("invalid match score")
+	ErrInvalidTemplateMode  = errors.New("invalid template mode")
 )
