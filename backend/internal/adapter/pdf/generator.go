@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"strings"
 
 	"github.com/johnfercher/maroto/v2"
 	"github.com/johnfercher/maroto/v2/pkg/components/col"
@@ -78,18 +79,13 @@ func (g *MarotoPDFGenerator) Generate(_ context.Context, input usecase.ContentIn
 
 	// Sections
 	for _, sec := range input.Sections {
-		// Section title
 		m.AddRows(text.NewRow(8, sec.Title, props.Text{
 			Size:  12,
 			Style: fontstyle.Bold,
 			Top:   4,
 		}))
-		// Section content
-		m.AddRows(text.NewRow(6, sec.Content, props.Text{
-			Size: 10,
-			Top:  1,
-		}))
-		m.AddRows(row.New(3)) // spacer
+		g.addContentLines(m, sec.Content)
+		m.AddRows(row.New(3))
 	}
 
 	doc, err := m.Generate()
@@ -98,6 +94,43 @@ func (g *MarotoPDFGenerator) Generate(_ context.Context, input usecase.ContentIn
 	}
 
 	return doc.GetBytes(), nil
+}
+
+const (
+	lineHeight   = 5.0
+	bulletIndent = 8.0
+	charsPerLine = 90.0
+)
+
+func (g *MarotoPDFGenerator) addContentLines(m core.Maroto, content string) {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
+			itemText := "•  " + strings.TrimSpace(trimmed[2:])
+			h := estimateHeight(itemText)
+			m.AddRows(text.NewRow(h, itemText, props.Text{
+				Size: 10,
+				Left: bulletIndent,
+				Top:  1,
+			}))
+		default:
+			h := estimateHeight(trimmed)
+			m.AddRows(text.NewRow(h, trimmed, props.Text{
+				Size: 10,
+				Top:  1,
+			}))
+		}
+	}
+}
+
+func estimateHeight(text string) float64 {
+	wrappedLines := float64(len(text))/charsPerLine + 1
+	return max(lineHeight, wrappedLines*lineHeight)
 }
 
 func (g *MarotoPDFGenerator) addHeader(m core.Maroto, input usecase.ContentInput) {

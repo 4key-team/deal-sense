@@ -2,6 +2,8 @@ package pdf_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/pdf"
@@ -64,6 +66,17 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 				Summary: "Test",
 			},
 		},
+		{
+			name: "multiline content with bullet lists",
+			input: usecase.ContentInput{
+				Meta: map[string]string{"client": "Test", "project": "Bullets"},
+				Sections: []usecase.ContentSection{
+					{Title: "Features", Content: "Our features:\n- Fast delivery\n- Quality control\n- 24/7 support\n- Custom integrations"},
+					{Title: "Details", Content: "Line one.\nLine two.\nLine three.\nLine four.\nLine five."},
+				},
+				Summary: "Test multiline",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -86,5 +99,34 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 				t.Errorf("output does not start with %%PDF, got: %q", string(result[:min(20, len(result))]))
 			}
 		})
+	}
+}
+
+func TestMarotoPDFGenerator_MultilineUsesMultipleRows(t *testing.T) {
+	g := pdf.NewMarotoPDFGenerator()
+
+	var lines strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&lines, "Line number %d with enough text to take space.\n", i+1)
+	}
+	lines.WriteString("- Bullet item one\n- Bullet item two\n- Bullet item three\n")
+
+	input := usecase.ContentInput{
+		Meta:     map[string]string{"client": "Test"},
+		Sections: []usecase.ContentSection{{Title: "Long Section", Content: lines.String()}},
+	}
+
+	result, err := g.Generate(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pageCount := strings.Count(string(result), "/Type /Page")
+	// /Type /Pages is also counted, subtract 1
+	if pageCount > 1 {
+		pageCount--
+	}
+	if pageCount < 2 {
+		t.Errorf("60+ lines should produce at least 2 pages, got %d", pageCount)
 	}
 }
