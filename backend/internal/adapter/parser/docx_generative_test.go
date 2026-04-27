@@ -29,13 +29,13 @@ func makeDocxWithBody(bodyXML string) []byte {
 	return buf.Bytes()
 }
 
-func readDocxXML(data []byte) string {
+func readDocxEntry(data []byte, entryName string) string {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return ""
 	}
 	for _, f := range r.File {
-		if f.Name == "word/document.xml" {
+		if f.Name == entryName {
 			rc, _ := f.Open()
 			b, _ := io.ReadAll(rc)
 			rc.Close()
@@ -43,6 +43,10 @@ func readDocxXML(data []byte) string {
 		}
 	}
 	return ""
+}
+
+func readDocxXML(data []byte) string {
+	return readDocxEntry(data, "word/document.xml")
 }
 
 func TestDocxGenerative_GenerativeFill(t *testing.T) {
@@ -220,6 +224,81 @@ func TestDocxGenerative_GenerativeFill_AppendBeforeSectPr(t *testing.T) {
 	if sectPrIdx >= 0 && contentIdx > sectPrIdx {
 		t.Errorf("content inserted AFTER <w:sectPr> — must be before it\ncontent at %d, sectPr at %d\nxml: %s",
 			contentIdx, sectPrIdx, xml)
+	}
+}
+
+func makeDocxWithStyles(bodyXML, stylesXML string) []byte {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	f, _ := w.Create("word/document.xml")
+	f.Write([]byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+		`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:body>` + bodyXML + `</w:body></w:document>`))
+	s, _ := w.Create("word/styles.xml")
+	s.Write([]byte(stylesXML))
+	ct, _ := w.Create("[Content_Types].xml")
+	ct.Write([]byte(`<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+		`<Default Extension="xml" ContentType="application/xml"/>` +
+		`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+		`</Types>`))
+	w.Close()
+	return buf.Bytes()
+}
+
+func TestDocxGenerative_GenerativeFill_InjectsListBulletStyle(t *testing.T) {
+	ctx := context.Background()
+
+	stylesWithoutBullet := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+		`<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:style w:type="paragraph" w:styleId="Normal" w:default="1">` +
+		`<w:name w:val="normal"/></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Heading1">` +
+		`<w:name w:val="heading 1"/></w:style>` +
+		`</w:styles>`
+
+	body := `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Features</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>Old</w:t></w:r></w:p>`
+
+	docx := makeDocxWithStyles(body, stylesWithoutBullet)
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, docx, []usecase.ContentSection{
+		{Title: "Features", Content: "Items:\n- First\n- Second"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	styles := readDocxEntry(result, "word/styles.xml")
+	if !strings.Contains(styles, `w:styleId="ListBullet"`) {
+		t.Errorf("styles.xml must contain ListBullet style definition\ngot: %s", styles)
+	}
+}
+
+func TestDocxGenerative_GenerativeFill_PreservesExistingListBulletStyle(t *testing.T) {
+	ctx := context.Background()
+
+	stylesWithBullet := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+		`<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:style w:type="paragraph" w:styleId="ListBullet">` +
+		`<w:name w:val="List Bullet"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>` +
+		`</w:styles>`
+
+	body := `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Items</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>Old</w:t></w:r></w:p>`
+
+	docx := makeDocxWithStyles(body, stylesWithBullet)
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, docx, []usecase.ContentSection{
+		{Title: "Items", Content: "- One\n- Two"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	styles := readDocxEntry(result, "word/styles.xml")
+	count := strings.Count(styles, `w:styleId="ListBullet"`)
+	if count != 1 {
+		t.Errorf("ListBullet style should appear exactly once (preserved), got %d times\nstyles: %s", count, styles)
 	}
 }
 
