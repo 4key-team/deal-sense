@@ -78,6 +78,32 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 			sections: nil,
 			contains: []string{"Original"},
 		},
+		{
+			name: "multiline content splits into separate paragraphs",
+			body: `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Scope</w:t></w:r></w:p>` +
+				`<w:p><w:r><w:t>Old scope</w:t></w:r></w:p>`,
+			sections: []usecase.ContentSection{
+				{Title: "Scope", Content: "Line one.\nLine two.\nLine three."},
+			},
+			contains: []string{
+				"Line one.</w:t></w:r></w:p>",
+				"Line two.</w:t></w:r></w:p>",
+				"Line three.</w:t></w:r></w:p>",
+			},
+		},
+		{
+			name: "bullet list items get ListBullet style",
+			body: `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Features</w:t></w:r></w:p>` +
+				`<w:p><w:r><w:t>Old features</w:t></w:r></w:p>`,
+			sections: []usecase.ContentSection{
+				{Title: "Features", Content: "Our features:\n- Fast delivery\n- Quality control\n- 24/7 support"},
+			},
+			contains: []string{
+				"Our features:",
+				"Fast delivery", "Quality control", "24/7 support",
+				`w:val="ListBullet"`,
+			},
+		},
 	}
 
 	for _, tt := range tests {
