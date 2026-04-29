@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/johnfercher/maroto/v2"
@@ -103,15 +104,30 @@ const (
 )
 
 func (g *MarotoPDFGenerator) addContentLines(m core.Maroto, content string) {
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
+
+		isHeading := headingRe.MatchString(trimmed)
+		isBullet := strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")
+
+		cleaned := StripMarkdown(trimmed)
+		if cleaned == "" {
+			continue
+		}
+
 		switch {
-		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
-			itemText := "•  " + strings.TrimSpace(trimmed[2:])
+		case isHeading:
+			h := estimateHeight(cleaned)
+			m.AddRows(text.NewRow(h, cleaned, props.Text{
+				Size:  11,
+				Style: fontstyle.Bold,
+				Top:   3,
+			}))
+		case isBullet:
+			itemText := "•  " + strings.TrimSpace(cleaned[2:])
 			h := estimateHeight(itemText)
 			m.AddRows(text.NewRow(h, itemText, props.Text{
 				Size: 10,
@@ -119,8 +135,8 @@ func (g *MarotoPDFGenerator) addContentLines(m core.Maroto, content string) {
 				Top:  1,
 			}))
 		default:
-			h := estimateHeight(trimmed)
-			m.AddRows(text.NewRow(h, trimmed, props.Text{
+			h := estimateHeight(cleaned)
+			m.AddRows(text.NewRow(h, cleaned, props.Text{
 				Size: 10,
 				Top:  1,
 			}))
@@ -169,6 +185,55 @@ func (g *MarotoPDFGenerator) addHeader(m core.Maroto, input usecase.ContentInput
 			),
 		),
 	)
+}
+
+var headingRe = regexp.MustCompile(`^#{1,6}\s+`)
+var boldRe = regexp.MustCompile(`\*\*(.+?)\*\*`)
+var italicRe = regexp.MustCompile(`(?:^|[^*])\*([^*]+?)\*(?:[^*]|$)`)
+var tableSepRe = regexp.MustCompile(`^\|[-\s|:]+\|$`)
+var tableRowRe = regexp.MustCompile(`^\|(.+)\|$`)
+
+func StripMarkdown(line string) string {
+	trimmed := strings.TrimSpace(line)
+
+	if tableSepRe.MatchString(trimmed) {
+		return ""
+	}
+
+	if m := tableRowRe.FindStringSubmatch(trimmed); m != nil {
+		cells := strings.Split(m[1], "|")
+		var parts []string
+		for _, c := range cells {
+			c = strings.TrimSpace(c)
+			if c != "" {
+				parts = append(parts, c)
+			}
+		}
+		return strings.Join(parts, " — ")
+	}
+
+	trimmed = headingRe.ReplaceAllString(trimmed, "")
+	trimmed = boldRe.ReplaceAllString(trimmed, "$1")
+
+	old := trimmed
+	trimmed = italicRe.ReplaceAllStringFunc(trimmed, func(match string) string {
+		_ = old
+		sub := italicRe.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		prefix := ""
+		suffix := ""
+		if len(match) > 0 && match[0] != '*' {
+			prefix = string(match[0])
+		}
+		if len(match) > 0 && match[len(match)-1] != '*' {
+			suffix = string(match[len(match)-1])
+		}
+		return prefix + sub[1] + suffix
+	})
+
+	return trimmed
 }
 
 // Ensure MarotoPDFGenerator implements PDFGenerator at compile time.
