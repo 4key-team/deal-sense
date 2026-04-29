@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"strings"
 
+	docx "github.com/mmonterroca/docxgo/v2"
+	docxdomain "github.com/mmonterroca/docxgo/v2/domain"
+
 	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -198,8 +201,51 @@ func ensureListBulletStyle(stylesXML []byte) []byte {
 	return []byte(s[:closeTag] + listBulletStyleDef + s[closeTag:])
 }
 
-func (g *DocxGenerative) GenerateClean(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
-	return nil, fmt.Errorf("generate clean: not yet implemented")
+func (g *DocxGenerative) addContentParagraphs(doc docxdomain.Document, content string) {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		p, _ := doc.AddParagraph()
+
+		switch {
+		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
+			p.SetStyle(docxdomain.StyleIDListParagraph)
+			r, _ := p.AddRun()
+			r.SetText(strings.TrimSpace(trimmed[2:]))
+		default:
+			r, _ := p.AddRun()
+			r.SetText(trimmed)
+		}
+	}
+}
+
+func (g *DocxGenerative) GenerateClean(_ context.Context, input usecase.ContentInput) ([]byte, error) {
+	doc := docx.NewDocument()
+
+	if input.Summary != "" {
+		p, _ := doc.AddParagraph()
+		p.SetStyle(docxdomain.StyleIDTitle)
+		r, _ := p.AddRun()
+		r.SetText(input.Summary)
+	}
+
+	for _, sec := range input.Sections {
+		heading, _ := doc.AddParagraph()
+		heading.SetStyle(docxdomain.StyleIDHeading1)
+		hr, _ := heading.AddRun()
+		hr.SetText(sec.Title)
+
+		g.addContentParagraphs(doc, sec.Content)
+	}
+
+	var buf bytes.Buffer
+	if _, err := doc.WriteTo(&buf); err != nil {
+		return nil, fmt.Errorf("generate clean: write: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // Ensure DocxGenerative implements GenerativeEngine at compile time.
