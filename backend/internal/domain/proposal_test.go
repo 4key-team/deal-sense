@@ -253,6 +253,34 @@ func TestProposal_SetPDFResult(t *testing.T) {
 	}
 }
 
+func TestNewCleanProposal(t *testing.T) {
+	tests := []struct {
+		name   string
+		params map[string]string
+	}{
+		{name: "with params", params: map[string]string{"company": "Acme"}},
+		{name: "nil params", params: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := domain.NewCleanProposal(tt.params)
+			if p == nil {
+				t.Fatal("NewCleanProposal() returned nil")
+			}
+			if p.Mode() != domain.ModeClean {
+				t.Errorf("Mode() = %q, want %q", p.Mode(), domain.ModeClean)
+			}
+			if p.TemplateName() != "" {
+				t.Errorf("TemplateName() = %q, want empty", p.TemplateName())
+			}
+			if p.TemplateContent() != nil {
+				t.Errorf("TemplateContent() = %v, want nil", p.TemplateContent())
+			}
+		})
+	}
+}
+
 func TestNewProposalSection(t *testing.T) {
 	tests := []struct {
 		name    string
