@@ -75,17 +75,26 @@ export async function analyzeTender(
   form.append("lang", lang);
   files.forEach((f) => form.append("files", f));
 
-  const res = await fetch(`${BASE}/api/tender/analyze`, {
-    method: "POST",
-    headers: apiHeaders(),
-    body: form,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
-  if (!res.ok) {
-    throw new Error(`Tender analyze failed: ${res.status}`);
+  try {
+    const res = await fetch(`${BASE}/api/tender/analyze`, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: form,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as Record<string, string>).error || `Tender analyze failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<TenderResult>;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json() as Promise<TenderResult>;
 }
 
 export interface ProposalSection {
@@ -128,17 +137,26 @@ export async function generateProposal(
     form.append("params", JSON.stringify(params));
   }
 
-  const res = await fetch(`${BASE}/api/proposal/generate`, {
-    method: "POST",
-    headers: apiHeaders(),
-    body: form,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
-  if (!res.ok) {
-    throw new Error(`Proposal generate failed: ${res.status}`);
+  try {
+    const res = await fetch(`${BASE}/api/proposal/generate`, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: form,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as Record<string, string>).error || `Proposal generate failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<ProposalResult>;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json() as Promise<ProposalResult>;
 }
 
 export async function checkConnection(overrides?: {

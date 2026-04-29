@@ -51,7 +51,7 @@ describe("analyzeTender", () => {
 
   it("throws on non-ok response", async () => {
     mockFetch.mockReturnValueOnce(
-      Promise.resolve({ ok: false, status: 500 }),
+      Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: "Tender analyze failed: 500" }) }),
     );
 
     await expect(
@@ -117,7 +117,7 @@ describe("generateProposal", () => {
 
   it("throws on error", async () => {
     mockFetch.mockReturnValueOnce(
-      Promise.resolve({ ok: false, status: 422 }),
+      Promise.resolve({ ok: false, status: 422, json: () => Promise.resolve({ error: "Proposal generate failed: 422" }) }),
     );
 
     await expect(

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useI18n } from "../../providers/useI18n";
 import { Card } from "../../ui/Card";
 import { SectionLabel } from "../../ui/SectionLabel";
@@ -19,6 +19,28 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function GeneratingView({ label }: { label: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  const start = useRef(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start.current) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const min = Math.floor(elapsed / 60);
+  const sec = elapsed % 60;
+  const time = min > 0 ? `${min}:${String(sec).padStart(2, "0")}` : `${sec} сек`;
+
+  return (
+    <div className={`screen-enter ${styles.uploadScreen}`}>
+      <Spinner size="lg" />
+      <p className="t-body muted">{label}</p>
+      <p className="t-mono dim" style={{ marginTop: 8 }}>{time}</p>
+    </div>
+  );
 }
 
 export function ProposalResult() {
@@ -135,12 +157,7 @@ export function ProposalResult() {
 
   // --- Generating phase ---
   if (phase === "generating") {
-    return (
-      <div className={`screen-enter ${styles.uploadScreen}`}>
-        <Spinner size="lg" />
-        <p className="t-body muted">{t.kp.generating}</p>
-      </div>
-    );
+    return <GeneratingView label={t.kp.generating} />;
   }
 
   // --- Error phase ---
