@@ -352,6 +352,54 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}
 	})
 
+	t.Run("no template with generative engine returns clean mode", func(t *testing.T) {
+		llmResp := `{"meta":{"client":"Acme"},"sections":[{"title":"Intro","content":"Clean text","status":"ai","tokens":30}],"summary":"clean","log":[]}`
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("unused")}
+		genEng := &stubGenerativeEngine{result: []byte("clean-docx")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, genEng, stubPrompt, nil)
+
+		// Send request without template file
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+
+		var resp map[string]any
+		json.NewDecoder(rec.Body).Decode(&resp)
+
+		if resp["mode"] != "clean" {
+			t.Errorf("mode = %v, want clean", resp["mode"])
+		}
+	})
+
+	t.Run("no template without generative engine returns 400", func(t *testing.T) {
+		llm := &stubLLM{response: `{}`, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("unused")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, stubPrompt, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+		}
+	})
+
 	t.Run("with lang=en", func(t *testing.T) {
 		llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
 		var capturedLang string
