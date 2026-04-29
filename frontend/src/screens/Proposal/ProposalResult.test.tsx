@@ -36,7 +36,7 @@ describe("ProposalResult upload phase (RU)", () => {
   it("renders upload screen by default", () => {
     renderWithProviders(<ProposalResult />);
     expect(screen.getByText("Коммерческое предложение")).toBeInTheDocument();
-    expect(screen.getByText("Шаблон КП (.docx)")).toBeInTheDocument();
+    expect(screen.getByText("Шаблон КП (опционально)")).toBeInTheDocument();
     expect(screen.getByText("Контекст (бриф, кейсы, прайс)")).toBeInTheDocument();
   });
 

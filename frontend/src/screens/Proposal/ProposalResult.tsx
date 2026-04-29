@@ -50,11 +50,11 @@ export function ProposalResult() {
   }
 
   async function handleGenerate() {
-    if (template.length === 0) return;
+    if (template.length === 0 && contextFiles.length === 0) return;
     setPhase("generating");
     setErrorMsg("");
     try {
-      const res = await generateProposal(template[0], contextFiles, lang);
+      const res = await generateProposal(template[0] ?? null, contextFiles, lang);
       setResult(res);
       const infos = [...template, ...contextFiles].map((f) => ({ name: f.name, size: f.size }));
       setFileInfos(infos);
@@ -124,7 +124,7 @@ export function ProposalResult() {
           variant="brand"
           size="lg"
           onClick={handleGenerate}
-          disabled={template.length === 0}
+          disabled={template.length === 0 && contextFiles.length === 0}
           icon={<SparkIcon />}
         >
           {t.kp.generate_btn}

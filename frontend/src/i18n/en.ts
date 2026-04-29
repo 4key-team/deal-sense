@@ -11,7 +11,7 @@ export const en: Copy = {
   },
   kp: {
     title: "Commercial proposal",
-    subtitle: "Upload your template and context documents.",
+    subtitle: "Upload your template and context documents. Without a template, a clean document will be generated.",
     subtitle_result: "Template filled in. Review sections and download.",
     generate_btn: "Generate proposal",
     generating: "Generating proposal…",
@@ -112,8 +112,8 @@ export const en: Copy = {
   dropzone: {
     tender_label: "Upload tender documentation",
     tender_hint: "PDF, DOCX, MD or ZIP archive · multiple files OK",
-    proposal_tpl_label: "Proposal template (.docx)",
-    proposal_tpl_hint: "DOCX, PDF, or MD template",
+    proposal_tpl_label: "Proposal template (optional)",
+    proposal_tpl_hint: "DOCX, PDF, or MD · without template — clean document",
     proposal_ctx_label: "Context (brief, cases, prices)",
     proposal_ctx_hint: "PDF, DOCX or MD · up to 5 files",
   },

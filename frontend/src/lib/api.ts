@@ -108,18 +108,20 @@ export interface ProposalResult {
   docx: string; // base64 encoded .docx
   pdf?: string; // base64 encoded .pdf
   md?: string; // markdown text
-  mode?: string; // "placeholder" | "generative" | "automarkup"
+  mode?: string; // "placeholder" | "generative" | "clean"
   usage?: TokenUsage;
 }
 
 export async function generateProposal(
-  template: File,
+  template: File | null,
   contextFiles: File[],
   lang = "ru",
   params?: Record<string, string>,
 ): Promise<ProposalResult> {
   const form = new FormData();
-  form.append("template", template);
+  if (template) {
+    form.append("template", template);
+  }
   form.append("lang", lang);
   contextFiles.forEach((f) => form.append("context", f));
   if (params) {
