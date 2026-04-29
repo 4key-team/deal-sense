@@ -68,9 +68,19 @@ func (uc *GenerateProposal) Execute(
 	userParams map[string]string,
 ) (*domain.Proposal, domain.TokenUsage, error) {
 	noUsage := domain.ZeroTokenUsage()
-	proposal, err := domain.NewProposal(templateName, templateData, userParams)
-	if err != nil {
-		return nil, noUsage, err
+
+	// Determine mode: clean (no template) or template-based.
+	isClean := len(templateData) == 0 && uc.generative != nil
+
+	var proposal *domain.Proposal
+	if isClean {
+		proposal = domain.NewCleanProposal(userParams)
+	} else {
+		var err error
+		proposal, err = domain.NewProposal(templateName, templateData, userParams)
+		if err != nil {
+			return nil, noUsage, err
+		}
 	}
 
 	// Parse context files
@@ -84,24 +94,34 @@ func (uc *GenerateProposal) Execute(
 	}
 
 	// Read template text for LLM (best-effort — complex templates may fail to parse as text)
-	templateText, parseErr := uc.parser.Parse(ctx, templateName, templateData)
-	if parseErr != nil || templateText == "" {
+	var templateText string
+	if isClean {
 		templateText = templateParseFallback
-	}
-
-	// Detect template mode: placeholder (has {{...}}) or generative (no placeholders).
-	mode, detectErr := DetectTemplateMode(templateData)
-	if detectErr != nil {
-		// Non-DOCX (PDF, MD) or unreadable — use generative if available, else placeholder.
-		if uc.generative != nil {
-			mode = domain.ModeGenerative
-		} else {
-			mode = domain.ModePlaceholder
+	} else {
+		var parseErr error
+		templateText, parseErr = uc.parser.Parse(ctx, templateName, templateData)
+		if parseErr != nil || templateText == "" {
+			templateText = templateParseFallback
 		}
 	}
-	// Use generative mode only if we have a generative engine.
-	if mode == domain.ModeGenerative && uc.generative == nil {
-		mode = domain.ModePlaceholder
+
+	// Detect template mode.
+	var mode domain.TemplateMode
+	if isClean {
+		mode = domain.ModeClean
+	} else {
+		var detectErr error
+		mode, detectErr = DetectTemplateMode(templateData)
+		if detectErr != nil {
+			if uc.generative != nil {
+				mode = domain.ModeGenerative
+			} else {
+				mode = domain.ModePlaceholder
+			}
+		}
+		if mode == domain.ModeGenerative && uc.generative == nil {
+			mode = domain.ModePlaceholder
+		}
 	}
 	proposal.SetMode(mode)
 
@@ -137,6 +157,8 @@ func (uc *GenerateProposal) Execute(
 	// Fill template based on mode.
 	var filled []byte
 	switch mode {
+	case domain.ModeClean:
+		filled, err = uc.generative.GenerateClean(ctx, contentInput)
 	case domain.ModeGenerative:
 		filled, err = uc.generative.GenerativeFill(ctx, templateData, contentSections)
 	default:

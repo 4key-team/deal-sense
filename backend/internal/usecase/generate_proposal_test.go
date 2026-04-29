@@ -31,9 +31,10 @@ func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]stri
 }
 
 type stubGenerativeEngine struct {
-	result []byte
-	err    error
-	called bool
+	result      []byte
+	err         error
+	called      bool
+	cleanCalled bool
 }
 
 func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.ContentSection) ([]byte, error) {
@@ -42,7 +43,7 @@ func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []u
 }
 
 func (s *stubGenerativeEngine) GenerateClean(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
-	s.called = true
+	s.cleanCalled = true
 	return s.result, s.err
 }
 
@@ -340,6 +341,39 @@ func TestGenerateProposal_GenerativeMode(t *testing.T) {
 	}
 	if string(result.Result()) != "generative-output" {
 		t.Errorf("Result() = %q, want generative-output", result.Result())
+	}
+}
+
+func TestGenerateProposal_CleanMode(t *testing.T) {
+	llmResp := `{
+		"meta":{"client":"Acme","project":"Portal"},
+		"sections":[{"title":"Intro","content":"Clean content","status":"ai","tokens":50}],
+		"summary":"Clean proposal",
+		"log":[{"time":"14:00","msg":"done"}]
+	}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "parsed text"}
+	tmplEng := &stubTemplateEngine{result: []byte("should not be called")}
+	genEng := &stubGenerativeEngine{result: []byte("clean-output")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	result, _, err := uc.Execute(t.Context(), "", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !genEng.cleanCalled {
+		t.Error("expected GenerateClean to be called")
+	}
+	if genEng.called {
+		t.Error("GenerativeFill should NOT be called in clean mode")
+	}
+	if result.Mode() != domain.ModeClean {
+		t.Errorf("Mode() = %q, want clean", result.Mode())
+	}
+	if string(result.Result()) != "clean-output" {
+		t.Errorf("Result() = %q, want clean-output", result.Result())
 	}
 }
 
