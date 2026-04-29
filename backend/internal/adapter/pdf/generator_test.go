@@ -102,6 +102,65 @@ func TestMarotoPDFGenerator_Generate(t *testing.T) {
 	}
 }
 
+func TestStripMarkdown(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"### 2.1. Роли систем", "2.1. Роли систем"},
+		{"## Заголовок", "Заголовок"},
+		{"# Главный", "Главный"},
+		{"**bold text**", "bold text"},
+		{"Текст **с bold** внутри", "Текст с bold внутри"},
+		{"*italic text*", "italic text"},
+		{"Обычный текст", "Обычный текст"},
+		{"|---------|----------|", ""},
+		{"| Позиция | Стоимость |", "Позиция — Стоимость"},
+		{"| Bitrix24 | 13 990 ₽ |", "Bitrix24 — 13 990 ₽"},
+		{"- Пункт списка", "- Пункт списка"},
+		{"* Пункт списка", "* Пункт списка"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := pdf.StripMarkdown(tt.input)
+			if got != tt.want {
+				t.Errorf("StripMarkdown(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMarotoPDFGenerator_MarkdownContent(t *testing.T) {
+	g := pdf.NewMarotoPDFGenerator()
+
+	input := usecase.ContentInput{
+		Meta: map[string]string{"client": "Test"},
+		Sections: []usecase.ContentSection{
+			{
+				Title: "Features",
+				Content: "### 2.1. Роли систем\n" +
+					"**1С УТ** – источник истины.\n" +
+					"Обычный текст без разметки.\n" +
+					"| Позиция | Стоимость |\n" +
+					"|---------|----------|\n" +
+					"| Bitrix24 | 13 990 ₽ |\n" +
+					"- Первый пункт\n" +
+					"* Второй пункт",
+			},
+		},
+		Summary: "Test markdown rendering",
+	}
+
+	result, err := g.Generate(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) < 4 || string(result[:4]) != "%PDF" {
+		t.Error("output is not a valid PDF")
+	}
+}
+
 func TestMarotoPDFGenerator_MultilineUsesMultipleRows(t *testing.T) {
 	g := pdf.NewMarotoPDFGenerator()
 
