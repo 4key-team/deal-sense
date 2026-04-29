@@ -41,6 +41,11 @@ func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []u
 	return s.result, s.err
 }
 
+func (s *stubGenerativeEngine) GenerateClean(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	s.called = true
+	return s.result, s.err
+}
+
 type stubPDFGenerator struct {
 	result []byte
 	err    error

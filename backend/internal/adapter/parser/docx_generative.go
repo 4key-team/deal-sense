@@ -198,6 +198,10 @@ func ensureListBulletStyle(stylesXML []byte) []byte {
 	return []byte(s[:closeTag] + listBulletStyleDef + s[closeTag:])
 }
 
+func (g *DocxGenerative) GenerateClean(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	return nil, fmt.Errorf("generate clean: not yet implemented")
+}
+
 // Ensure DocxGenerative implements GenerativeEngine at compile time.
 var _ usecase.GenerativeEngine = (*DocxGenerative)(nil)
 

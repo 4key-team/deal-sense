@@ -39,9 +39,11 @@ type ContentInput struct {
 	Summary  string
 }
 
-// GenerativeEngine fills a template in generative mode (no placeholders).
+// GenerativeEngine fills a template in generative mode (no placeholders)
+// or generates a clean document from scratch.
 type GenerativeEngine interface {
 	GenerativeFill(ctx context.Context, template []byte, sections []ContentSection) ([]byte, error)
+	GenerateClean(ctx context.Context, input ContentInput) ([]byte, error)
 }
 
 // PDFGenerator creates a PDF document from proposal data.
