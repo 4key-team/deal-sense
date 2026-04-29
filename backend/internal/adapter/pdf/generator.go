@@ -215,9 +215,7 @@ func StripMarkdown(line string) string {
 	trimmed = headingRe.ReplaceAllString(trimmed, "")
 	trimmed = boldRe.ReplaceAllString(trimmed, "$1")
 
-	old := trimmed
 	trimmed = italicRe.ReplaceAllStringFunc(trimmed, func(match string) string {
-		_ = old
 		sub := italicRe.FindStringSubmatch(match)
 		if len(sub) < 2 {
 			return match
