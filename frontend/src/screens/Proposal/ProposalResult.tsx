@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useI18n } from "../../providers/useI18n";
 import { Card } from "../../ui/Card";
 import { SectionLabel } from "../../ui/SectionLabel";
@@ -19,6 +19,28 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function GeneratingView({ label }: { label: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  const start = useRef(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start.current) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const min = Math.floor(elapsed / 60);
+  const sec = elapsed % 60;
+  const time = min > 0 ? `${min}:${String(sec).padStart(2, "0")}` : `${sec} сек`;
+
+  return (
+    <div className={`screen-enter ${styles.uploadScreen}`}>
+      <Spinner size="lg" />
+      <p className="t-body muted">{label}</p>
+      <p className="t-mono dim" style={{ marginTop: 8 }}>{time}</p>
+    </div>
+  );
 }
 
 export function ProposalResult() {
@@ -50,11 +72,11 @@ export function ProposalResult() {
   }
 
   async function handleGenerate() {
-    if (template.length === 0) return;
+    if (template.length === 0 && contextFiles.length === 0) return;
     setPhase("generating");
     setErrorMsg("");
     try {
-      const res = await generateProposal(template[0], contextFiles, lang);
+      const res = await generateProposal(template[0] ?? null, contextFiles, lang);
       setResult(res);
       const infos = [...template, ...contextFiles].map((f) => ({ name: f.name, size: f.size }));
       setFileInfos(infos);
@@ -124,7 +146,7 @@ export function ProposalResult() {
           variant="brand"
           size="lg"
           onClick={handleGenerate}
-          disabled={template.length === 0}
+          disabled={template.length === 0 && contextFiles.length === 0}
           icon={<SparkIcon />}
         >
           {t.kp.generate_btn}
@@ -135,12 +157,7 @@ export function ProposalResult() {
 
   // --- Generating phase ---
   if (phase === "generating") {
-    return (
-      <div className={`screen-enter ${styles.uploadScreen}`}>
-        <Spinner size="lg" />
-        <p className="t-body muted">{t.kp.generating}</p>
-      </div>
-    );
+    return <GeneratingView label={t.kp.generating} />;
   }
 
   // --- Error phase ---
@@ -166,7 +183,7 @@ export function ProposalResult() {
 
   function statusChip(s: ProposalSection) {
     if (s.status === "ai") {
-      return <Chip tone="brand" icon={<SparkIcon />}>{t.kp.section_ai}</Chip>;
+      return <Chip tone="go" icon={<SparkIcon />}>{t.kp.section_ai}</Chip>;
     }
     if (s.status === "review") {
       return <Chip tone="warn">{t.kp.section_review}</Chip>;
@@ -287,11 +304,6 @@ export function ProposalResult() {
                 </span>
                 <div className={styles.sectionInfo}>
                   <span className={`t-body ${styles.sectionTitle}`}>{section.title}</span>
-                  {section.tokens > 0 && (
-                    <span className={`t-mono ${styles.sectionTokens}`}>
-                      {section.tokens.toLocaleString()} {lang === "ru" ? "токенов" : "tokens"}
-                    </span>
-                  )}
                 </div>
                 <div>{statusChip(section)}</div>
                 <button
@@ -354,15 +366,15 @@ export function ProposalResult() {
         <Card padding={18}>
           <p className={`t-micro ${styles.cardLabel}`}>{t.kp.sections}</p>
           <div className={styles.donutRow}>
-            <MiniDonut met={aiCount} partial={reviewCount} miss={filledCount} size={92} />
+            <MiniDonut met={aiCount + filledCount} partial={reviewCount} miss={0} size={92} />
             <div className={styles.statsGrid}>
               <div className={styles.statItem}>
-                <span className={styles.statDot} style={{ background: "var(--brand)" }} />
+                <span className={styles.statDot} style={{ background: "var(--go)" }} />
                 <span className={`t-small ${styles.statCount}`}>{aiCount}</span>
                 <span className={`t-small ${styles.statLabel}`}>{t.kp.section_ai}</span>
               </div>
               <div className={styles.statItem}>
-                <span className={styles.statDot} style={{ background: "var(--go)" }} />
+                <span className={styles.statDot} style={{ background: "var(--brand)" }} />
                 <span className={`t-small ${styles.statCount}`}>{filledCount}</span>
                 <span className={`t-small ${styles.statLabel}`}>{t.kp.section_filled}</span>
               </div>

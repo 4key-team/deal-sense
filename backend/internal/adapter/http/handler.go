@@ -32,6 +32,7 @@ type Handler struct {
 	providers         []ProviderInfo
 	logger            *slog.Logger
 	pdfGen            usecase.PDFGenerator
+	docxToPDF         usecase.DOCXToPDFConverter
 	generativeEngine  usecase.GenerativeEngine
 	generativePrompt  PromptResolver
 	mdGen             usecase.MDGenerator
@@ -47,6 +48,7 @@ func NewHandler(
 	providers []ProviderInfo,
 	logger *slog.Logger,
 	pdfGen usecase.PDFGenerator,
+	docxToPDF usecase.DOCXToPDFConverter,
 	generativeEngine usecase.GenerativeEngine,
 	generativePrompt PromptResolver,
 	mdGen usecase.MDGenerator,
@@ -58,6 +60,7 @@ func NewHandler(
 		providers: providers,
 		logger:    logger.With("component", "handler"),
 		pdfGen:           pdfGen,
+		docxToPDF:        docxToPDF,
 		generativeEngine: generativeEngine,
 		generativePrompt: generativePrompt,
 		mdGen:            mdGen,

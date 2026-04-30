@@ -63,7 +63,7 @@ func (h *Handler) HandleAnalyzeTender(w http.ResponseWriter, r *http.Request) {
 	result, usage, err := uc.Execute(r.Context(), inputs, companyProfile)
 	if err != nil {
 		h.logger.Error("tender analysis failed", "err", err)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, mapErrorToUserMessage(err.Error(), langName))
 		return
 	}
 

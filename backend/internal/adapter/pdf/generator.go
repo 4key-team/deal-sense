@@ -17,6 +17,7 @@ import (
 	"github.com/johnfercher/maroto/v2/pkg/props"
 	"github.com/johnfercher/maroto/v2/pkg/repository"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/mdstrip"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
 
@@ -103,15 +104,30 @@ const (
 )
 
 func (g *MarotoPDFGenerator) addContentLines(m core.Maroto, content string) {
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
+
+		isHeading := strings.HasPrefix(trimmed, "#")
+		isBullet := strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")
+
+		cleaned := mdstrip.Strip(trimmed)
+		if cleaned == "" {
+			continue
+		}
+
 		switch {
-		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
-			itemText := "•  " + strings.TrimSpace(trimmed[2:])
+		case isHeading:
+			h := estimateHeight(cleaned)
+			m.AddRows(text.NewRow(h, cleaned, props.Text{
+				Size:  11,
+				Style: fontstyle.Bold,
+				Top:   3,
+			}))
+		case isBullet:
+			itemText := "•  " + strings.TrimSpace(cleaned[2:])
 			h := estimateHeight(itemText)
 			m.AddRows(text.NewRow(h, itemText, props.Text{
 				Size: 10,
@@ -119,8 +135,8 @@ func (g *MarotoPDFGenerator) addContentLines(m core.Maroto, content string) {
 				Top:  1,
 			}))
 		default:
-			h := estimateHeight(trimmed)
-			m.AddRows(text.NewRow(h, trimmed, props.Text{
+			h := estimateHeight(cleaned)
+			m.AddRows(text.NewRow(h, cleaned, props.Text{
 				Size: 10,
 				Top:  1,
 			}))

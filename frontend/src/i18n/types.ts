@@ -69,6 +69,11 @@ export interface Copy {
     actions_prep: string;
     recent: string;
     trend: string;
+    legend_go: string;
+    legend_watch: string;
+    legend_no: string;
+    toggle_go: string;
+    toggle_no: string;
   };
   profile: {
     title: string;

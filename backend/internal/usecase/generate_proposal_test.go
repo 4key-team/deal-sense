@@ -31,13 +31,19 @@ func (s *stubTemplateEngine) Fill(_ context.Context, _ []byte, _ map[string]stri
 }
 
 type stubGenerativeEngine struct {
-	result []byte
-	err    error
-	called bool
+	result      []byte
+	err         error
+	called      bool
+	cleanCalled bool
 }
 
 func (s *stubGenerativeEngine) GenerativeFill(_ context.Context, _ []byte, _ []usecase.ContentSection) ([]byte, error) {
 	s.called = true
+	return s.result, s.err
+}
+
+func (s *stubGenerativeEngine) GenerateClean(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
+	s.cleanCalled = true
 	return s.result, s.err
 }
 
@@ -49,6 +55,19 @@ type stubPDFGenerator struct {
 
 func (s *stubPDFGenerator) Generate(_ context.Context, _ usecase.ContentInput) ([]byte, error) {
 	s.called = true
+	return s.result, s.err
+}
+
+type stubDOCXToPDF struct {
+	result   []byte
+	err      error
+	called   bool
+	received []byte
+}
+
+func (s *stubDOCXToPDF) Convert(_ context.Context, docx []byte) ([]byte, error) {
+	s.called = true
+	s.received = docx
 	return s.result, s.err
 }
 
@@ -338,6 +357,39 @@ func TestGenerateProposal_GenerativeMode(t *testing.T) {
 	}
 }
 
+func TestGenerateProposal_CleanMode(t *testing.T) {
+	llmResp := `{
+		"meta":{"client":"Acme","project":"Portal"},
+		"sections":[{"title":"Intro","content":"Clean content","status":"ai","tokens":50}],
+		"summary":"Clean proposal",
+		"log":[{"time":"14:00","msg":"done"}]
+	}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "parsed text"}
+	tmplEng := &stubTemplateEngine{result: []byte("should not be called")}
+	genEng := &stubGenerativeEngine{result: []byte("clean-output")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+	result, _, err := uc.Execute(t.Context(), "", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !genEng.cleanCalled {
+		t.Error("expected GenerateClean to be called")
+	}
+	if genEng.called {
+		t.Error("GenerativeFill should NOT be called in clean mode")
+	}
+	if result.Mode() != domain.ModeClean {
+		t.Errorf("Mode() = %q, want clean", result.Mode())
+	}
+	if string(result.Result()) != "clean-output" {
+		t.Errorf("Result() = %q, want clean-output", result.Result())
+	}
+}
+
 func TestGenerateProposal_PDFGeneration(t *testing.T) {
 	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
 
@@ -464,6 +516,77 @@ func TestGenerateProposal_PDFTemplate_GenerativeMode(t *testing.T) {
 	if result.Mode() != domain.ModeGenerative {
 		t.Errorf("Mode() = %q, want generative", result.Mode())
 	}
+}
+
+func TestGenerateProposal_DOCXToPDFConverter(t *testing.T) {
+	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","content":"Hello","status":"ai","tokens":50}],"summary":"ok"}`
+
+	t.Run("converter produces PDF from filled DOCX", func(t *testing.T) {
+		llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+		parser := &stubParser{content: "text"}
+		tmplEng := &stubTemplateEngine{result: []byte("filled-docx-bytes")}
+		converter := &stubDOCXToPDF{result: []byte("%PDF-from-docx")}
+		marotoPDF := &stubPDFGenerator{result: []byte("%PDF-maroto")}
+
+		uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+		uc.SetDOCXToPDFConverter(converter)
+		uc.SetPDFGenerator(marotoPDF)
+		result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !converter.called {
+			t.Fatal("expected converter to be called")
+		}
+		if string(converter.received) != "filled-docx-bytes" {
+			t.Errorf("converter received %q, want filled-docx-bytes", converter.received)
+		}
+		if string(result.PDFResult()) != "%PDF-from-docx" {
+			t.Errorf("PDFResult = %q, want %%PDF-from-docx", result.PDFResult())
+		}
+	})
+
+	t.Run("converter error falls back to Maroto", func(t *testing.T) {
+		llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+		parser := &stubParser{content: "text"}
+		tmplEng := &stubTemplateEngine{result: []byte("filled-docx")}
+		converter := &stubDOCXToPDF{err: errors.New("soffice failed")}
+		marotoPDF := &stubPDFGenerator{result: []byte("%PDF-maroto")}
+
+		uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+		uc.SetDOCXToPDFConverter(converter)
+		uc.SetPDFGenerator(marotoPDF)
+		result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !marotoPDF.called {
+			t.Error("expected Maroto fallback to be called")
+		}
+		if string(result.PDFResult()) != "%PDF-maroto" {
+			t.Errorf("PDFResult = %q, want %%PDF-maroto", result.PDFResult())
+		}
+	})
+
+	t.Run("no converter — uses Maroto directly", func(t *testing.T) {
+		llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+		parser := &stubParser{content: "text"}
+		tmplEng := &stubTemplateEngine{result: []byte("filled-docx")}
+		marotoPDF := &stubPDFGenerator{result: []byte("%PDF-maroto")}
+
+		uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "prompt")
+		uc.SetPDFGenerator(marotoPDF)
+		result, _, err := uc.Execute(t.Context(), "offer.docx", []byte("template"), nil, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !marotoPDF.called {
+			t.Error("expected Maroto to be called")
+		}
+		if string(result.PDFResult()) != "%PDF-maroto" {
+			t.Errorf("PDFResult = %q, want %%PDF-maroto", result.PDFResult())
+		}
+	})
 }
 
 func TestGenerateProposal_PlaceholderMode_WithGenerativeEngine(t *testing.T) {

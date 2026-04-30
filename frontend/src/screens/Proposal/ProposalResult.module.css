@@ -309,6 +309,37 @@
   color: var(--ink-3);
 }
 
+/* Section stats */
+
+.statsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.statDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.statCount {
+  color: var(--ink-1);
+  font-weight: 500;
+  min-width: 14px;
+}
+
+.statLabel {
+  color: var(--ink-3);
+}
+
 /* Upload phase */
 .uploadScreen {
   display: flex;

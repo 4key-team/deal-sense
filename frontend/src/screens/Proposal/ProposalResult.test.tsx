@@ -36,7 +36,7 @@ describe("ProposalResult upload phase (RU)", () => {
   it("renders upload screen by default", () => {
     renderWithProviders(<ProposalResult />);
     expect(screen.getByText("Коммерческое предложение")).toBeInTheDocument();
-    expect(screen.getByText("Шаблон КП (.docx)")).toBeInTheDocument();
+    expect(screen.getByText("Шаблон КП (опционально)")).toBeInTheDocument();
     expect(screen.getByText("Контекст (бриф, кейсы, прайс)")).toBeInTheDocument();
   });
 
@@ -121,9 +121,9 @@ describe("ProposalResult result phase (RU)", () => {
     expect(screen.getAllByText("нужна проверка").length).toBeGreaterThan(0);
   });
 
-  it("shows token counts", async () => {
+  it("shows total token count in hero", async () => {
     await goToResult();
-    expect(screen.getByText("250 токенов")).toBeInTheDocument();
+    expect(screen.getByText(/770/)).toBeInTheDocument();
   });
 
   it("shows summary in hero subtitle", async () => {

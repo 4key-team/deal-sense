@@ -70,6 +70,13 @@ type Proposal struct {
 	mdResult        []byte
 }
 
+func NewCleanProposal(parameters map[string]string) *Proposal {
+	return &Proposal{
+		parameters: parameters,
+		mode:       ModeClean,
+	}
+}
+
 func NewProposal(templateName string, templateContent []byte, parameters map[string]string) (*Proposal, error) {
 	if len(templateContent) == 0 {
 		return nil, ErrEmptyTemplate

@@ -33,13 +33,13 @@ export function VerdictHero({ data, verdict, setVerdict }: VerdictHeroProps) {
               className={`${styles.toggleBtn} ${verdict === "go" ? styles.toggleBtnGoActive : ""}`}
               onClick={() => setVerdict("go")}
             >
-              GO
+              {t.tender.toggle_go}
             </button>
             <button
               className={`${styles.toggleBtn} ${verdict === "no" ? styles.toggleBtnNoActive : ""}`}
               onClick={() => setVerdict("no")}
             >
-              NO-GO
+              {t.tender.toggle_no}
             </button>
           </div>
         </div>

@@ -11,7 +11,7 @@ export const ru: Copy = {
   },
   kp: {
     title: "Коммерческое предложение",
-    subtitle: "Загрузите шаблон и контекстные документы.",
+    subtitle: "Загрузите шаблон и контекстные документы. Без шаблона — сгенерируем чистый документ.",
     subtitle_result: "Шаблон заполнен. Проверьте секции и скачайте.",
     generate_btn: "Сгенерировать КП",
     generating: "Генерирую предложение…",
@@ -69,6 +69,11 @@ export const ru: Copy = {
     actions_prep: "Готовить заявку",
     recent: "История анализов",
     trend: "Тренд · 8 недель",
+    legend_go: "подходит",
+    legend_watch: "под вопросом",
+    legend_no: "не подходит",
+    toggle_go: "ИДЁМ",
+    toggle_no: "ПАС",
   },
   profile: {
     title: "Профиль компании",
@@ -112,8 +117,8 @@ export const ru: Copy = {
   dropzone: {
     tender_label: "Загрузите тендерную документацию",
     tender_hint: "PDF, DOCX, MD или ZIP-архив · можно несколько файлов",
-    proposal_tpl_label: "Шаблон КП (.docx)",
-    proposal_tpl_hint: "DOCX, PDF или MD шаблон",
+    proposal_tpl_label: "Шаблон КП (опционально)",
+    proposal_tpl_hint: "DOCX, PDF или MD · без шаблона — чистый документ",
     proposal_ctx_label: "Контекст (бриф, кейсы, прайс)",
     proposal_ctx_hint: "PDF, DOCX или MD · до 5 файлов",
   },

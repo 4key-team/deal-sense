@@ -339,15 +339,15 @@ export function TenderReport() {
                 <div className={styles.legend}>
                   <div className={styles.legendItem}>
                     <div className={styles.legendDot} style={{ background: "var(--go)" }} />
-                    GO {stats.go}
+                    {t.tender.legend_go} {stats.go}
                   </div>
                   <div className={styles.legendItem}>
                     <div className={styles.legendDot} style={{ background: "var(--warn)" }} />
-                    watch {stats.watch}
+                    {t.tender.legend_watch} {stats.watch}
                   </div>
                   <div className={styles.legendItem}>
                     <div className={styles.legendDot} style={{ background: "var(--no)" }} />
-                    NO {stats.no}
+                    {t.tender.legend_no} {stats.no}
                   </div>
                 </div>
               </Card>

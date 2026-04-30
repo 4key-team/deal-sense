@@ -15,12 +15,18 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 	}
 
 	_, header, err := r.FormFile("template")
+	var templateData []byte
+	var templateName string
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "template file is required")
-		return
+		// No template file — allow clean mode if generative engine is available.
+		if h.generativeEngine == nil {
+			writeError(w, http.StatusBadRequest, "template file is required")
+			return
+		}
+	} else {
+		templateData = mustReadMultipartFile(header)
+		templateName = header.Filename
 	}
-
-	templateData := mustReadMultipartFile(header)
 
 	var userParams map[string]string
 	if raw := r.FormValue("params"); raw != "" {
@@ -44,31 +50,35 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 
 	llmProvider := h.resolveLLM(r)
 	h.logger.Debug("proposal generation request",
-		"template", header.Filename,
+		"template", templateName,
 		"context_files", len(contextFiles),
 		"provider", llmProvider.Name(),
 		"lang", langName,
 	)
 
 	uc := usecase.NewGenerateProposal(llmProvider, h.parser, h.template, h.proposalPrompt(langName))
+	uc.SetLogger(h.logger)
 	if h.generativeEngine != nil && h.generativePrompt != nil {
 		uc.SetGenerativeEngine(h.generativeEngine, h.generativePrompt(langName))
 	}
 	if h.pdfGen != nil {
 		uc.SetPDFGenerator(h.pdfGen)
 	}
+	if h.docxToPDF != nil {
+		uc.SetDOCXToPDFConverter(h.docxToPDF)
+	}
 	if h.mdGen != nil {
 		uc.SetMDGenerator(h.mdGen)
 	}
-	result, usage, err := uc.Execute(r.Context(), header.Filename, templateData, contextFiles, userParams)
+	result, usage, err := uc.Execute(r.Context(), templateName, templateData, contextFiles, userParams)
 	if err != nil {
 		h.logger.Error("proposal generation failed", "err", err)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, mapErrorToUserMessage(err.Error(), langName))
 		return
 	}
 
 	h.logger.Info("proposal generated",
-		"template", header.Filename,
+		"template", templateName,
 		"sections", len(result.Sections()),
 		"docx_size", len(result.Result()),
 		"prompt_tokens", usage.PromptTokens(),

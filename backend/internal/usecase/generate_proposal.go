@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -20,7 +21,9 @@ type GenerateProposal struct {
 	generative       GenerativeEngine
 	generativePrompt string
 	pdfGen           PDFGenerator
+	docxToPDF        DOCXToPDFConverter
 	mdGen            MDGenerator
+	logger           *slog.Logger
 }
 
 func NewGenerateProposal(llm LLMProvider, parser DocumentParser, template TemplateEngine, systemPrompt string) *GenerateProposal {
@@ -36,8 +39,23 @@ func (uc *GenerateProposal) SetPDFGenerator(g PDFGenerator) {
 	uc.pdfGen = g
 }
 
+func (uc *GenerateProposal) SetDOCXToPDFConverter(c DOCXToPDFConverter) {
+	uc.docxToPDF = c
+}
+
 func (uc *GenerateProposal) SetMDGenerator(g MDGenerator) {
 	uc.mdGen = g
+}
+
+func (uc *GenerateProposal) SetLogger(l *slog.Logger) {
+	uc.logger = l
+}
+
+func (uc *GenerateProposal) log() *slog.Logger {
+	if uc.logger != nil {
+		return uc.logger
+	}
+	return slog.Default()
 }
 
 type proposalLLMResponse struct {
@@ -68,9 +86,19 @@ func (uc *GenerateProposal) Execute(
 	userParams map[string]string,
 ) (*domain.Proposal, domain.TokenUsage, error) {
 	noUsage := domain.ZeroTokenUsage()
-	proposal, err := domain.NewProposal(templateName, templateData, userParams)
-	if err != nil {
-		return nil, noUsage, err
+
+	// Determine mode: clean (no template) or template-based.
+	isClean := len(templateData) == 0 && uc.generative != nil
+
+	var proposal *domain.Proposal
+	if isClean {
+		proposal = domain.NewCleanProposal(userParams)
+	} else {
+		var err error
+		proposal, err = domain.NewProposal(templateName, templateData, userParams)
+		if err != nil {
+			return nil, noUsage, err
+		}
 	}
 
 	// Parse context files
@@ -84,24 +112,34 @@ func (uc *GenerateProposal) Execute(
 	}
 
 	// Read template text for LLM (best-effort — complex templates may fail to parse as text)
-	templateText, parseErr := uc.parser.Parse(ctx, templateName, templateData)
-	if parseErr != nil || templateText == "" {
+	var templateText string
+	if isClean {
 		templateText = templateParseFallback
-	}
-
-	// Detect template mode: placeholder (has {{...}}) or generative (no placeholders).
-	mode, detectErr := DetectTemplateMode(templateData)
-	if detectErr != nil {
-		// Non-DOCX (PDF, MD) or unreadable — use generative if available, else placeholder.
-		if uc.generative != nil {
-			mode = domain.ModeGenerative
-		} else {
-			mode = domain.ModePlaceholder
+	} else {
+		var parseErr error
+		templateText, parseErr = uc.parser.Parse(ctx, templateName, templateData)
+		if parseErr != nil || templateText == "" {
+			templateText = templateParseFallback
 		}
 	}
-	// Use generative mode only if we have a generative engine.
-	if mode == domain.ModeGenerative && uc.generative == nil {
-		mode = domain.ModePlaceholder
+
+	// Detect template mode.
+	var mode domain.TemplateMode
+	if isClean {
+		mode = domain.ModeClean
+	} else {
+		var detectErr error
+		mode, detectErr = DetectTemplateMode(templateData)
+		if detectErr != nil {
+			if uc.generative != nil {
+				mode = domain.ModeGenerative
+			} else {
+				mode = domain.ModePlaceholder
+			}
+		}
+		if mode == domain.ModeGenerative && uc.generative == nil {
+			mode = domain.ModePlaceholder
+		}
 	}
 	proposal.SetMode(mode)
 
@@ -137,6 +175,8 @@ func (uc *GenerateProposal) Execute(
 	// Fill template based on mode.
 	var filled []byte
 	switch mode {
+	case domain.ModeClean:
+		filled, err = uc.generative.GenerateClean(ctx, contentInput)
 	case domain.ModeGenerative:
 		filled, err = uc.generative.GenerativeFill(ctx, templateData, contentSections)
 	default:
@@ -186,10 +226,22 @@ func (uc *GenerateProposal) Execute(
 	}
 	proposal.SetLog(logEntries)
 
-	// Best-effort PDF generation.
-	if uc.pdfGen != nil {
+	// Best-effort PDF generation: prefer DOCX→PDF converter, fallback to Maroto.
+	var pdfDone bool
+	if uc.docxToPDF != nil && len(filled) > 0 {
+		pdfBytes, convErr := uc.docxToPDF.Convert(ctx, filled)
+		if convErr != nil {
+			uc.log().Warn("docx-to-pdf conversion failed, falling back to maroto", "err", convErr)
+		} else {
+			proposal.SetPDFResult(pdfBytes)
+			pdfDone = true
+		}
+	}
+	if !pdfDone && uc.pdfGen != nil {
 		pdfBytes, pdfErr := uc.pdfGen.Generate(ctx, contentInput)
-		if pdfErr == nil {
+		if pdfErr != nil {
+			uc.log().Warn("maroto pdf generation failed", "err", pdfErr)
+		} else {
 			proposal.SetPDFResult(pdfBytes)
 		}
 	}
@@ -197,7 +249,9 @@ func (uc *GenerateProposal) Execute(
 	// Best-effort Markdown generation.
 	if uc.mdGen != nil {
 		mdBytes, mdErr := uc.mdGen.Render(ctx, contentInput)
-		if mdErr == nil {
+		if mdErr != nil {
+			uc.log().Warn("markdown generation failed", "err", mdErr)
+		} else {
 			proposal.SetMDResult(mdBytes)
 		}
 	}
