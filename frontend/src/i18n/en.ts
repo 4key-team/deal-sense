@@ -69,6 +69,11 @@ export const en: Copy = {
     actions_prep: "Start preparing bid",
     recent: "Analysis history",
     trend: "Trend · 8 weeks",
+    legend_go: "GO",
+    legend_watch: "watch",
+    legend_no: "NO",
+    toggle_go: "GO",
+    toggle_no: "NO-GO",
   },
   profile: {
     title: "Company profile",

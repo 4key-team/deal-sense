@@ -121,9 +121,9 @@ describe("ProposalResult result phase (RU)", () => {
     expect(screen.getAllByText("нужна проверка").length).toBeGreaterThan(0);
   });
 
-  it("shows token counts", async () => {
+  it("shows total token count in hero", async () => {
     await goToResult();
-    expect(screen.getByText("250 токенов")).toBeInTheDocument();
+    expect(screen.getByText(/770/)).toBeInTheDocument();
   });
 
   it("shows summary in hero subtitle", async () => {

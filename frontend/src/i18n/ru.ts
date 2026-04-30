@@ -69,6 +69,11 @@ export const ru: Copy = {
     actions_prep: "Готовить заявку",
     recent: "История анализов",
     trend: "Тренд · 8 недель",
+    legend_go: "подходит",
+    legend_watch: "под вопросом",
+    legend_no: "не подходит",
+    toggle_go: "ИДЁМ",
+    toggle_no: "ПАС",
   },
   profile: {
     title: "Профиль компании",

@@ -183,7 +183,7 @@ export function ProposalResult() {
 
   function statusChip(s: ProposalSection) {
     if (s.status === "ai") {
-      return <Chip tone="brand" icon={<SparkIcon />}>{t.kp.section_ai}</Chip>;
+      return <Chip tone="go" icon={<SparkIcon />}>{t.kp.section_ai}</Chip>;
     }
     if (s.status === "review") {
       return <Chip tone="warn">{t.kp.section_review}</Chip>;
@@ -304,11 +304,6 @@ export function ProposalResult() {
                 </span>
                 <div className={styles.sectionInfo}>
                   <span className={`t-body ${styles.sectionTitle}`}>{section.title}</span>
-                  {section.tokens > 0 && (
-                    <span className={`t-mono ${styles.sectionTokens}`}>
-                      {section.tokens.toLocaleString()} {lang === "ru" ? "токенов" : "tokens"}
-                    </span>
-                  )}
                 </div>
                 <div>{statusChip(section)}</div>
                 <button
@@ -371,15 +366,15 @@ export function ProposalResult() {
         <Card padding={18}>
           <p className={`t-micro ${styles.cardLabel}`}>{t.kp.sections}</p>
           <div className={styles.donutRow}>
-            <MiniDonut met={aiCount} partial={reviewCount} miss={filledCount} size={92} />
+            <MiniDonut met={aiCount + filledCount} partial={reviewCount} miss={0} size={92} />
             <div className={styles.statsGrid}>
               <div className={styles.statItem}>
-                <span className={styles.statDot} style={{ background: "var(--brand)" }} />
+                <span className={styles.statDot} style={{ background: "var(--go)" }} />
                 <span className={`t-small ${styles.statCount}`}>{aiCount}</span>
                 <span className={`t-small ${styles.statLabel}`}>{t.kp.section_ai}</span>
               </div>
               <div className={styles.statItem}>
-                <span className={styles.statDot} style={{ background: "var(--go)" }} />
+                <span className={styles.statDot} style={{ background: "var(--brand)" }} />
                 <span className={`t-small ${styles.statCount}`}>{filledCount}</span>
                 <span className={`t-small ${styles.statLabel}`}>{t.kp.section_filled}</span>
               </div>
