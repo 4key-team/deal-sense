@@ -112,6 +112,18 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 			wantNotContain: []string{"Old features"},
 		},
 		{
+			name: "strips markdown from content",
+			paragraphs: []struct{ text, style string }{
+				{"Details", domain.StyleIDHeading1},
+				{"Old details", ""},
+			},
+			sections: []usecase.ContentSection{
+				{Title: "Details", Content: "**1С УТ**: мастер-система.\n### Подзаголовок\n| Позиция | Цена |\n|---|---|\n| Bitrix | 13 990 ₽ |\n[ваш email](mailto:x)"},
+			},
+			wantContains:   []string{"1С УТ", "Подзаголовок", "Bitrix", "13 990 ₽", "ваш email"},
+			wantNotContain: []string{"**", "###", "|---|", "[ваш email](mailto:x)"},
+		},
+		{
 			name:       "empty sections — no modification",
 			paragraphs: []struct{ text, style string }{{"Original", ""}},
 			sections:   nil,
@@ -366,6 +378,95 @@ func TestDocxGenerative_ZipFallback_InjectsListBulletStyle(t *testing.T) {
 	styles := readDocxEntry(result, "word/styles.xml")
 	if !strings.Contains(styles, `w:styleId="ListBullet"`) {
 		t.Errorf("ListBullet style not injected\ngot: %s", styles)
+	}
+}
+
+func TestDocxGenerative_ZipFallback_InsertsBeforeFooter(t *testing.T) {
+	ctx := context.Background()
+	body := `<w:p><w:r><w:t>Уважаемые коллеги!</w:t></w:r></w:p>` +
+		`<w:p></w:p><w:p></w:p>` +
+		`<w:p><w:r><w:t>С уважением, Директор</w:t></w:r></w:p>` +
+		`<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`
+
+	template := makeDocxWithBody(body)
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, template, []usecase.ContentSection{
+		{Title: "Введение", Content: "Текст введения."},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	xml := readDocxEntry(result, "word/document.xml")
+	contentIdx := strings.Index(xml, "Текст введения.")
+	footerIdx := strings.Index(xml, "С уважением")
+	if contentIdx < 0 {
+		t.Fatal("content not found")
+	}
+	if footerIdx < 0 {
+		t.Fatal("footer not found")
+	}
+	if contentIdx > footerIdx {
+		t.Errorf("content (at %d) must be BEFORE footer (at %d)", contentIdx, footerIdx)
+	}
+}
+
+func TestDocxGenerative_ZipFallback_StripsMarkdown(t *testing.T) {
+	ctx := context.Background()
+	body := `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Details</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>Old</w:t></w:r></w:p>`
+
+	template := makeDocxWithBody(body)
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, template, []usecase.ContentSection{
+		{Title: "Details", Content: "**Bold text** here.\n### Heading\n| A | B |\n|---|---|\n| C | D |"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	xml := readDocxEntry(result, "word/document.xml")
+	if strings.Contains(xml, "**") {
+		t.Errorf("output contains ** markdown markers\ngot: %s", xml)
+	}
+	if strings.Contains(xml, "###") {
+		t.Errorf("output contains ### markdown markers\ngot: %s", xml)
+	}
+	if !strings.Contains(xml, "Bold text") {
+		t.Errorf("output missing cleaned text 'Bold text'\ngot: %s", xml)
+	}
+	if !strings.Contains(xml, "Heading") {
+		t.Errorf("output missing cleaned heading text\ngot: %s", xml)
+	}
+}
+
+func TestDocxGenerative_GenerateClean_StripsMarkdown(t *testing.T) {
+	ctx := context.Background()
+	g := parser.NewDocxGenerative()
+
+	input := usecase.ContentInput{
+		Summary: "Test",
+		Sections: []usecase.ContentSection{
+			{Title: "Info", Content: "**Bold** and *italic* and [link](http://x)"},
+		},
+	}
+
+	result, err := g.GenerateClean(ctx, input)
+	if err != nil {
+		t.Fatalf("GenerateClean() error: %v", err)
+	}
+
+	texts := docxParagraphTexts(result)
+	allText := strings.Join(texts, "\n")
+
+	if strings.Contains(allText, "**") {
+		t.Errorf("output contains ** markdown markers\nparagraphs: %v", texts)
+	}
+	if strings.Contains(allText, "[link](http://x)") {
+		t.Errorf("output contains raw markdown link\nparagraphs: %v", texts)
+	}
+	if !strings.Contains(allText, "Bold") {
+		t.Errorf("output missing cleaned text\nparagraphs: %v", texts)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	docx "github.com/mmonterroca/docxgo/v2"
 	docxdomain "github.com/mmonterroca/docxgo/v2/domain"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/mdstrip"
 	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -100,15 +101,20 @@ func (g *DocxGenerative) fillParagraphWithContent(para docxdomain.Paragraph, con
 		if trimmed == "" {
 			continue
 		}
+		isBullet := strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")
+		cleaned := mdstrip.Strip(trimmed)
+		if cleaned == "" {
+			continue
+		}
 		if !first {
 			br, _ := para.AddRun()
 			br.AddBreak(docxdomain.BreakTypeLine)
 		}
 		r, _ := para.AddRun()
-		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-			r.SetText("• " + strings.TrimSpace(trimmed[2:]))
+		if isBullet {
+			r.SetText("• " + bulletText(cleaned))
 		} else {
-			r.SetText(trimmed)
+			r.SetText(cleaned)
 		}
 		first = false
 	}
@@ -120,17 +126,22 @@ func (g *DocxGenerative) addContentParagraphs(doc docxdomain.Document, content s
 		if trimmed == "" {
 			continue
 		}
+		isBullet := strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")
+		cleaned := mdstrip.Strip(trimmed)
+		if cleaned == "" {
+			continue
+		}
 
 		p, _ := doc.AddParagraph()
 
 		switch {
-		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
+		case isBullet:
 			p.SetStyle(docxdomain.StyleIDListParagraph)
 			r, _ := p.AddRun()
-			r.SetText(strings.TrimSpace(trimmed[2:]))
+			r.SetText(bulletText(cleaned))
 		default:
 			r, _ := p.AddRun()
-			r.SetText(trimmed)
+			r.SetText(cleaned)
 		}
 	}
 }
@@ -257,14 +268,13 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 				escapeXML(sec.Title) + `</w:t></w:r></w:p>`)
 			appended.WriteString(buildParagraphsXML(sec.Content))
 		}
-		insertAt := strings.LastIndex(out, "<w:sectPr")
-		if insertAt < 0 {
-			insertAt = strings.LastIndex(out, "</w:body>")
-		}
+		insertAt := findFooterInsertPoint(out)
 		if insertAt >= 0 {
 			out = out[:insertAt] + appended.String() + out[insertAt:]
 		}
 	}
+
+	out = stripEmptyBodyParagraphs(out)
 
 	return []byte(out)
 }
@@ -285,13 +295,18 @@ func buildParagraphsXML(content string) string {
 		if trimmed == "" {
 			continue
 		}
+		isBullet := strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ")
+		cleaned := mdstrip.Strip(trimmed)
+		if cleaned == "" {
+			continue
+		}
 		switch {
-		case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
-			text := strings.TrimSpace(trimmed[2:])
+		case isBullet:
+			text := bulletText(cleaned)
 			b.WriteString(`<w:p><w:pPr><w:pStyle w:val="ListBullet"/></w:pPr>`)
 			b.WriteString(`<w:r><w:t xml:space="preserve">` + escapeXML(text) + `</w:t></w:r></w:p>`)
 		default:
-			b.WriteString(`<w:p><w:r><w:t xml:space="preserve">` + escapeXML(trimmed) + `</w:t></w:r></w:p>`)
+			b.WriteString(`<w:p><w:r><w:t xml:space="preserve">` + escapeXML(cleaned) + `</w:t></w:r></w:p>`)
 		}
 	}
 	return b.String()
@@ -307,6 +322,49 @@ func hasBulletContent(sections []usecase.ContentSection) bool {
 		}
 	}
 	return false
+}
+
+func bulletText(cleaned string) string {
+	if len(cleaned) > 2 && (strings.HasPrefix(cleaned, "- ") || strings.HasPrefix(cleaned, "* ")) {
+		return strings.TrimSpace(cleaned[2:])
+	}
+	return strings.TrimSpace(cleaned)
+}
+
+var footerMarkerRe = regexp.MustCompile(`(?i)(с\s+уважением|действительно\s+\d|regards|sincerely)`)
+
+func findFooterInsertPoint(xml string) int {
+	paras := paragraphRe.FindAllStringIndex(xml, -1)
+	const tailCount = 10
+	start := 0
+	if len(paras) > tailCount {
+		start = len(paras) - tailCount
+	}
+	for _, loc := range paras[start:] {
+		text := extractParagraphText(xml[loc[0]:loc[1]])
+		if footerMarkerRe.MatchString(text) {
+			return loc[0]
+		}
+	}
+	insertAt := strings.LastIndex(xml, "<w:sectPr")
+	if insertAt < 0 {
+		insertAt = strings.LastIndex(xml, "</w:body>")
+	}
+	return insertAt
+}
+
+func stripEmptyBodyParagraphs(xml string) string {
+	return paragraphRe.ReplaceAllStringFunc(xml, func(para string) string {
+		if textContentRe.MatchString(para) {
+			return para
+		}
+		if strings.Contains(para, "<w:drawing") || strings.Contains(para, "<mc:") ||
+			strings.Contains(para, "<wps:") || strings.Contains(para, "<wpg:") ||
+			strings.Contains(para, "<w:spacing") {
+			return para
+		}
+		return ""
+	})
 }
 
 func ensureListBulletStyle(stylesXML []byte) []byte {

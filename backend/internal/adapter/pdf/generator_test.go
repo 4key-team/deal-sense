@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/mdstrip"
 	"github.com/daniil/deal-sense/backend/internal/adapter/pdf"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -123,7 +124,7 @@ func TestStripMarkdown(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := pdf.StripMarkdown(tt.input)
+			got := mdstrip.Strip(tt.input)
 			if got != tt.want {
 				t.Errorf("StripMarkdown(%q) = %q, want %q", tt.input, got, tt.want)
 			}
