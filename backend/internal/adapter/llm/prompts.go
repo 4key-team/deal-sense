@@ -36,6 +36,7 @@ Rules:
 - "tokens" is approximate token count for each section
 - "log" — list 4-6 generation steps with realistic timestamps (reading template, indexing context, filling fields, generating sections, building docx)
 - Generate professional, detailed content based on the context documents
+- Do NOT use markdown formatting in values — no **, ##, [], |table| — write plain text only
 IMPORTANT: Respond in ` + langName + `.`
 }
 
@@ -60,5 +61,10 @@ Rules:
 - "log" — list 4-6 generation steps with realistic timestamps
 - Generate professional, detailed content based on the context documents
 - If the template has existing text in sections, improve and expand it
+- Section titles must be meaningful business headings (e.g. "Введение", "Описание решения", "Стоимость")
+- Do NOT generate sections with technical/code-like titles (no variable names, no dots, no camelCase)
+- Do NOT generate boilerplate sections like "Date", "Signature", "Подпись", "Контакты" — these belong to the template footer, not the proposal body
+- Do NOT use markdown formatting in "content" — no **, ##, [], |table| — write plain text only
+- Use bullet lists with "- " prefix for list items
 IMPORTANT: Respond in ` + langName + `.`
 }
