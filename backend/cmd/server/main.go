@@ -61,6 +61,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	docxTemplate := parser.NewDocxTemplate()
 	docxGenerative := parser.NewDocxGenerative()
 	pdfGen := apppdf.NewMarotoPDFGenerator()
+	docxToPDF := apppdf.NewLibreOfficeConverter()
 
 	providers := []apphttp.ProviderInfo{
 		{ID: "anthropic", Name: "Anthropic", Models: []string{"claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-1"}},
@@ -71,7 +72,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
 	mdRenderer := parser.NewMarkdownRenderer()
-	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
+	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux

@@ -61,7 +61,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	t.Run("successful generation returns JSON", func(t *testing.T) {
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("filled document")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -92,7 +92,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("missing template", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -110,7 +110,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("invalid params JSON", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -132,7 +132,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	t.Run("llm error returns 500", func(t *testing.T) {
 		llm := &stubLLM{err: errors.New("llm down"), name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -151,7 +151,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	})
 
 	t.Run("invalid multipart", func(t *testing.T) {
-		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{}, &stubTemplateEngine{}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", strings.NewReader("bad"))
 		req.Header.Set("Content-Type", "multipart/form-data; boundary=bad")
 		rec := httptest.NewRecorder()
@@ -175,7 +175,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}`
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("filled document bytes")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "template text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -231,7 +231,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		llmResp := `{"params":{"x":"y"},"sections":[],"summary":"ok"}`
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -262,7 +262,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		tmpl := &stubTemplateEngine{result: []byte("filled")}
 		pdfGen := &stubPDFGenerator{result: []byte("%PDF-1.4 test content")}
 		genEng := &stubGenerativeEngine{result: []byte("gen")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, genEng, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, nil, genEng, stubPrompt, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -297,7 +297,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		pdfGen := &stubPDFGenerator{result: []byte("%PDF")}
 		genEng := &stubGenerativeEngine{result: []byte("gen")}
 		mdGen := &stubMDGenerator{result: []byte("# Proposal")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, genEng, stubPrompt, mdGen)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, pdfGen, nil, genEng, stubPrompt, mdGen)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -327,7 +327,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("should-not-be-used")}
 		genEng := &stubGenerativeEngine{result: []byte("generative-output")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "pdf text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, genEng, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "pdf text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, genEng, stubPrompt, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -357,7 +357,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("unused")}
 		genEng := &stubGenerativeEngine{result: []byte("clean-docx")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, genEng, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, genEng, stubPrompt, nil)
 
 		// Send request without template file
 		var buf bytes.Buffer
@@ -384,7 +384,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 	t.Run("no template without generative engine returns 400", func(t *testing.T) {
 		llm := &stubLLM{response: `{}`, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("unused")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, stubPrompt, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, stubPrompt, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
@@ -409,7 +409,7 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}
 		llm := &stubLLM{response: llmResp, name: "test"}
 		tmpl := &stubTemplateEngine{result: []byte("doc")}
-		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, promptFn, promptFn, nil, testLogger, nil, nil, nil, nil)
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, promptFn, promptFn, nil, testLogger, nil, nil, nil, nil, nil)
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)

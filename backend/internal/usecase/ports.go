@@ -51,6 +51,11 @@ type PDFGenerator interface {
 	Generate(ctx context.Context, input ContentInput) ([]byte, error)
 }
 
+// DOCXToPDFConverter converts a filled DOCX to PDF (e.g. via LibreOffice).
+type DOCXToPDFConverter interface {
+	Convert(ctx context.Context, docx []byte) ([]byte, error)
+}
+
 // MDGenerator creates a Markdown document from proposal data.
 type MDGenerator interface {
 	Render(ctx context.Context, input ContentInput) ([]byte, error)

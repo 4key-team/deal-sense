@@ -57,11 +57,15 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 	)
 
 	uc := usecase.NewGenerateProposal(llmProvider, h.parser, h.template, h.proposalPrompt(langName))
+	uc.SetLogger(h.logger)
 	if h.generativeEngine != nil && h.generativePrompt != nil {
 		uc.SetGenerativeEngine(h.generativeEngine, h.generativePrompt(langName))
 	}
 	if h.pdfGen != nil {
 		uc.SetPDFGenerator(h.pdfGen)
+	}
+	if h.docxToPDF != nil {
+		uc.SetDOCXToPDFConverter(h.docxToPDF)
 	}
 	if h.mdGen != nil {
 		uc.SetMDGenerator(h.mdGen)
@@ -69,7 +73,7 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 	result, usage, err := uc.Execute(r.Context(), templateName, templateData, contextFiles, userParams)
 	if err != nil {
 		h.logger.Error("proposal generation failed", "err", err)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, mapErrorToUserMessage(err.Error(), langName))
 		return
 	}
 

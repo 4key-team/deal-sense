@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -20,7 +21,9 @@ type GenerateProposal struct {
 	generative       GenerativeEngine
 	generativePrompt string
 	pdfGen           PDFGenerator
+	docxToPDF        DOCXToPDFConverter
 	mdGen            MDGenerator
+	logger           *slog.Logger
 }
 
 func NewGenerateProposal(llm LLMProvider, parser DocumentParser, template TemplateEngine, systemPrompt string) *GenerateProposal {
@@ -36,8 +39,23 @@ func (uc *GenerateProposal) SetPDFGenerator(g PDFGenerator) {
 	uc.pdfGen = g
 }
 
+func (uc *GenerateProposal) SetDOCXToPDFConverter(c DOCXToPDFConverter) {
+	uc.docxToPDF = c
+}
+
 func (uc *GenerateProposal) SetMDGenerator(g MDGenerator) {
 	uc.mdGen = g
+}
+
+func (uc *GenerateProposal) SetLogger(l *slog.Logger) {
+	uc.logger = l
+}
+
+func (uc *GenerateProposal) log() *slog.Logger {
+	if uc.logger != nil {
+		return uc.logger
+	}
+	return slog.Default()
 }
 
 type proposalLLMResponse struct {
@@ -208,10 +226,22 @@ func (uc *GenerateProposal) Execute(
 	}
 	proposal.SetLog(logEntries)
 
-	// Best-effort PDF generation.
-	if uc.pdfGen != nil {
+	// Best-effort PDF generation: prefer DOCX→PDF converter, fallback to Maroto.
+	var pdfDone bool
+	if uc.docxToPDF != nil && len(filled) > 0 {
+		pdfBytes, convErr := uc.docxToPDF.Convert(ctx, filled)
+		if convErr != nil {
+			uc.log().Warn("docx-to-pdf conversion failed, falling back to maroto", "err", convErr)
+		} else {
+			proposal.SetPDFResult(pdfBytes)
+			pdfDone = true
+		}
+	}
+	if !pdfDone && uc.pdfGen != nil {
 		pdfBytes, pdfErr := uc.pdfGen.Generate(ctx, contentInput)
-		if pdfErr == nil {
+		if pdfErr != nil {
+			uc.log().Warn("maroto pdf generation failed", "err", pdfErr)
+		} else {
 			proposal.SetPDFResult(pdfBytes)
 		}
 	}
@@ -219,7 +249,9 @@ func (uc *GenerateProposal) Execute(
 	// Best-effort Markdown generation.
 	if uc.mdGen != nil {
 		mdBytes, mdErr := uc.mdGen.Render(ctx, contentInput)
-		if mdErr == nil {
+		if mdErr != nil {
+			uc.log().Warn("markdown generation failed", "err", mdErr)
+		} else {
 			proposal.SetMDResult(mdBytes)
 		}
 	}
