@@ -41,6 +41,11 @@ func (f *fakeAPI) AnalyzeTender(ctx context.Context, req usecase.AnalyzeTenderRe
 	return f.resp, f.err
 }
 
+// GenerateProposal stub — not exercised by these tests.
+func (f *fakeAPI) GenerateProposal(context.Context, usecase.GenerateProposalRequest) (*usecase.GenerateProposalResponse, error) {
+	return nil, nil
+}
+
 // --- tests ---------------------------------------------------------------
 
 func TestAnalyzeHandler_NoDocument_AsksForFile(t *testing.T) {

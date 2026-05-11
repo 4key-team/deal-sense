@@ -39,8 +39,47 @@ type AnalyzeTenderResponse struct {
 	Effort       string
 }
 
+// GenerateProposalRequest is the input to a proposal-generation call.
+// Template is the .docx/.pdf/.md template file (Filename preserves the
+// extension so the backend picks the right engine). Context is a list of
+// supplementary materials parsed for the LLM. Params is forwarded as the
+// `params` JSON field.
+type GenerateProposalRequest struct {
+	Template         []byte
+	TemplateFilename string
+	ContextFiles     []ContextFile
+	Params           map[string]string
+}
+
+// ContextFile is a single supplementary document for proposal generation.
+type ContextFile struct {
+	Filename string
+	Data     []byte
+}
+
+// GeneratedSection mirrors one section status entry from the backend.
+type GeneratedSection struct {
+	Title  string
+	Status string
+	Tokens int
+}
+
+// GenerateProposalResponse is the parsed result of POST /api/proposal/generate.
+// DOCX/PDF/MD payloads are already base64-decoded into raw bytes; nil if the
+// backend omitted that format.
+type GenerateProposalResponse struct {
+	Template string
+	Summary  string
+	Mode     string
+	Sections []GeneratedSection
+	DOCX     []byte
+	PDF      []byte
+	MD       []byte
+}
+
 // APIClient is the port the bot uses to invoke Deal Sense backend endpoints.
 // Implementations live in adapter/dealsenseapi.
 type APIClient interface {
 	AnalyzeTender(ctx context.Context, req AnalyzeTenderRequest) (*AnalyzeTenderResponse, error)
+	GenerateProposal(ctx context.Context, req GenerateProposalRequest) (*GenerateProposalResponse, error)
 }

@@ -282,6 +282,11 @@ func (s *stubAPIClient) AnalyzeTender(ctx context.Context, req usecase.AnalyzeTe
 	return s.resp, s.err
 }
 
+// GenerateProposal stub — not exercised by /analyze tests.
+func (s *stubAPIClient) GenerateProposal(context.Context, usecase.GenerateProposalRequest) (*usecase.GenerateProposalResponse, error) {
+	return nil, nil
+}
+
 func stubBotForSend(t *testing.T) (*bot.Bot, *atomic.Int32) {
 	t.Helper()
 	var sends atomic.Int32

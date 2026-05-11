@@ -100,6 +100,11 @@ func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTend
 	return out, nil
 }
 
+// GenerateProposal stub for the RED step. The real impl lands in GREEN.
+func (c *HTTPClient) GenerateProposal(ctx context.Context, req telegram.GenerateProposalRequest) (*telegram.GenerateProposalResponse, error) {
+	return nil, nil
+}
+
 func writeAnalyzeMultipart(out io.Writer, req telegram.AnalyzeTenderRequest) (string, error) {
 	w := multipart.NewWriter(out)
 
