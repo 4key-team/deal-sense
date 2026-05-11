@@ -2,6 +2,8 @@ package telegram
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
 )
@@ -43,14 +45,55 @@ func NewAnalyzeHandler(api usecase.APIClient, replier Replier, profile string) *
 	return &AnalyzeHandler{api: api, replier: replier, profile: profile}
 }
 
-// Handle is a stub for the RED step — returns nil without contacting any
-// dependency, so every behavioural test fails on missing side effects.
+// Handle routes /analyze. Without an attached document it asks the user to
+// reply with one; with a document it calls the backend and posts the result.
 func (h *AnalyzeHandler) Handle(ctx context.Context, u *Update) error {
-	return nil
+	if u.Document == nil {
+		return h.replier.Reply(ctx, u.ChatID, msgAttachFile)
+	}
+	resp, err := h.api.AnalyzeTender(ctx, usecase.AnalyzeTenderRequest{
+		File:           u.Document.Data,
+		Filename:       u.Document.Filename,
+		CompanyProfile: h.profile,
+	})
+	if err != nil {
+		return h.replier.Reply(ctx, u.ChatID, fmt.Sprintf("%s %s", msgAnalysisErrorPrefix, err.Error()))
+	}
+	return h.replier.Reply(ctx, u.ChatID, FormatAnalyzeReply(resp))
 }
 
 // FormatAnalyzeReply renders a backend response into a chat-friendly message.
-// Stub for RED.
 func FormatAnalyzeReply(r *usecase.AnalyzeTenderResponse) string {
-	return ""
+	var b strings.Builder
+	fmt.Fprintf(&b, "Verdict: %s | Score: %.2f", r.Verdict, r.Score)
+	if r.Risk != "" {
+		fmt.Fprintf(&b, " | Risk: %s", r.Risk)
+	}
+	b.WriteString("\n")
+	if r.Summary != "" {
+		b.WriteString(r.Summary)
+		b.WriteString("\n")
+	}
+	if len(r.Pros) > 0 {
+		b.WriteString("\nPros:\n")
+		for _, p := range r.Pros {
+			fmt.Fprintf(&b, "+ %s — %s\n", p.Title, p.Desc)
+		}
+	}
+	if len(r.Cons) > 0 {
+		b.WriteString("\nCons:\n")
+		for _, c := range r.Cons {
+			fmt.Fprintf(&b, "- %s — %s\n", c.Title, c.Desc)
+		}
+	}
+	if len(r.Requirements) > 0 {
+		b.WriteString("\nRequirements:\n")
+		for _, q := range r.Requirements {
+			fmt.Fprintf(&b, "• %s (%s)\n", q.Label, q.Status)
+		}
+	}
+	if r.Effort != "" {
+		fmt.Fprintf(&b, "\nEffort: %s\n", r.Effort)
+	}
+	return b.String()
 }
