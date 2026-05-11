@@ -5,6 +5,7 @@ package dealsenseapi
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -100,9 +101,124 @@ func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTend
 	return out, nil
 }
 
-// GenerateProposal stub for the RED step. The real impl lands in GREEN.
+// GenerateProposal POSTs the template + context files + params JSON to
+// /api/proposal/generate and decodes the JSON response, base64-decoding
+// docx/pdf/md payloads into raw bytes.
 func (c *HTTPClient) GenerateProposal(ctx context.Context, req telegram.GenerateProposalRequest) (*telegram.GenerateProposalResponse, error) {
-	return nil, nil
+	body := &bytes.Buffer{}
+	contentType, err := writeGenerateMultipart(body, req)
+	if err != nil {
+		return nil, fmt.Errorf("build multipart: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/proposal/generate", body)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", contentType)
+	if c.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("backend returned %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
+
+	var raw struct {
+		Template string `json:"template"`
+		Summary  string `json:"summary"`
+		Mode     string `json:"mode"`
+		Sections []struct {
+			Title  string `json:"title"`
+			Status string `json:"status"`
+			Tokens int    `json:"tokens"`
+		} `json:"sections"`
+		DOCX string `json:"docx"`
+		PDF  string `json:"pdf"`
+		MD   string `json:"md"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	out := &telegram.GenerateProposalResponse{
+		Template: raw.Template,
+		Summary:  raw.Summary,
+		Mode:     raw.Mode,
+	}
+	for _, s := range raw.Sections {
+		out.Sections = append(out.Sections, telegram.GeneratedSection{
+			Title: s.Title, Status: s.Status, Tokens: s.Tokens,
+		})
+	}
+	if raw.DOCX != "" {
+		out.DOCX, err = base64.StdEncoding.DecodeString(raw.DOCX)
+		if err != nil {
+			return nil, fmt.Errorf("decode docx base64: %w", err)
+		}
+	}
+	if raw.PDF != "" {
+		out.PDF, err = base64.StdEncoding.DecodeString(raw.PDF)
+		if err != nil {
+			return nil, fmt.Errorf("decode pdf base64: %w", err)
+		}
+	}
+	if raw.MD != "" {
+		// Backend returns MD as plain string (not base64); be defensive
+		// and try base64 first, fall back to raw.
+		if decoded, err := base64.StdEncoding.DecodeString(raw.MD); err == nil {
+			out.MD = decoded
+		} else {
+			out.MD = []byte(raw.MD)
+		}
+	}
+	return out, nil
+}
+
+// writeGenerateMultipart writes template + context files + params JSON to
+// the multipart body. Mirrors backend handler_proposal.go field names.
+func writeGenerateMultipart(out io.Writer, req telegram.GenerateProposalRequest) (string, error) {
+	w := multipart.NewWriter(out)
+
+	fw, err := w.CreateFormFile("template", req.TemplateFilename)
+	if err != nil {
+		return "", err
+	}
+	if _, err := fw.Write(req.Template); err != nil {
+		return "", err
+	}
+
+	for _, cf := range req.ContextFiles {
+		cfw, err := w.CreateFormFile("context", cf.Filename)
+		if err != nil {
+			return "", err
+		}
+		if _, err := cfw.Write(cf.Data); err != nil {
+			return "", err
+		}
+	}
+
+	if len(req.Params) > 0 {
+		paramsJSON, err := json.Marshal(req.Params)
+		if err != nil {
+			return "", fmt.Errorf("marshal params: %w", err)
+		}
+		if err := w.WriteField("params", string(paramsJSON)); err != nil {
+			return "", err
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	return w.FormDataContentType(), nil
 }
 
 func writeAnalyzeMultipart(out io.Writer, req telegram.AnalyzeTenderRequest) (string, error) {
