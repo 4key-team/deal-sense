@@ -7,28 +7,45 @@
 
 ---
 
-## Session 2 — Каркас Telegram-обёртки + распространение Layer 1
+## Session 2 — Каркас Telegram-обёртки ✅ DONE (2026-05-12)
 
 **Цель**: Создать `cmd/telegram-bot/` thin wrapper вокруг существующих HTTP-endpoints с подключённым security guard.
 
-**TDD-декомпозиция** (RED→GREEN, отдельные коммиты):
+**Итог** (commits `e533320` → `200c870`, 13 коммитов в main):
+- ✅ Backend X-API-Key middleware (`internal/adapter/http/middleware.go:APIKeyAuth`) — добавлено сверх плана
+- ✅ env-based Config (`internal/adapter/telegram/config.go`) — BOT_TOKEN, ALLOWLIST_USER_IDS, API_BASE_URL, DEAL_SENSE_API_KEY
+- ✅ Allowlist VO (`internal/domain/auth/allowlist.go`) — NewAllowlist, IsAllowed, ErrEmptyAllowlist, ErrInvalidUserID
+- ✅ APIClient interface (`internal/usecase/telegram/ports.go`) + HTTPClient impl (`internal/adapter/dealsenseapi/client.go`)
+- ✅ /analyze handler (`internal/adapter/telegram/analyze.go`) + FormatAnalyzeReply
+- ✅ cmd/telegram-bot wiring с allowlistMiddleware + graceful shutdown (SIGINT/SIGTERM via signal.NotifyContext)
+- ✅ docker-compose + Dockerfile.telegram-bot + .env.example
+- ❌ `/generate` handler — отложен на Session 2.5
 
-1. `test(telegram): RED — config loader for bot token`
-2. `feat(telegram): GREEN — env-based config (BOT_TOKEN, ALLOWLIST_USER_IDS, API_BASE_URL)`
-3. `test(telegram): RED — auth allowlist guard (allowed/denied/empty allowlist)`
-4. `feat(telegram): GREEN — auth allowlist middleware via Telegram user_id`
-5. `test(telegram): RED — handler for /analyze command (file_id → API call)`
-6. `feat(telegram): GREEN — /analyze handler proxying to /api/tender/analyze`
-7. `test(telegram): RED — handler for /generate command`
-8. `feat(telegram): GREEN — /generate handler proxying to /api/proposal/generate`
-9. `feat(telegram): polling loop with graceful shutdown via context`
-10. `chore: docker-compose service for telegram-bot`
+**Библиотека**: `github.com/go-telegram/bot` v1.20.0 (вместо go-telegram-bot-api/v5 — выбрано за context-aware handlers + middleware из коробки, см. ADR-007).
 
-**Библиотека**: предварительно `go-telegram-bot-api/telegram-bot-api/v5` (de-facto standard, MIT). Проверить актуальность через `context7` MCP (если зарегистрируется — иначе WebSearch).
+**Security**: handlers не зовут LLM напрямую — только HTTP вызов в backend. Layer 1 работает на backend стороне.
 
-**Security**: handlers не зовут LLM напрямую — только HTTP вызов в существующий backend. Layer 1 уже работает на backend стороне.
+**Compliance**: code-reviewer (после refactor 200c870) дал TDD 7 / DDD 9 / CA 9 / Tests 9. TDD 7 — исторический долг по коммиту `d326358` (polling loop без RED-step), документирован как honest test-after. ADR-007 в `memory/decisions.md`.
 
-**Gate перед коммитом 9**: `go test ./... -race -cover` зелёный, coverage cmd/telegram-bot ≥90%.
+**Coverage**: `domain/auth` 100%, `adapter/telegram` 100%, `internal/config` 100%, `adapter/dealsenseapi` 95.2%, `cmd/telegram-bot` 86.1% (`main()` glue не покрывается). Race detector clean.
+
+---
+
+## Session 2.5 — /generate handler
+
+**Цель**: Добавить `/generate` команду в бота — proxy к `POST /api/proposal/generate`.
+
+**TDD-декомпозиция** (≤5 коммитов):
+1. `test(telegram): RED — APIClient.GenerateProposal contract` (multipart template + context files + params)
+2. `feat(telegram): GREEN — HTTPClient.GenerateProposal`
+3. `test(telegram): RED — /generate handler (template + optional context)`
+4. `feat(telegram): GREEN — /generate handler + reply with .docx attachment via SendDocument`
+5. `chore(telegram): wire RegisterHandler в main.go`
+
+**Нюансы**:
+- Backend handler `/api/proposal/generate` принимает `template` (single file), `context` (multiple files), `params` (JSON) — см. `backend/internal/adapter/http/handler_proposal.go`.
+- Ответ возвращает `docx`/`pdf` base64. Бот должен раскодировать и `b.SendDocument(...)` с правильным filename.
+- /generate UX: user шлёт template файлом, бот отвечает .docx. Если шаблон без плейсхолдеров → backend сам выбирает generative mode.
 
 ---
 
