@@ -99,9 +99,12 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 
 	replier := &botReplier{b: b, logger: logger}
 	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, replier, defaultCompanyProfile)
+	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
 		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, logger))
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/generate", bot.MatchTypePrefix,
+		makeGenerateHandler(generateHandler, b, defaultDocDownloader, logger))
 
 	logger.Info("telegram bot starting",
 		"api_base", cfg.APIBaseURL,
@@ -161,11 +164,43 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
-// makeGenerateHandler stub for the RED step — no-op so behavioural tests
-// fail. The real impl mirrors makeAnalyzeHandler: convert update, download
-// template, delegate to GenerateHandler.
+// makeGenerateHandler converts the library Update into our DTO (downloading
+// the attached template via dl) and delegates to the GenerateHandler.
 func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docDownloader, logger *slog.Logger) bot.HandlerFunc {
-	return func(context.Context, *bot.Bot, *models.Update) {}
+	return func(ctx context.Context, _ *bot.Bot, u *models.Update) {
+		if u.Message == nil {
+			return
+		}
+		dto := &telegramadapter.Update{
+			ChatID: u.Message.Chat.ID,
+			Text:   u.Message.Text,
+		}
+		if u.Message.From != nil {
+			dto.UserID = u.Message.From.ID
+		}
+
+		doc := documentFromMessage(u.Message)
+		if doc != nil {
+			data, filename, err := dl(ctx, b, doc)
+			if err != nil {
+				logger.Error("download template", "err", err)
+				_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID: u.Message.Chat.ID,
+					Text:   telegramadapter.MsgDownloadFailed + " " + err.Error(),
+				})
+				return
+			}
+			dto.Document = &telegramadapter.Document{
+				FileID:   doc.FileID,
+				Filename: filename,
+				Data:     data,
+			}
+		}
+
+		if err := h.Handle(ctx, dto); err != nil {
+			logger.Error("generate handle", "err", err)
+		}
+	}
 }
 
 // makeAnalyzeHandler converts the library Update into our DTO (downloading
