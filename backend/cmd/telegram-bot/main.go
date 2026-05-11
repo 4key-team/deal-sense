@@ -21,7 +21,7 @@ import (
 )
 
 // defaultCompanyProfile is the static company description fed into every
-// /analyze call until Session 2.5 introduces a per-user profile.
+// /analyze call. Per-user profile support is backlog.
 const defaultCompanyProfile = "Software development company"
 
 // docDownloader returns the file body and resolved filename for a Telegram
