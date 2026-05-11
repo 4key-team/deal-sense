@@ -3,7 +3,6 @@ package dealsenseapi_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -218,23 +217,6 @@ func TestWriteAnalyzeMultipart_PropagatesWriteError(t *testing.T) {
 				t.Error("expected error from failing writer, got nil")
 			}
 		})
-	}
-}
-
-func TestHTTPClient_AnalyzeTender_PropagatesMultipartError(t *testing.T) {
-	orig := dealsenseapi.MultipartBuilderForTest()
-	t.Cleanup(func() { dealsenseapi.SetMultipartBuilderForTest(orig) })
-	dealsenseapi.SetMultipartBuilderForTest(func(telegram.AnalyzeTenderRequest) (io.Reader, string, error) {
-		return nil, "", errors.New("simulated build failure")
-	})
-
-	client := dealsenseapi.NewHTTPClient("http://example.com", "", http.DefaultClient)
-	_, err := client.AnalyzeTender(context.Background(), telegram.AnalyzeTenderRequest{})
-	if err == nil {
-		t.Fatal("expected wrapped build error, got nil")
-	}
-	if !strings.Contains(err.Error(), "build multipart") {
-		t.Errorf("err = %v, want to mention 'build multipart'", err)
 	}
 }
 

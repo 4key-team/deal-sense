@@ -35,22 +35,14 @@ func NewHTTPClient(baseURL, apiKey string, c *http.Client) *HTTPClient {
 	}
 }
 
-// multipartBuilder is an overridable seam so tests can inject failures into
-// the (in production unreachable) multipart-build error branch. Default
-// implementation writes to a bytes.Buffer, which never fails.
-var multipartBuilder = func(req telegram.AnalyzeTenderRequest) (io.Reader, string, error) {
+// AnalyzeTender POSTs the file to /api/tender/analyze as multipart form and
+// decodes the JSON response into AnalyzeTenderResponse. The multipart body
+// is built over a bytes.Buffer whose Write never fails — so the writer
+// errors below are dead code in production, exercised only by
+// writeAnalyzeMultipart's own tests.
+func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTenderRequest) (*telegram.AnalyzeTenderResponse, error) {
 	body := &bytes.Buffer{}
 	contentType, err := writeAnalyzeMultipart(body, req)
-	if err != nil {
-		return nil, "", err
-	}
-	return body, contentType, nil
-}
-
-// AnalyzeTender POSTs the file to /api/tender/analyze as multipart form and
-// decodes the JSON response into AnalyzeTenderResponse.
-func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTenderRequest) (*telegram.AnalyzeTenderResponse, error) {
-	body, contentType, err := multipartBuilder(req)
 	if err != nil {
 		return nil, fmt.Errorf("build multipart: %w", err)
 	}
