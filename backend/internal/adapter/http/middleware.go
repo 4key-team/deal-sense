@@ -2,8 +2,14 @@ package http
 
 import (
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
+	"strconv"
+	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // CORS wraps a handler with CORS headers for the frontend dev server.
@@ -64,16 +70,63 @@ func Recover(logger *slog.Logger, next http.Handler) http.Handler {
 	})
 }
 
-// RateLimit caps the request rate per client (default key: RemoteAddr) via
-// a token-bucket. When the bucket for a key is empty the middleware
+// RateLimit caps the request rate per client (key: RemoteAddr IP) via a
+// token bucket. When the bucket for a key is empty the middleware
 // responds 429 + Retry-After and short-circuits — the wrapped handler is
-// not invoked. Configured rps=0 disables the middleware entirely (used to
-// keep the middleware chain stable when the limit is off).
+// not invoked. rps == 0 disables the middleware (passthrough).
 //
 // Defence-in-depth only — the primary rate-limit is the API gateway.
-// Stub for the RED step: always passthrough.
+// Per-key state is kept in-memory; for multi-instance deployments use the
+// gateway's distributed limiter as the source of truth.
 func RateLimit(rps float64, burst int, next http.Handler) http.Handler {
-	return next
+	if rps <= 0 {
+		return next
+	}
+	limit := rate.Limit(rps)
+	limiters := &perKeyLimiters{limit: limit, burst: burst}
+	retryAfter := strconv.Itoa(int(math.Ceil(1 / rps)))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := remoteIP(r)
+		if !limiters.get(key).Allow() {
+			w.Header().Set("Retry-After", retryAfter)
+			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// perKeyLimiters stores one token-bucket per key. No eviction — fine for
+// the local defence-in-depth role; high cardinality is handled by the
+// gateway anyway.
+type perKeyLimiters struct {
+	mu       sync.Mutex
+	limit    rate.Limit
+	burst    int
+	limiters map[string]*rate.Limiter
+}
+
+func (p *perKeyLimiters) get(key string) *rate.Limiter {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.limiters == nil {
+		p.limiters = map[string]*rate.Limiter{}
+	}
+	lim, ok := p.limiters[key]
+	if !ok {
+		lim = rate.NewLimiter(p.limit, p.burst)
+		p.limiters[key] = lim
+	}
+	return lim
+}
+
+func remoteIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // APIKeyAuth gates requests behind the X-API-Key header. When expectedKey is
