@@ -5,4 +5,11 @@ package telegram
 const (
 	msgAttachFile          = "Пришлите файл тендера ответом на эту команду."
 	msgAnalysisErrorPrefix = "❌ Ошибка анализа:"
+
+	// Exported strings are used by the cmd-level wiring (auth middleware,
+	// runtime adapter). Keeping them all here means translation work
+	// touches one file.
+	MsgDenied              = "🚫 Доступ запрещён."
+	MsgDownloadFailed      = "❌ Не удалось скачать файл:"
+	MsgFallbackHint        = "Используйте /analyze ответом на файл тендера."
 )
