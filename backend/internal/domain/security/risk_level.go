@@ -38,10 +38,13 @@ const (
 )
 
 // NewRiskLevel validates the supplied string and returns the typed value.
-// Stub for the RED step — always returns ErrInvalidRiskLevel so behavioural
-// tests fail at runtime.
+// Only the three canonical tokens (case-sensitive) are accepted.
 func NewRiskLevel(s string) (RiskLevel, error) {
-	return "", ErrInvalidRiskLevel
+	switch RiskLevel(s) {
+	case RiskSafeRead, RiskModify, RiskDestructive:
+		return RiskLevel(s), nil
+	}
+	return "", fmt.Errorf("%w: %q", ErrInvalidRiskLevel, s)
 }
 
 // String returns the canonical token for the level.
@@ -53,26 +56,40 @@ func (r RiskLevel) String() string {
 // NewEndpointRegistry and Register; queries use Lookup. Registry is the
 // machine-readable equivalent of an ops runbook — Layer 4 coupling tests
 // assert every wired route appears here.
-type EndpointRegistry struct{}
+type EndpointRegistry struct {
+	levels map[string]RiskLevel
+	order  []string
+}
 
-// NewEndpointRegistry returns an empty registry. Stub for the RED step.
+// NewEndpointRegistry returns an empty registry.
 func NewEndpointRegistry() *EndpointRegistry {
-	return &EndpointRegistry{}
+	return &EndpointRegistry{levels: map[string]RiskLevel{}}
 }
 
-// Register stores a risk level for the given path. Stub returns nil so
-// tests fall through to Lookup misses.
+// Register stores a risk level for the given path. Returns
+// ErrDuplicateEndpoint if path was already registered.
 func (r *EndpointRegistry) Register(path string, level RiskLevel) error {
+	if _, exists := r.levels[path]; exists {
+		return fmt.Errorf("%w: %q", ErrDuplicateEndpoint, path)
+	}
+	r.levels[path] = level
+	r.order = append(r.order, path)
 	return nil
 }
 
-// Lookup returns the risk level for path. Stub always returns
-// ErrUnannotatedEndpoint.
+// Lookup returns the risk level for path, or ErrUnannotatedEndpoint if path
+// has no annotation.
 func (r *EndpointRegistry) Lookup(path string) (RiskLevel, error) {
-	return "", fmt.Errorf("%w: %q", ErrUnannotatedEndpoint, path)
+	level, ok := r.levels[path]
+	if !ok {
+		return "", fmt.Errorf("%w: %q", ErrUnannotatedEndpoint, path)
+	}
+	return level, nil
 }
 
-// Paths returns all registered paths in insertion order. Stub returns nil.
+// Paths returns all registered paths in the order they were registered.
 func (r *EndpointRegistry) Paths() []string {
-	return nil
+	out := make([]string, len(r.order))
+	copy(out, r.order)
+	return out
 }
