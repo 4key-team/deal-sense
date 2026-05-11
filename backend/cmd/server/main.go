@@ -76,9 +76,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	mux := apphttp.NewRouter(h)
 
 	var handler http.Handler = mux
+	handler = apphttp.APIKeyAuth(cfg.APIKey, handler)
 	handler = apphttp.CORS("*", handler)
 	handler = apphttp.Logger(logger, handler)
 	handler = apphttp.Recover(logger, handler)
+	if cfg.APIKey != "" {
+		logger.Info("api key auth enabled")
+	}
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

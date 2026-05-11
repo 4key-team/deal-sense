@@ -66,10 +66,18 @@ func Recover(logger *slog.Logger, next http.Handler) http.Handler {
 
 // APIKeyAuth gates requests behind the X-API-Key header. When expectedKey is
 // empty the middleware is a passthrough — this preserves open-access local
-// dev while production deployments inject a real key via env var.
-//
-// Stub for RED step: ignores expectedKey, always passes through. Real
-// implementation lands in the GREEN commit.
+// dev while production deployments inject a real key via env var. CORS must
+// be wrapped outside this middleware so preflight requests succeed without
+// the header.
 func APIKeyAuth(expectedKey string, next http.Handler) http.Handler {
-	return next
+	if expectedKey == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != expectedKey {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

@@ -13,6 +13,7 @@ type Config struct {
 	LLMAPIKey   string
 	LLMModel    string
 	LogLevel    string
+	APIKey      string
 }
 
 func Load() Config {
@@ -23,5 +24,6 @@ func Load() Config {
 		LLMAPIKey:   os.Getenv("LLM_API_KEY"),
 		LLMModel:    cmp.Or(os.Getenv("LLM_MODEL"), "claude-sonnet-4-5"),
 		LogLevel:    strings.ToLower(cmp.Or(os.Getenv("LOG_LEVEL"), "info")),
+		APIKey:      os.Getenv("DEAL_SENSE_API_KEY"),
 	}
 }

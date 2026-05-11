@@ -54,6 +54,7 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("LLM_BASE_URL", "https://api.openai.com/v1")
 	t.Setenv("LLM_API_KEY", "sk-test-key")
 	t.Setenv("LLM_MODEL", "gpt-4o")
+	t.Setenv("DEAL_SENSE_API_KEY", "deal-sense-secret")
 
 	cfg := config.Load()
 
@@ -71,5 +72,16 @@ func TestLoad_FromEnv(t *testing.T) {
 	}
 	if cfg.LLMModel != "gpt-4o" {
 		t.Errorf("LLMModel = %q, want gpt-4o", cfg.LLMModel)
+	}
+	if cfg.APIKey != "deal-sense-secret" {
+		t.Errorf("APIKey = %q, want deal-sense-secret", cfg.APIKey)
+	}
+}
+
+func TestLoad_APIKeyEmptyByDefault(t *testing.T) {
+	t.Setenv("DEAL_SENSE_API_KEY", "")
+	cfg := config.Load()
+	if cfg.APIKey != "" {
+		t.Errorf("APIKey = %q, want empty (open access by default)", cfg.APIKey)
 	}
 }
