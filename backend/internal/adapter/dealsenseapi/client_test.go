@@ -404,17 +404,69 @@ func TestHTTPClient_GenerateProposal_ErrorOnBadJSON(t *testing.T) {
 }
 
 func TestHTTPClient_GenerateProposal_ErrorOnBadBase64(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"docx":"%%%not-base64%%%"}`))
-	}))
-	defer srv.Close()
+	cases := []struct {
+		name string
+		json string
+	}{
+		{"bad docx", `{"docx":"%%%not-base64%%%"}`},
+		{"bad pdf", `{"pdf":"%%%not-base64%%%"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(tc.json))
+			}))
+			defer srv.Close()
 
-	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+			client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+			_, err := client.GenerateProposal(context.Background(), telegram.GenerateProposalRequest{
+				Template: []byte("x"), TemplateFilename: "t.docx",
+			})
+			if err == nil {
+				t.Fatal("expected base64 decode error")
+			}
+		})
+	}
+}
+
+func TestHTTPClient_GenerateProposal_TransportError(t *testing.T) {
+	client := dealsenseapi.NewHTTPClient("http://127.0.0.1:1", "", nil)
 	_, err := client.GenerateProposal(context.Background(), telegram.GenerateProposalRequest{
 		Template: []byte("x"), TemplateFilename: "t.docx",
 	})
 	if err == nil {
-		t.Fatal("expected base64 decode error")
+		t.Fatal("expected transport error")
+	}
+}
+
+func TestHTTPClient_GenerateProposal_InvalidURL(t *testing.T) {
+	client := dealsenseapi.NewHTTPClient("http://example.com\x7f", "", http.DefaultClient)
+	_, err := client.GenerateProposal(context.Background(), telegram.GenerateProposalRequest{
+		Template: []byte("x"), TemplateFilename: "t.docx",
+	})
+	if err == nil {
+		t.Fatal("expected request-build error")
+	}
+}
+
+func TestHTTPClient_GenerateProposal_MDPlainString(t *testing.T) {
+	// Backend sometimes returns MD as plain text (not base64). Verify
+	// fallback to raw string.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"md":"# Plain markdown"}`))
+	}))
+	defer srv.Close()
+
+	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+	resp, err := client.GenerateProposal(context.Background(), telegram.GenerateProposalRequest{
+		Template: []byte("x"), TemplateFilename: "t.docx",
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	// "# Plain markdown" is not valid base64 → fallback applies.
+	if string(resp.MD) != "# Plain markdown" {
+		t.Errorf("MD = %q, want raw '# Plain markdown'", string(resp.MD))
 	}
 }
 
