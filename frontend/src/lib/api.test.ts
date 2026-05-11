@@ -27,6 +27,30 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+describe("X-API-Key header", () => {
+  it("forwards DEAL_SENSE_API_KEY from settings when set", async () => {
+    localStorage.setItem(
+      "ds:llm-settings",
+      JSON.stringify({ dealSenseApiKey: "shared-key" }),
+    );
+    mockFetch.mockReturnValueOnce(jsonResponse({ providers: [] }));
+
+    await listProviders();
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers["X-API-Key"]).toBe("shared-key");
+  });
+
+  it("omits X-API-Key when not configured", async () => {
+    mockFetch.mockReturnValueOnce(jsonResponse({ providers: [] }));
+
+    await listProviders();
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers["X-API-Key"]).toBeUndefined();
+  });
+});
+
 describe("analyzeTender", () => {
   it("sends multipart with files and company_profile", async () => {
     mockFetch.mockReturnValueOnce(
