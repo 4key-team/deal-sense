@@ -1,5 +1,11 @@
 package llm
 
+// SecurityDirectives returns critical security directives prepended to every
+// LLM system prompt. Stub — real content lands in the GREEN commit.
+func SecurityDirectives() string {
+	return ""
+}
+
 // TenderAnalysisPrompt returns the system prompt for tender analysis.
 func TenderAnalysisPrompt(langName string) string {
 	return `You are a tender analysis expert. Analyze tender documents against a company profile.
