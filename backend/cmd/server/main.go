@@ -75,13 +75,30 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
 	mux := apphttp.NewRouter(h)
 
-	var handler http.Handler = mux
-	handler = apphttp.APIKeyAuth(cfg.APIKey, handler)
+	// Health probes bypass auth + rate limit so orchestrators can hit them
+	// without holding an API key and without contributing to the per-IP
+	// bucket.
+	gated := http.Handler(mux)
+	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, gated)
+	gated = apphttp.APIKeyAuth(cfg.APIKey, gated)
+
+	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		gated.ServeHTTP(w, r)
+	})
+
+	var handler http.Handler = combined
 	handler = apphttp.CORS("*", handler)
 	handler = apphttp.Logger(logger, handler)
 	handler = apphttp.Recover(logger, handler)
 	if cfg.APIKey != "" {
 		logger.Info("api key auth enabled")
+	}
+	if cfg.RateLimitRPS > 0 {
+		logger.Info("rate limit enabled", "rps", cfg.RateLimitRPS, "burst", cfg.RateLimitBurst)
 	}
 
 	srv := &http.Server{
