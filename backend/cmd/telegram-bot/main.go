@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -130,9 +131,21 @@ func (r *botReplier) Reply(ctx context.Context, chatID int64, text string) error
 	return err
 }
 
-// ReplyDocument is a stub for the RED step — the real impl lands in GREEN.
+// ReplyDocument uploads data as a Telegram document with the given filename
+// and caption.
 func (r *botReplier) ReplyDocument(ctx context.Context, chatID int64, filename string, data []byte, caption string) error {
-	return nil
+	_, err := r.b.SendDocument(ctx, &bot.SendDocumentParams{
+		ChatID: chatID,
+		Document: &models.InputFileUpload{
+			Filename: filename,
+			Data:     bytes.NewReader(data),
+		},
+		Caption: caption,
+	})
+	if err != nil {
+		r.logger.Error("send document", "chat_id", chatID, "filename", filename, "err", err)
+	}
+	return err
 }
 
 func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
