@@ -423,6 +423,118 @@ func TestMakeAnalyzeHandler_LogsHandleError(t *testing.T) {
 	})
 }
 
+// --- makeGenerateHandler tests ------------------------------------------
+
+func TestMakeGenerateHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
+	b, sends := stubBotForSend(t)
+	api := &stubAPIClient{}
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+	h := makeGenerateHandler(gh, b, nopDownloader, discardLogger())
+	h(context.Background(), b, &models.Update{})
+	if api.calls != 0 || sends.Load() != 0 {
+		t.Errorf("expected no work for update without message; api=%d sends=%d", api.calls, sends.Load())
+	}
+}
+
+func TestMakeGenerateHandler_NoDocument_AsksForTemplate(t *testing.T) {
+	b, sends := stubBotForSend(t)
+	api := &stubAPIClient{}
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+
+	h := makeGenerateHandler(gh, b, nopDownloader, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/generate"},
+	})
+	if sends.Load() != 1 {
+		t.Errorf("sendMessage calls = %d, want 1 (template prompt)", sends.Load())
+	}
+}
+
+// stubGenerateAPI satisfies APIClient with a configurable GenerateProposal.
+type stubGenerateAPI struct {
+	gotReq usecase.GenerateProposalRequest
+	resp   *usecase.GenerateProposalResponse
+	err    error
+	calls  int
+}
+
+func (s *stubGenerateAPI) AnalyzeTender(context.Context, usecase.AnalyzeTenderRequest) (*usecase.AnalyzeTenderResponse, error) {
+	return nil, errors.New("not used")
+}
+func (s *stubGenerateAPI) GenerateProposal(_ context.Context, req usecase.GenerateProposalRequest) (*usecase.GenerateProposalResponse, error) {
+	s.calls++
+	s.gotReq = req
+	return s.resp, s.err
+}
+
+func TestMakeGenerateHandler_WithTemplate_DownloadsAndCallsAPI(t *testing.T) {
+	// stubBotForSend used for sendDocument tracking too — both call /sendMessage
+	// in the JSON RPC layer but SendDocument hits /sendDocument. We accept any
+	// 2xx and just verify API was called with right body.
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/getMe"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"id":1,"is_bot":true,"first_name":"x"}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
+		}
+	}))
+	defer stub.Close()
+	b, err := bot.New("t", bot.WithServerURL(stub.URL))
+	if err != nil {
+		t.Fatalf("bot.New: %v", err)
+	}
+
+	api := &stubGenerateAPI{resp: &usecase.GenerateProposalResponse{Mode: "placeholder", DOCX: []byte("DOCXBYTES")}}
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+
+	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
+		return []byte("TEMPLATE"), doc.FileName, nil
+	})
+
+	h := makeGenerateHandler(gh, b, dl, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{
+			Chat:     models.Chat{ID: 5},
+			Text:     "/generate",
+			Document: &models.Document{FileID: "f1", FileName: "tpl.docx"},
+		},
+	})
+	if api.calls != 1 {
+		t.Errorf("api.GenerateProposal calls = %d, want 1", api.calls)
+	}
+	if api.gotReq.TemplateFilename != "tpl.docx" {
+		t.Errorf("filename = %q", api.gotReq.TemplateFilename)
+	}
+	if string(api.gotReq.Template) != "TEMPLATE" {
+		t.Errorf("template = %q", string(api.gotReq.Template))
+	}
+}
+
+func TestMakeGenerateHandler_DownloadError_RepliesToUser(t *testing.T) {
+	b, sends := stubBotForSend(t)
+	api := &stubGenerateAPI{}
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+
+	failingDL := docDownloader(func(context.Context, *bot.Bot, *models.Document) ([]byte, string, error) {
+		return nil, "", errors.New("boom")
+	})
+
+	h := makeGenerateHandler(gh, b, failingDL, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{
+			Chat:     models.Chat{ID: 5},
+			Document: &models.Document{FileID: "f1", FileName: "x.docx"},
+		},
+	})
+	if api.calls != 0 {
+		t.Errorf("api.GenerateProposal called despite download error")
+	}
+	if sends.Load() != 1 {
+		t.Errorf("expected one user-facing error reply, sends=%d", sends.Load())
+	}
+}
+
 func TestMakeAnalyzeHandler_DownloadError_RepliesToUser(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	api := &stubAPIClient{}

@@ -161,6 +161,13 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
+// makeGenerateHandler stub for the RED step — no-op so behavioural tests
+// fail. The real impl mirrors makeAnalyzeHandler: convert update, download
+// template, delegate to GenerateHandler.
+func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docDownloader, logger *slog.Logger) bot.HandlerFunc {
+	return func(context.Context, *bot.Bot, *models.Update) {}
+}
+
 // makeAnalyzeHandler converts the library Update into our DTO (downloading
 // any attached document via dl) and delegates to the AnalyzeHandler.
 func makeAnalyzeHandler(h *telegramadapter.AnalyzeHandler, b *bot.Bot, dl docDownloader, logger *slog.Logger) bot.HandlerFunc {
