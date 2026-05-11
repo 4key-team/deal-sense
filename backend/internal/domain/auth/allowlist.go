@@ -4,7 +4,10 @@
 // who is allowed is a business rule, not an infrastructure concern.
 package auth
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrEmptyAllowlist indicates an attempt to construct an Allowlist with no
 // user IDs — that would silently allow no one, which is almost always a
@@ -17,14 +20,29 @@ var ErrInvalidUserID = errors.New("auth: user ID must be positive")
 
 // Allowlist is the immutable set of Telegram user IDs permitted to interact
 // with the bot. Construct via NewAllowlist — the zero value is invalid.
-type Allowlist struct{}
+type Allowlist struct {
+	members map[int64]struct{}
+}
 
-// NewAllowlist validates and returns an Allowlist. Stub for RED step.
+// NewAllowlist validates the provided IDs and returns an Allowlist. Returns
+// ErrEmptyAllowlist if ids is nil/empty, ErrInvalidUserID wrapped with the
+// offending value if any ID is ≤ 0. Duplicates are silently collapsed.
 func NewAllowlist(ids []int64) (*Allowlist, error) {
-	return nil, nil
+	if len(ids) == 0 {
+		return nil, ErrEmptyAllowlist
+	}
+	members := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, fmt.Errorf("%w: %d", ErrInvalidUserID, id)
+		}
+		members[id] = struct{}{}
+	}
+	return &Allowlist{members: members}, nil
 }
 
 // IsAllowed reports whether the given user ID is in the allowlist.
 func (a *Allowlist) IsAllowed(id int64) bool {
-	return false
+	_, ok := a.members[id]
+	return ok
 }
