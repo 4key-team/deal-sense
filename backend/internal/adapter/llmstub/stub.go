@@ -32,14 +32,32 @@ type Provider struct {
 
 // New returns a Provider that replies with the given responses in order.
 // When the sequence is exhausted GenerateCompletion returns
-// ErrScriptExhausted. Pass a single response to use it for every call.
+// ErrScriptExhausted. Pass a single response to use it for every call,
+// or duplicate it manually for longer scripts.
 func New(name string, responses ...string) *Provider {
-	return nil
+	cp := make([]string, len(responses))
+	copy(cp, responses)
+	return &Provider{
+		name:      name,
+		responses: cp,
+	}
 }
 
-// GenerateCompletion stub for RED step — returns empty response, nil error.
+// GenerateCompletion records the prompts and returns the next scripted
+// response, or ErrScriptExhausted if no responses remain.
 func (p *Provider) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
-	return "", domain.TokenUsage{}, nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.systemPrompts = append(p.systemPrompts, systemPrompt)
+	p.userPrompts = append(p.userPrompts, userPrompt)
+
+	if p.idx >= len(p.responses) {
+		return "", domain.TokenUsage{}, ErrScriptExhausted
+	}
+	resp := p.responses[p.idx]
+	p.idx++
+	return resp, domain.TokenUsage{}, nil
 }
 
 // CheckConnection always succeeds.
@@ -61,17 +79,27 @@ func (p *Provider) Name() string {
 	return p.name
 }
 
-// SystemPrompts returns a copy of every system prompt observed so far.
+// SystemPrompts returns a defensive copy of every system prompt observed.
 func (p *Provider) SystemPrompts() []string {
-	return nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]string, len(p.systemPrompts))
+	copy(out, p.systemPrompts)
+	return out
 }
 
-// UserPrompts returns a copy of every user prompt observed so far.
+// UserPrompts returns a defensive copy of every user prompt observed.
 func (p *Provider) UserPrompts() []string {
-	return nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]string, len(p.userPrompts))
+	copy(out, p.userPrompts)
+	return out
 }
 
 // CallCount returns the number of GenerateCompletion calls made.
 func (p *Provider) CallCount() int {
-	return 0
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.systemPrompts)
 }
