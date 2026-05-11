@@ -125,7 +125,10 @@ accidental DESTRUCTIVE classification until Layer 5 lands.
 - [ ] Layer 3: `infra-side-requirements.md` reviewed by DevOps; controls implemented in target platform
 - [x] Layer 4: coupling tests passing; endpoint registry populated
 - [ ] Layer 5: not required until a DESTRUCTIVE endpoint exists
+- [x] Health probes `/healthz` + `/readyz` wired (ADR-009)
+- [x] Per-IP rate limit middleware (`RATE_LIMIT_RPS`) — defence-in-depth (ADR-009)
 - [ ] Tool annotations exported via observability endpoint (e.g. `/metrics/security`) — backlog
+- [ ] Secrets manager integration (Vault / SOPS / cloud KMS) — backlog
 - [ ] Daniil + DevOps signed off on the release
 
 ---

@@ -40,17 +40,17 @@ Source: `reflective-agent-defaults v1.4 §Layer 3`. Companion to ADR-006
 | Control | App-side hook |
 |---------|---------------|
 | Scoped tokens | `X-API-Key` middleware (`internal/adapter/http/middleware.go:APIKeyAuth`). Configured per-deployment via `DEAL_SENSE_API_KEY`. |
-| Rate limit | Application-level rate limit middleware is defence-in-depth (see backlog) but the primary mitigation is the gateway. |
+| Rate limit | Application-level per-IP token-bucket middleware (`middleware.go:RateLimit`, configured via `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST`). Defence-in-depth — primary mitigation is still the gateway. |
 | DESTRUCTIVE guard | `domain/security.RiskLevel` + `EndpointRegistry` (ADR-008). When DESTRUCTIVE endpoints land they will be wired with Layer 5 out-of-band confirmation. |
 | Access logs | `apphttp.Logger` middleware in `cmd/server/main.go` emits structured slog records. |
-| Health probes | Not yet present — see backlog in master plan. |
+| Health probes | `/healthz` (liveness) + `/readyz` (readiness) wired in `cmd/server` (ADR-009). Both bypass APIKeyAuth and RateLimit. |
 
 ---
 
 ## Open items before production deployment
 
-- [ ] Health/readiness probes (`/healthz`, `/readyz`) wired into `cmd/server`.
-- [ ] Rate limit middleware on handler level (defence-in-depth with the gateway).
+- [x] Health/readiness probes (`/healthz`, `/readyz`) wired into `cmd/server` — ADR-009.
+- [x] Rate limit middleware on handler level (defence-in-depth) — ADR-009.
 - [ ] Secrets manager integration (currently plain env vars).
 - [ ] Pre-flight checklist sign-off — see `docs/security/SECURITY.md`.
 
