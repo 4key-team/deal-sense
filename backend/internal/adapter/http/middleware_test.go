@@ -64,6 +64,70 @@ func TestLogger(t *testing.T) {
 	}
 }
 
+func TestAPIKeyAuth(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	tests := []struct {
+		name       string
+		expected   string
+		sent       string
+		sendHeader bool
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "empty expected key acts as passthrough",
+			expected:   "",
+			sendHeader: false,
+			wantStatus: http.StatusOK,
+			wantBody:   "ok",
+		},
+		{
+			name:       "missing header when key configured returns 401",
+			expected:   "secret-key",
+			sendHeader: false,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "wrong header value returns 401",
+			expected:   "secret-key",
+			sent:       "wrong-key",
+			sendHeader: true,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "matching header passes through",
+			expected:   "secret-key",
+			sent:       "secret-key",
+			sendHeader: true,
+			wantStatus: http.StatusOK,
+			wantBody:   "ok",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := handler.APIKeyAuth(tt.expected, inner)
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.sendHeader {
+				req.Header.Set("X-API-Key", tt.sent)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			if tt.wantBody != "" && !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Errorf("body = %q, want to contain %q", rec.Body.String(), tt.wantBody)
+			}
+		})
+	}
+}
+
 func TestRecover(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))

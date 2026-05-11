@@ -63,3 +63,13 @@ func Recover(logger *slog.Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// APIKeyAuth gates requests behind the X-API-Key header. When expectedKey is
+// empty the middleware is a passthrough — this preserves open-access local
+// dev while production deployments inject a real key via env var.
+//
+// Stub for RED step: ignores expectedKey, always passes through. Real
+// implementation lands in the GREEN commit.
+func APIKeyAuth(expectedKey string, next http.Handler) http.Handler {
+	return next
+}
