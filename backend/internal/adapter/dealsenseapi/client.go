@@ -3,8 +3,14 @@
 package dealsenseapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase/telegram"
 )
@@ -22,11 +28,101 @@ func NewHTTPClient(baseURL, apiKey string, c *http.Client) *HTTPClient {
 	if c == nil {
 		c = http.DefaultClient
 	}
-	return &HTTPClient{baseURL: baseURL, apiKey: apiKey, http: c}
+	return &HTTPClient{
+		baseURL: strings.TrimRight(baseURL, "/"),
+		apiKey:  apiKey,
+		http:    c,
+	}
 }
 
-// AnalyzeTender is a stub for the RED step — returns nil/nil so the
-// accompanying test fails at runtime instead of compile-time.
+// multipartBuilder is an overridable seam so tests can inject failures into
+// the (in production unreachable) multipart-build error branch. Default
+// implementation writes to a bytes.Buffer, which never fails.
+var multipartBuilder = func(req telegram.AnalyzeTenderRequest) (io.Reader, string, error) {
+	body := &bytes.Buffer{}
+	contentType, err := writeAnalyzeMultipart(body, req)
+	if err != nil {
+		return nil, "", err
+	}
+	return body, contentType, nil
+}
+
+// AnalyzeTender POSTs the file to /api/tender/analyze as multipart form and
+// decodes the JSON response into AnalyzeTenderResponse.
 func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTenderRequest) (*telegram.AnalyzeTenderResponse, error) {
-	return nil, nil
+	body, contentType, err := multipartBuilder(req)
+	if err != nil {
+		return nil, fmt.Errorf("build multipart: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/tender/analyze", body)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", contentType)
+	if c.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", c.apiKey)
+	}
+
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("backend returned %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
+
+	var raw struct {
+		Verdict      string  `json:"verdict"`
+		Risk         string  `json:"risk"`
+		Score        float64 `json:"score"`
+		Summary      string  `json:"summary"`
+		Pros         []struct{ Title, Desc string } `json:"pros"`
+		Cons         []struct{ Title, Desc string } `json:"cons"`
+		Requirements []struct{ Label, Status string } `json:"requirements"`
+		Effort       string `json:"effort"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	out := &telegram.AnalyzeTenderResponse{
+		Verdict: raw.Verdict,
+		Risk:    raw.Risk,
+		Score:   raw.Score,
+		Summary: raw.Summary,
+		Effort:  raw.Effort,
+	}
+	for _, p := range raw.Pros {
+		out.Pros = append(out.Pros, telegram.ProConItem{Title: p.Title, Desc: p.Desc})
+	}
+	for _, c := range raw.Cons {
+		out.Cons = append(out.Cons, telegram.ProConItem{Title: c.Title, Desc: c.Desc})
+	}
+	for _, r := range raw.Requirements {
+		out.Requirements = append(out.Requirements, telegram.RequirementItem{Label: r.Label, Status: r.Status})
+	}
+	return out, nil
+}
+
+func writeAnalyzeMultipart(out io.Writer, req telegram.AnalyzeTenderRequest) (string, error) {
+	w := multipart.NewWriter(out)
+
+	if err := w.WriteField("company_profile", req.CompanyProfile); err != nil {
+		return "", err
+	}
+	fw, err := w.CreateFormFile("files", req.Filename)
+	if err != nil {
+		return "", err
+	}
+	if _, err := fw.Write(req.File); err != nil {
+		return "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	return w.FormDataContentType(), nil
 }
