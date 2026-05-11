@@ -6,11 +6,13 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/telegram"
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 )
 
 // extractUserID pulls the originating user ID out of any update kind we
-// care about. Returns 0 if the update has no user attached.
+// care about. Returns 0 if the update has no user attached — those
+// updates fall through unchanged.
 func extractUserID(u *models.Update) int64 {
 	switch {
 	case u == nil:
@@ -36,12 +38,24 @@ func extractChatID(u *models.Update) int64 {
 	return 0
 }
 
-// allowlistMiddleware stub — passes every update through without checking,
-// so TestAllowlistMiddleware/denied_user_blocked_and_notified fails on the
-// missing denial side-effect. The GREEN commit replaces it with the real
-// guard.
+// allowlistMiddleware blocks updates from users outside the allowlist with
+// a polite refusal posted via send. Updates without a user (system events)
+// pass through.
 func allowlistMiddleware(list *auth.Allowlist, send func(ctx context.Context, chatID int64, text string)) bot.Middleware {
 	return func(next bot.HandlerFunc) bot.HandlerFunc {
-		return next
+		return func(ctx context.Context, b *bot.Bot, u *models.Update) {
+			uid := extractUserID(u)
+			if uid == 0 {
+				next(ctx, b, u)
+				return
+			}
+			if !list.IsAllowed(uid) {
+				if chatID := extractChatID(u); chatID != 0 {
+					send(ctx, chatID, telegram.MsgDenied)
+				}
+				return
+			}
+			next(ctx, b, u)
+		}
 	}
 }
