@@ -69,14 +69,14 @@ func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTend
 	}
 
 	var raw struct {
-		Verdict      string  `json:"verdict"`
-		Risk         string  `json:"risk"`
-		Score        float64 `json:"score"`
-		Summary      string  `json:"summary"`
-		Pros         []struct{ Title, Desc string } `json:"pros"`
-		Cons         []struct{ Title, Desc string } `json:"cons"`
+		Verdict      string                           `json:"verdict"`
+		Risk         string                           `json:"risk"`
+		Score        float64                          `json:"score"`
+		Summary      string                           `json:"summary"`
+		Pros         []struct{ Title, Desc string }   `json:"pros"`
+		Cons         []struct{ Title, Desc string }   `json:"cons"`
 		Requirements []struct{ Label, Status string } `json:"requirements"`
-		Effort       string `json:"effort"`
+		Effort       string                           `json:"effort"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)

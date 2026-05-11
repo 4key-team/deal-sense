@@ -26,9 +26,14 @@ test-cover-html:
 build-backend:
     cd backend && go build -o bin/server ./cmd/server
 
-# Линтер
+# Линтер (go vet + golangci-lint если установлен)
 lint:
     cd backend && go vet ./...
+    @cd backend && if command -v golangci-lint >/dev/null 2>&1; then \
+        golangci-lint run ./...; \
+    else \
+        echo "golangci-lint not installed — skipping. Install: https://golangci-lint.run/welcome/install/"; \
+    fi
 
 # === Frontend ===
 

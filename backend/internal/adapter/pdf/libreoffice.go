@@ -31,7 +31,7 @@ func (c *LibreOfficeConverter) Convert(ctx context.Context, docxData []byte) ([]
 	if err != nil {
 		return nil, fmt.Errorf("docx2pdf: create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }() //nolint:errcheck // best-effort cleanup
 
 	inputPath := filepath.Join(tmpDir, "input.docx")
 	if err := os.WriteFile(inputPath, docxData, 0o600); err != nil {

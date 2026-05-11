@@ -51,7 +51,7 @@ func NewRequirement(label string, status RequirementStatus) (Requirement, error)
 	return Requirement{label: label, status: status}, nil
 }
 
-func (r Requirement) Label() string            { return r.label }
+func (r Requirement) Label() string             { return r.label }
 func (r Requirement) Status() RequirementStatus { return r.status }
 
 // TenderAnalysis represents a tender document analysis request and its result.
@@ -106,17 +106,17 @@ func NewTenderAnalysis(documents []Document, companyProfile string) (*TenderAnal
 	}, nil
 }
 
-func (t *TenderAnalysis) Documents() []Document { return t.documents }
+func (t *TenderAnalysis) Documents() []Document  { return t.documents }
 func (t *TenderAnalysis) CompanyProfile() string { return t.companyProfile }
 func (t *TenderAnalysis) Verdict() Verdict       { return t.verdict }
 func (t *TenderAnalysis) Risk() Risk             { return t.risk }
 func (t *TenderAnalysis) Score() MatchScore      { return t.score }
 func (t *TenderAnalysis) Summary() string        { return t.summary }
 
-func (t *TenderAnalysis) Pros() []ProCon          { return t.pros }
-func (t *TenderAnalysis) Cons() []ProCon          { return t.cons }
+func (t *TenderAnalysis) Pros() []ProCon              { return t.pros }
+func (t *TenderAnalysis) Cons() []ProCon              { return t.cons }
 func (t *TenderAnalysis) Requirements() []Requirement { return t.requirements }
-func (t *TenderAnalysis) Effort() string           { return t.effort }
+func (t *TenderAnalysis) Effort() string              { return t.effort }
 
 func (t *TenderAnalysis) SetResult(verdict Verdict, risk Risk, score MatchScore, summary string) {
 	t.verdict = verdict

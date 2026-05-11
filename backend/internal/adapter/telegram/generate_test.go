@@ -21,11 +21,11 @@ type sentDoc struct {
 }
 
 type recordingReplier struct {
-	mu         sync.Mutex
-	textCalls  []string
-	docCalls   []sentDoc
-	textErr    error
-	docErr     error
+	mu        sync.Mutex
+	textCalls []string
+	docCalls  []sentDoc
+	textErr   error
+	docErr    error
 }
 
 func (r *recordingReplier) Reply(ctx context.Context, chatID int64, text string) error {

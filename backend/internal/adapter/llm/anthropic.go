@@ -88,7 +88,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp anthropicResponse
-		json.Unmarshal(respBody, &errResp)
+		_ = json.Unmarshal(respBody, &errResp) // best-effort parse of error body
 		msg := "unknown error"
 		if errResp.Error != nil {
 			msg = errResp.Error.Message

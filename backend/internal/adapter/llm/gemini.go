@@ -92,7 +92,7 @@ func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPromp
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp geminiResponse
-		json.Unmarshal(respBody, &errResp)
+		_ = json.Unmarshal(respBody, &errResp) // best-effort parse of error body
 		msg := "unknown error"
 		if errResp.Error != nil {
 			msg = errResp.Error.Message

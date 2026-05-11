@@ -95,7 +95,7 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp chatResponse
-		json.Unmarshal(respBody, &errResp)
+		_ = json.Unmarshal(respBody, &errResp) // best-effort parse of error body
 		msg := "unknown error"
 		if errResp.Error != nil {
 			msg = errResp.Error.Message

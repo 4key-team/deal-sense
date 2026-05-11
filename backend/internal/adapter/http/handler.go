@@ -23,19 +23,19 @@ type ProviderInfo struct {
 
 // Handler holds use cases and exposes HTTP endpoints.
 type Handler struct {
-	llm               usecase.LLMProvider
-	llmFactory        usecase.LLMProviderFactory
-	parser            usecase.DocumentParser
-	template          usecase.TemplateEngine
-	tenderPrompt      PromptResolver
-	proposalPrompt    PromptResolver
-	providers         []ProviderInfo
-	logger            *slog.Logger
-	pdfGen            usecase.PDFGenerator
-	docxToPDF         usecase.DOCXToPDFConverter
-	generativeEngine  usecase.GenerativeEngine
-	generativePrompt  PromptResolver
-	mdGen             usecase.MDGenerator
+	llm              usecase.LLMProvider
+	llmFactory       usecase.LLMProviderFactory
+	parser           usecase.DocumentParser
+	template         usecase.TemplateEngine
+	tenderPrompt     PromptResolver
+	proposalPrompt   PromptResolver
+	providers        []ProviderInfo
+	logger           *slog.Logger
+	pdfGen           usecase.PDFGenerator
+	docxToPDF        usecase.DOCXToPDFConverter
+	generativeEngine usecase.GenerativeEngine
+	generativePrompt PromptResolver
+	mdGen            usecase.MDGenerator
 }
 
 func NewHandler(
@@ -57,8 +57,8 @@ func NewHandler(
 		llm: llm, llmFactory: factory,
 		parser: parser, template: template,
 		tenderPrompt: tenderPrompt, proposalPrompt: proposalPrompt,
-		providers: providers,
-		logger:    logger.With("component", "handler"),
+		providers:        providers,
+		logger:           logger.With("component", "handler"),
 		pdfGen:           pdfGen,
 		docxToPDF:        docxToPDF,
 		generativeEngine: generativeEngine,

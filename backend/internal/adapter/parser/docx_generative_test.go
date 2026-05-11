@@ -124,9 +124,9 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 			wantNotContain: []string{"**", "###", "|---|", "[ваш email](mailto:x)"},
 		},
 		{
-			name:       "empty sections — no modification",
-			paragraphs: []struct{ text, style string }{{"Original", ""}},
-			sections:   nil,
+			name:         "empty sections — no modification",
+			paragraphs:   []struct{ text, style string }{{"Original", ""}},
+			sections:     nil,
 			wantContains: []string{"Original"},
 		},
 	}

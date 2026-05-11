@@ -22,11 +22,11 @@ var ErrDuplicateEndpoint = errors.New("security: endpoint already registered")
 //
 //   - SAFE_READ:    pure reads (list providers, analyze without persistence)
 //   - MODIFY:       creates artifacts (generate proposal — bytes in response,
-//                   no external delivery)
+//     no external delivery)
 //   - DESTRUCTIVE:  external delivery / mutation that cannot be undone
-//                   (send proposal to client, change tender status). None
-//                   exist in the current codebase; the type is in place so
-//                   future endpoints land annotated from day one.
+//     (send proposal to client, change tender status). None
+//     exist in the current codebase; the type is in place so
+//     future endpoints land annotated from day one.
 //
 // Construct via NewRiskLevel — the zero value (empty string) is invalid.
 type RiskLevel string

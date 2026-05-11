@@ -224,16 +224,16 @@ func TestWriteAnalyzeMultipart_PropagatesWriteError(t *testing.T) {
 
 func TestHTTPClient_GenerateProposal_Success(t *testing.T) {
 	var (
-		gotMethod        string
-		gotPath          string
-		gotAPIKey        string
-		gotContentType   string
-		gotParams        string
-		gotTemplateName  string
-		gotTemplateBody  string
-		gotContextCount  int
-		gotContextName   string
-		gotContextBody   string
+		gotMethod       string
+		gotPath         string
+		gotAPIKey       string
+		gotContentType  string
+		gotParams       string
+		gotTemplateName string
+		gotTemplateBody string
+		gotContextCount int
+		gotContextName  string
+		gotContextBody  string
 	)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

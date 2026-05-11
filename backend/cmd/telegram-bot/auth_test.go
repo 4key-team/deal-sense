@@ -18,8 +18,8 @@ type sentMessage struct {
 }
 
 type recordingSender struct {
-	mu    sync.Mutex
-	sent  []sentMessage
+	mu   sync.Mutex
+	sent []sentMessage
 }
 
 func (r *recordingSender) send(ctx context.Context, chatID int64, text string) {
@@ -39,10 +39,10 @@ func mkAllowlist(t *testing.T, ids ...int64) *auth.Allowlist {
 
 func TestExtractIDs(t *testing.T) {
 	tests := []struct {
-		name       string
-		update     *models.Update
-		wantUser   int64
-		wantChat   int64
+		name     string
+		update   *models.Update
+		wantUser int64
+		wantChat int64
 	}{
 		{"nil update", nil, 0, 0},
 		{"message with from", &models.Update{Message: &models.Message{
@@ -98,8 +98,8 @@ func TestAllowlistMiddleware(t *testing.T) {
 			wantDenials:   1,
 		},
 		{
-			name: "update with no user passes through silently",
-			update: &models.Update{},
+			name:          "update with no user passes through silently",
+			update:        &models.Update{},
 			wantNextCalls: 1,
 			wantDenials:   0,
 		},

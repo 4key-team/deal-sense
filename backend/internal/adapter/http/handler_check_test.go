@@ -25,9 +25,9 @@ type stubLLM struct {
 func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
 	return s.response, domain.ZeroTokenUsage(), s.err
 }
-func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
-func (s *stubLLM) ListModels(_ context.Context) ([]string, error)     { return nil, nil }
-func (s *stubLLM) Name() string                                       { return s.name }
+func (s *stubLLM) CheckConnection(_ context.Context) error        { return s.err }
+func (s *stubLLM) ListModels(_ context.Context) ([]string, error) { return nil, nil }
+func (s *stubLLM) Name() string                                   { return s.name }
 
 func TestHandleCheckConnection(t *testing.T) {
 	tests := []struct {

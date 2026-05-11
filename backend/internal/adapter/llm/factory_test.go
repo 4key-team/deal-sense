@@ -28,11 +28,17 @@ func TestFactory_Create(t *testing.T) {
 				APIKey: "key", Model: "model",
 			})
 			if tt.wantErr {
-				if err == nil { t.Fatal("expected error") }
+				if err == nil {
+					t.Fatal("expected error")
+				}
 				return
 			}
-			if err != nil { t.Fatalf("unexpected error: %v", err) }
-			if p.Name() != tt.wantName { t.Errorf("name = %q, want %q", p.Name(), tt.wantName) }
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if p.Name() != tt.wantName {
+				t.Errorf("name = %q, want %q", p.Name(), tt.wantName)
+			}
 		})
 	}
 }

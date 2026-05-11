@@ -93,9 +93,9 @@ func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, do
 	return s.response, s.usage, s.err
 }
 
-func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
-func (s *stubLLM) ListModels(_ context.Context) ([]string, error)     { return nil, nil }
-func (s *stubLLM) Name() string                                       { return s.name }
+func (s *stubLLM) CheckConnection(_ context.Context) error        { return s.err }
+func (s *stubLLM) ListModels(_ context.Context) ([]string, error) { return nil, nil }
+func (s *stubLLM) Name() string                                   { return s.name }
 
 func TestGenerateProposal_Execute(t *testing.T) {
 	llmResp := `{"params":{"client_name":"Acme","summary":"Great project"},"sections":[{"title":"Резюме","status":"ai","tokens":120}],"summary":"КП сгенерировано"}`
@@ -180,12 +180,12 @@ func TestGenerateProposal_Execute(t *testing.T) {
 			wantSecs:   1,
 		},
 		{
-			name:     "empty section title skipped",
-			tmplName: "proposal.docx",
-			tmplData: []byte("template"),
-			llmResp:  `{"params":{"x":"y"},"sections":[{"title":"","status":"ai","tokens":50},{"title":"Valid","status":"ai","tokens":30}],"summary":"ok"}`,
+			name:       "empty section title skipped",
+			tmplName:   "proposal.docx",
+			tmplData:   []byte("template"),
+			llmResp:    `{"params":{"x":"y"},"sections":[{"title":"","status":"ai","tokens":50},{"title":"Valid","status":"ai","tokens":30}],"summary":"ok"}`,
 			tmplResult: []byte("filled"),
-			wantSecs: 1,
+			wantSecs:   1,
 		},
 	}
 
@@ -394,9 +394,9 @@ func TestGenerateProposal_PDFGeneration(t *testing.T) {
 	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
 
 	tests := []struct {
-		name       string
-		pdfGen     *stubPDFGenerator
-		wantPDF    bool
+		name    string
+		pdfGen  *stubPDFGenerator
+		wantPDF bool
 	}{
 		{
 			name:    "pdf generator produces output",

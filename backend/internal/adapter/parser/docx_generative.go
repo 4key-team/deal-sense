@@ -81,7 +81,7 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 		heading, _ := doc.AddParagraph()
 		heading.SetStyle(docxdomain.StyleIDHeading1)
 		hr, _ := heading.AddRun()
-		hr.SetText(sec.Title)
+		_ = hr.SetText(sec.Title) //nolint:errcheck // docxgo SetText returns nil on detached runs only
 
 		g.addContentParagraphs(doc, sec.Content)
 	}
@@ -160,7 +160,7 @@ func (g *DocxGenerative) GenerateClean(_ context.Context, input usecase.ContentI
 		heading, _ := doc.AddParagraph()
 		heading.SetStyle(docxdomain.StyleIDHeading1)
 		hr, _ := heading.AddRun()
-		hr.SetText(sec.Title)
+		_ = hr.SetText(sec.Title) //nolint:errcheck // docxgo SetText returns nil on detached runs only
 
 		g.addContentParagraphs(doc, sec.Content)
 	}
@@ -199,10 +199,10 @@ func (g *DocxGenerative) generativeFillZip(template []byte, sections []usecase.C
 		header := f.FileHeader
 		header.UncompressedSize64 = uint64(len(content))
 		fw, _ := w.CreateHeader(&header)
-		fw.Write(content)
+		_, _ = fw.Write(content) //nolint:errcheck // write to in-memory bytes.Buffer
 	}
 
-	w.Close()
+	_ = w.Close() //nolint:errcheck // close of in-memory zip writer
 	return buf.Bytes(), nil
 }
 
@@ -386,4 +386,3 @@ func ensureListBulletStyle(stylesXML []byte) []byte {
 
 // Ensure DocxGenerative implements GenerativeEngine at compile time.
 var _ usecase.GenerativeEngine = (*DocxGenerative)(nil)
-

@@ -36,9 +36,9 @@ func NewProposalSection(title string, status SectionStatus, tokens int) (Proposa
 	return ProposalSection{title: title, status: status, tokens: tokens}, nil
 }
 
-func (s ProposalSection) Title() string        { return s.title }
+func (s ProposalSection) Title() string         { return s.title }
 func (s ProposalSection) Status() SectionStatus { return s.status }
-func (s ProposalSection) Tokens() int          { return s.tokens }
+func (s ProposalSection) Tokens() int           { return s.tokens }
 
 // LogEntry represents a step in the generation process.
 type LogEntry struct {
@@ -52,8 +52,8 @@ func NewLogEntry(time, msg string) (LogEntry, error) {
 	}
 	return LogEntry{time: time, msg: msg}, nil
 }
-func (l LogEntry) Time() string             { return l.time }
-func (l LogEntry) Msg() string              { return l.msg }
+func (l LogEntry) Time() string { return l.time }
+func (l LogEntry) Msg() string  { return l.msg }
 
 // Proposal represents a commercial proposal generation request and its result.
 type Proposal struct {
@@ -91,22 +91,22 @@ func NewProposal(templateName string, templateContent []byte, parameters map[str
 	}, nil
 }
 
-func (p *Proposal) TemplateName() string         { return p.templateName }
-func (p *Proposal) TemplateContent() []byte      { return p.templateContent }
+func (p *Proposal) TemplateName() string          { return p.templateName }
+func (p *Proposal) TemplateContent() []byte       { return p.templateContent }
 func (p *Proposal) Parameters() map[string]string { return p.parameters }
-func (p *Proposal) Result() []byte               { return p.result }
+func (p *Proposal) Result() []byte                { return p.result }
 func (p *Proposal) Sections() []ProposalSection   { return p.sections }
 func (p *Proposal) Meta() map[string]string       { return p.meta }
 func (p *Proposal) Log() []LogEntry               { return p.log }
 func (p *Proposal) Summary() string               { return p.summary }
 
-func (p *Proposal) Mode() TemplateMode     { return p.mode }
-func (p *Proposal) PDFResult() []byte       { return p.pdfResult }
-func (p *Proposal) MDResult() []byte        { return p.mdResult }
+func (p *Proposal) Mode() TemplateMode { return p.mode }
+func (p *Proposal) PDFResult() []byte  { return p.pdfResult }
+func (p *Proposal) MDResult() []byte   { return p.mdResult }
 
-func (p *Proposal) SetMode(m TemplateMode)      { p.mode = m }
-func (p *Proposal) SetPDFResult(data []byte)     { p.pdfResult = data }
-func (p *Proposal) SetMDResult(data []byte)      { p.mdResult = data }
+func (p *Proposal) SetMode(m TemplateMode)   { p.mode = m }
+func (p *Proposal) SetPDFResult(data []byte) { p.pdfResult = data }
+func (p *Proposal) SetMDResult(data []byte)  { p.mdResult = data }
 
 func (p *Proposal) SetResult(data []byte) {
 	p.result = data

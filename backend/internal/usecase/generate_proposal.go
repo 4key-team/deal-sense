@@ -59,11 +59,11 @@ func (uc *GenerateProposal) log() *slog.Logger {
 }
 
 type proposalLLMResponse struct {
-	Params   map[string]string      `json:"params"`
-	Meta     map[string]string      `json:"meta"`
-	Sections []proposalLLMSection   `json:"sections"`
-	Summary  string                 `json:"summary"`
-	Log      []proposalLLMLog       `json:"log"`
+	Params   map[string]string    `json:"params"`
+	Meta     map[string]string    `json:"meta"`
+	Sections []proposalLLMSection `json:"sections"`
+	Summary  string               `json:"summary"`
+	Log      []proposalLLMLog     `json:"log"`
 }
 
 type proposalLLMSection struct {

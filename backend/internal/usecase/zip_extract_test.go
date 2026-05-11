@@ -34,7 +34,7 @@ func TestExtractZip(t *testing.T) {
 		{
 			name: "pdf and docx extracted",
 			data: makeZip(t, map[string][]byte{
-				"spec.pdf":  []byte("pdf-data"),
+				"spec.pdf":   []byte("pdf-data"),
 				"brief.docx": []byte("docx-data"),
 			}),
 			wantCount: 2,
@@ -61,9 +61,9 @@ func TestExtractZip(t *testing.T) {
 		{
 			name: "macOS artifacts skipped",
 			data: makeZip(t, map[string][]byte{
-				"spec.pdf":                    []byte("pdf-data"),
-				"__MACOSX/._spec.pdf":         []byte("mac-meta"),
-				".DS_Store":                   []byte("ds"),
+				"spec.pdf":            []byte("pdf-data"),
+				"__MACOSX/._spec.pdf": []byte("mac-meta"),
+				".DS_Store":           []byte("ds"),
 			}),
 			wantCount: 1,
 			wantNames: []string{"spec.pdf"},

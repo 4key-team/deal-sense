@@ -22,14 +22,14 @@ func (s *stubParser) Supports(_ domain.FileType) bool { return true }
 
 func TestAnalyzeTender_Execute(t *testing.T) {
 	tests := []struct {
-		name       string
-		files      []usecase.FileInput
-		profile    string
-		parseText  string
-		parseErr   error
-		llmResp    string
-		llmErr     error
-		wantErr    bool
+		name      string
+		files     []usecase.FileInput
+		profile   string
+		parseText string
+		parseErr  error
+		llmResp   string
+		llmErr    error
+		wantErr   bool
 	}{
 		{
 			name:      "successful analysis",
