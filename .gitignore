@@ -1,5 +1,6 @@
 # Go
 backend/server
+backend/telegram-bot
 backend/bin/
 backend/coverage.out
 backend/coverage.html
