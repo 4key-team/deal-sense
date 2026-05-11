@@ -165,9 +165,37 @@ func TestGenerateHandler_ReplierError_Propagates(t *testing.T) {
 	}
 }
 
-func TestGenerateHandler_NoDocxInResponse_RepliesTextSummary(t *testing.T) {
-	// Some templates produce only MD/PDF; fallback to text summary so the
-	// user still gets feedback.
+func TestGenerateHandler_NoDocx_FallsBackToPDF(t *testing.T) {
+	rep := &recordingReplier{}
+	api := &generateFakeAPI{
+		resp: &usecase.GenerateProposalResponse{
+			Template: "tpl.docx",
+			Mode:     "placeholder",
+			PDF:      []byte("PDF BYTES"),
+		},
+	}
+	h := telegram.NewGenerateHandler(api, rep)
+
+	err := h.Handle(context.Background(), &telegram.Update{
+		ChatID:   1,
+		Document: &telegram.Document{Filename: "tpl.docx", Data: []byte("T")},
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(rep.docCalls) != 1 {
+		t.Fatalf("expected 1 doc reply (PDF fallback), got %d", len(rep.docCalls))
+	}
+	if !strings.HasSuffix(rep.docCalls[0].filename, ".pdf") {
+		t.Errorf("filename = %q, want to end with .pdf", rep.docCalls[0].filename)
+	}
+	if string(rep.docCalls[0].data) != "PDF BYTES" {
+		t.Errorf("data = %q, want PDF BYTES", string(rep.docCalls[0].data))
+	}
+}
+
+func TestGenerateHandler_NoDocxNoPDF_FallsBackToMD(t *testing.T) {
+	// Generative templates may produce only MD; bot uploads it as .md.
 	rep := &recordingReplier{}
 	api := &generateFakeAPI{
 		resp: &usecase.GenerateProposalResponse{
@@ -185,11 +213,67 @@ func TestGenerateHandler_NoDocxInResponse_RepliesTextSummary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	// No docx → fall back to MD as the attached document.
 	if len(rep.docCalls) != 1 {
 		t.Fatalf("expected 1 doc reply (MD fallback), got %d", len(rep.docCalls))
 	}
 	if !strings.HasSuffix(rep.docCalls[0].filename, ".md") {
 		t.Errorf("filename = %q, want to end with .md", rep.docCalls[0].filename)
+	}
+}
+
+func TestGenerateHandler_NoArtifacts_RepliesTextSummary(t *testing.T) {
+	// When the backend returns no DOCX/PDF/MD payload at all the handler
+	// must still acknowledge with a text summary so the user isn't left
+	// guessing.
+	rep := &recordingReplier{}
+	api := &generateFakeAPI{
+		resp: &usecase.GenerateProposalResponse{
+			Mode:     "placeholder",
+			Sections: []usecase.GeneratedSection{{Title: "Intro"}, {Title: "Body"}},
+			// no DOCX/PDF/MD
+		},
+	}
+	h := telegram.NewGenerateHandler(api, rep)
+
+	err := h.Handle(context.Background(), &telegram.Update{
+		ChatID:   1,
+		Document: &telegram.Document{Filename: "tpl.docx", Data: []byte("T")},
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(rep.docCalls) != 0 {
+		t.Errorf("expected no document reply when artifact empty, got %d", len(rep.docCalls))
+	}
+	if len(rep.textCalls) != 1 {
+		t.Fatalf("text replies = %d, want 1", len(rep.textCalls))
+	}
+	// Caption format mentions mode + section count.
+	if !strings.Contains(rep.textCalls[0], "placeholder") || !strings.Contains(rep.textCalls[0], "2") {
+		t.Errorf("summary = %q, want mode 'placeholder' and section count 2", rep.textCalls[0])
+	}
+}
+
+func TestGenerateHandler_FilenameFallbackWhenTemplateHasNoExt(t *testing.T) {
+	// stripExt fallback path: template with no extension → filename swap
+	// produces "proposal" base + artifact extension. Covers the
+	// no-dot branch.
+	rep := &recordingReplier{}
+	api := &generateFakeAPI{resp: &usecase.GenerateProposalResponse{DOCX: []byte("X")}}
+	h := telegram.NewGenerateHandler(api, rep)
+
+	err := h.Handle(context.Background(), &telegram.Update{
+		ChatID:   1,
+		Document: &telegram.Document{Filename: "noextension", Data: []byte("T")},
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(rep.docCalls) != 1 {
+		t.Fatalf("doc replies = %d", len(rep.docCalls))
+	}
+	// "noextension" has no dot → stripExt returns whole name → base+".docx"
+	if rep.docCalls[0].filename != "noextension.docx" {
+		t.Errorf("filename = %q, want noextension.docx", rep.docCalls[0].filename)
 	}
 }
