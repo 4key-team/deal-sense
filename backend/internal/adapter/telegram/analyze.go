@@ -27,10 +27,11 @@ type Document struct {
 	Data     []byte
 }
 
-// Replier posts a text message back to the originating chat. Implementations
-// wrap bot.SendMessage.
+// Replier posts a text message or a document back to the originating chat.
+// Implementations wrap bot.SendMessage / bot.SendDocument.
 type Replier interface {
 	Reply(ctx context.Context, chatID int64, text string) error
+	ReplyDocument(ctx context.Context, chatID int64, filename string, data []byte, caption string) error
 }
 
 // AnalyzeHandler implements the /analyze command flow.

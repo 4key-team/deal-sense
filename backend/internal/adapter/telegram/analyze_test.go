@@ -28,6 +28,12 @@ func (f *fakeReplier) Reply(ctx context.Context, chatID int64, text string) erro
 	return f.err
 }
 
+// ReplyDocument is a no-op stub for /analyze tests — /generate tests in
+// generate_test.go use a richer fake.
+func (f *fakeReplier) ReplyDocument(context.Context, int64, string, []byte, string) error {
+	return nil
+}
+
 type fakeAPI struct {
 	gotReq usecase.AnalyzeTenderRequest
 	resp   *usecase.AnalyzeTenderResponse

@@ -130,6 +130,11 @@ func (r *botReplier) Reply(ctx context.Context, chatID int64, text string) error
 	return err
 }
 
+// ReplyDocument is a stub for the RED step — the real impl lands in GREEN.
+func (r *botReplier) ReplyDocument(ctx context.Context, chatID int64, filename string, data []byte, caption string) error {
+	return nil
+}
+
 func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
 		if u.Message == nil {
