@@ -64,6 +64,18 @@ func Recover(logger *slog.Logger, next http.Handler) http.Handler {
 	})
 }
 
+// RateLimit caps the request rate per client (default key: RemoteAddr) via
+// a token-bucket. When the bucket for a key is empty the middleware
+// responds 429 + Retry-After and short-circuits — the wrapped handler is
+// not invoked. Configured rps=0 disables the middleware entirely (used to
+// keep the middleware chain stable when the limit is off).
+//
+// Defence-in-depth only — the primary rate-limit is the API gateway.
+// Stub for the RED step: always passthrough.
+func RateLimit(rps float64, burst int, next http.Handler) http.Handler {
+	return next
+}
+
 // APIKeyAuth gates requests behind the X-API-Key header. When expectedKey is
 // empty the middleware is a passthrough — this preserves open-access local
 // dev while production deployments inject a real key via env var. CORS must

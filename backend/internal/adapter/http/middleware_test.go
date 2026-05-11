@@ -128,6 +128,108 @@ func TestAPIKeyAuth(t *testing.T) {
 	}
 }
 
+func TestRateLimit_AllowsUpToBurst(t *testing.T) {
+	called := 0
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusOK)
+	})
+	h := handler.RateLimit(1, 5, inner) // burst 5, rps 1
+
+	for i := range 5 {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "1.2.3.4:1000"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("burst call %d: status = %d, want 200", i, rec.Code)
+		}
+	}
+	if called != 5 {
+		t.Errorf("inner called %d times, want 5", called)
+	}
+}
+
+func TestRateLimit_BlocksAfterBurst(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := handler.RateLimit(1, 2, inner) // burst 2
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "1.2.3.4:1000"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+	}
+
+	// 3rd call should be blocked.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "1.2.3.4:1000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Errorf("missing Retry-After header")
+	}
+}
+
+func TestRateLimit_IsolatesByRemoteAddr(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := handler.RateLimit(1, 1, inner) // burst 1 per key
+
+	// Exhaust client A.
+	reqA := httptest.NewRequest(http.MethodGet, "/", nil)
+	reqA.RemoteAddr = "1.1.1.1:1000"
+	recA := httptest.NewRecorder()
+	h.ServeHTTP(recA, reqA)
+	if recA.Code != http.StatusOK {
+		t.Fatalf("A first call status = %d", recA.Code)
+	}
+
+	// Client A's second call blocked.
+	recA2 := httptest.NewRecorder()
+	h.ServeHTTP(recA2, reqA)
+	if recA2.Code != http.StatusTooManyRequests {
+		t.Errorf("A second call status = %d, want 429", recA2.Code)
+	}
+
+	// Client B fresh — still gets a token.
+	reqB := httptest.NewRequest(http.MethodGet, "/", nil)
+	reqB.RemoteAddr = "2.2.2.2:1000"
+	recB := httptest.NewRecorder()
+	h.ServeHTTP(recB, reqB)
+	if recB.Code != http.StatusOK {
+		t.Errorf("B first call status = %d, want 200", recB.Code)
+	}
+}
+
+func TestRateLimit_DisabledWhenRPSZero(t *testing.T) {
+	called := 0
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusOK)
+	})
+	h := handler.RateLimit(0, 0, inner) // disabled
+
+	for range 100 {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "1.1.1.1:1000"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 when disabled", rec.Code)
+		}
+	}
+	if called != 100 {
+		t.Errorf("inner called %d times, want 100", called)
+	}
+}
+
 func TestRecover(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
