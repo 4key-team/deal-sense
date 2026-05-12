@@ -61,9 +61,19 @@ func LoadConfig() (Config, error) {
 	}, nil
 }
 
-// readSecret is a RED-stub: returns only the plain env, ignores `<NAME>_FILE`.
-// The GREEN commit will replace this with file-aware logic.
+// readSecret resolves a secret from `<NAME>_FILE` (preferred) or plain env
+// `<NAME>`. File content is whitespace-trimmed. An unreadable `<NAME>_FILE`
+// returns a wrapped error so LoadConfig fails the bot at startup — an
+// operator who set *_FILE expects exactly that source and should not get a
+// silent fall-through to plain env.
 func readSecret(name string) (string, error) {
+	if path := os.Getenv(name + "_FILE"); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("telegram: read %s_FILE %q: %w", name, path, err)
+		}
+		return strings.TrimSpace(string(raw)), nil
+	}
 	return os.Getenv(name), nil
 }
 
