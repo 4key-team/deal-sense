@@ -129,14 +129,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		logger.Info("rate limit enabled", "rps", cfg.RateLimitRPS, "burst", cfg.RateLimitBurst)
 	}
 
-	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  60 * time.Second,
-		BaseContext:  func(_ net.Listener) context.Context { return ctx },
-	}
+	srv := newHTTPServer(":"+cfg.Port, handler)
+	srv.BaseContext = func(_ net.Listener) context.Context { return ctx }
 
 	errCh := make(chan error, 1)
 	go func() {
