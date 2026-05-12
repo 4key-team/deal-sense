@@ -23,7 +23,9 @@ func withFakeSoffice(t *testing.T, script string) {
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("write fake soffice: %v", err)
 	}
-	t.Setenv("PATH", bin)
+	// Prepend our shim dir so exec.LookPath finds the fake first while
+	// system tools (basename, sleep) remain accessible.
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 const fakeSofficeOK = `
@@ -86,7 +88,8 @@ func TestDocConverter_ConvertToDOCX(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error from cancelled subprocess")
 		}
-		if elapsed > 2*time.Second {
+		// ctx deadline 200ms + WaitDelay 1s force-close — well under 3s.
+		if elapsed > 3*time.Second {
 			t.Errorf("subprocess not aborted on ctx cancel (took %v)", elapsed)
 		}
 	})

@@ -56,6 +56,13 @@ type DOCXToPDFConverter interface {
 	Convert(ctx context.Context, docx []byte) ([]byte, error)
 }
 
+// DocConverter upgrades legacy Word 97-2003 binaries (.doc, OLE2) into
+// modern .docx bytes. Pure-Go OLE2 parsers are immature, so adapters
+// shell out to LibreOffice headless.
+type DocConverter interface {
+	ConvertToDOCX(ctx context.Context, doc []byte) ([]byte, error)
+}
+
 // MDGenerator creates a Markdown document from proposal data.
 type MDGenerator interface {
 	Render(ctx context.Context, input ContentInput) ([]byte, error)
