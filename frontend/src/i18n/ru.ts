@@ -120,7 +120,7 @@ export const ru: Copy = {
     proposal_tpl_label: "Шаблон КП (опционально)",
     proposal_tpl_hint: "DOCX, PDF или MD · без шаблона — чистый документ",
     proposal_ctx_label: "Контекст (бриф, кейсы, прайс)",
-    proposal_ctx_hint: "PDF, DOCX или MD · до 5 файлов",
+    proposal_ctx_hint: "PDF, DOCX, MD или ZIP · до 5 файлов",
   },
   settings: {
     title: "LLM-провайдер",

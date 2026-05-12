@@ -120,7 +120,7 @@ export const en: Copy = {
     proposal_tpl_label: "Proposal template (optional)",
     proposal_tpl_hint: "DOCX, PDF, or MD · without template — clean document",
     proposal_ctx_label: "Context (brief, cases, prices)",
-    proposal_ctx_hint: "PDF, DOCX or MD · up to 5 files",
+    proposal_ctx_hint: "PDF, DOCX, MD or ZIP · up to 5 files",
   },
   settings: {
     title: "LLM provider",
