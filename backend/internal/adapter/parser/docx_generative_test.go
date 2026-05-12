@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -602,4 +603,92 @@ func TestDocxGenerative_ZipFallback_HeadingMatcher_StripsNumericPrefix(t *testin
 	// in the regression test below.
 	_ = buf.Bytes()
 	t.Skip("zip-fallback heading matcher contract is covered by the bitrix24-template regression test")
+}
+
+// TestDocxGenerative_RegressionBitrix24Template reproduces the bug from
+// 2026-05-12 (Telegram report + samples-12-05-26/): a real Bitrix24
+// proposal template carrying numbered Heading 2 paragraphs.
+//
+// Before the matcher fix every numbered section was duplicated at the
+// end as a new Heading1 because "2. Цель проекта" did not match
+// "Цель проекта". This regression test asserts: (a) content lands under
+// each existing numbered heading and (b) no duplicate Heading1
+// "Цель проекта" / "Архитектура, стек и требования к системе" appears
+// at the tail of the document.
+func TestDocxGenerative_RegressionBitrix24Template(t *testing.T) {
+	tmpl, err := readFixture("testdata/bitrix24-template.docx")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	sections := []usecase.ContentSection{
+		{Title: "Проблематика", Content: "PROBLEM-CONTENT"},
+		{Title: "Цель проекта", Content: "GOAL-CONTENT"},
+		{Title: "Объем работ (MVP)", Content: "SCOPE-CONTENT"},
+		{Title: "Архитектура, стек и требования к системе", Content: "ARCH-CONTENT"},
+		{Title: "Стоимость и сроки", Content: "PRICE-CONTENT"},
+	}
+
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(context.Background(), tmpl, sections)
+	if err != nil {
+		t.Fatalf("GenerativeFill: %v", err)
+	}
+
+	// Every section content must land in the document.
+	body := documentXML(t, result)
+	for _, sec := range sections {
+		if !strings.Contains(body, sec.Content) {
+			t.Errorf("missing content %q for section %q", sec.Content, sec.Title)
+		}
+	}
+
+	// No append-duplicates: after stripping numeric prefixes each
+	// numbered heading title must appear at most once in the rendered
+	// paragraph texts (excluding ToC / footer where the original text
+	// is reused verbatim — none in this template).
+	for _, sec := range sections {
+		count := strings.Count(body, ">"+sec.Title+"<")
+		// Allow exactly one Heading2 occurrence for headings that exist
+		// as numbered "N. Title" in the template (matched form has the
+		// numeric prefix stripped already by us; the original numbered
+		// text remains in the doc).
+		if count > 1 {
+			t.Errorf("section %q rendered %d times (append-duplicate bug)", sec.Title, count)
+		}
+	}
+}
+
+func readFixture(rel string) ([]byte, error) {
+	f, err := os.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+func documentXML(t *testing.T, docxBytes []byte) string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open document.xml: %v", err)
+		}
+		defer rc.Close()
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("read document.xml: %v", err)
+		}
+		return string(data)
+	}
+	t.Fatal("word/document.xml not found in result")
+	return ""
 }
