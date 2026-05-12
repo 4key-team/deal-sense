@@ -65,7 +65,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	collector := metrics.NewCollector()
 	provider = llm.NewMetered(provider, collector)
 
-	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader(), parser.NewMDParser())
+	docConverter := parser.NewDocConverter()
+	docParser := parser.NewComposite(
+		parser.NewPDFParser(),
+		parser.NewDocxReader(),
+		parser.NewMDParser(),
+		parser.NewDocParser(docConverter),
+	)
 	docxTemplate := parser.NewDocxTemplate()
 	docxGenerative := parser.NewDocxGenerative()
 	pdfGen := apppdf.NewMarotoPDFGenerator()
