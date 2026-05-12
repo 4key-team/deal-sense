@@ -143,9 +143,12 @@ func (uc *GenerateProposal) Execute(
 	}
 	proposal.SetMode(mode)
 
-	// Select system prompt based on mode.
+	// Select system prompt based on mode. Both Generative and Clean modes
+	// need the generative prompt because its JSON schema declares the
+	// `content` field on each section — the placeholder-mode prompt does
+	// not, leaving GenerateClean/GenerativeFill with empty bodies.
 	systemPrompt := uc.systemPrompt
-	if mode == domain.ModeGenerative {
+	if mode == domain.ModeGenerative || mode == domain.ModeClean {
 		systemPrompt = uc.generativePrompt
 	}
 
