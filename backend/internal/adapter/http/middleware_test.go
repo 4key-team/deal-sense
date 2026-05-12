@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	handler "github.com/daniil/deal-sense/backend/internal/adapter/http"
@@ -110,7 +111,7 @@ func TestAPIKeyAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler.APIKeyAuth(tt.expected, inner)
+			h := handler.APIKeyAuth(tt.expected, nil, inner)
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			if tt.sendHeader {
 				req.Header.Set("X-API-Key", tt.sent)
@@ -134,7 +135,7 @@ func TestRateLimit_AllowsUpToBurst(t *testing.T) {
 		called++
 		w.WriteHeader(http.StatusOK)
 	})
-	h := handler.RateLimit(1, 5, inner) // burst 5, rps 1
+	h := handler.RateLimit(1, 5, nil, inner) // burst 5, rps 1
 
 	for i := range 5 {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -154,7 +155,7 @@ func TestRateLimit_BlocksAfterBurst(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := handler.RateLimit(1, 2, inner) // burst 2
+	h := handler.RateLimit(1, 2, nil, inner) // burst 2
 
 	for range 2 {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -180,7 +181,7 @@ func TestRateLimit_IsolatesByRemoteAddr(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	h := handler.RateLimit(1, 1, inner) // burst 1 per key
+	h := handler.RateLimit(1, 1, nil, inner) // burst 1 per key
 
 	// Exhaust client A.
 	reqA := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -214,7 +215,7 @@ func TestRateLimit_DisabledWhenRPSZero(t *testing.T) {
 		called++
 		w.WriteHeader(http.StatusOK)
 	})
-	h := handler.RateLimit(0, 0, inner) // disabled
+	h := handler.RateLimit(0, 0, nil, inner) // disabled
 
 	for range 100 {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -227,6 +228,113 @@ func TestRateLimit_DisabledWhenRPSZero(t *testing.T) {
 	}
 	if called != 100 {
 		t.Errorf("inner called %d times, want 100", called)
+	}
+}
+
+// --- security_decline_total counter wiring ---
+
+type fakeDeclineCounter struct {
+	mu   sync.Mutex
+	kind []string
+}
+
+func (f *fakeDeclineCounter) Inc(kind string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.kind = append(f.kind, kind)
+}
+
+func (f *fakeDeclineCounter) snapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.kind))
+	copy(out, f.kind)
+	return out
+}
+
+func TestAPIKeyAuth_IncrementsCounterOn401(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	counter := &fakeDeclineCounter{}
+	h := handler.APIKeyAuth("secret-key", counter, inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// no header → 401
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	got := counter.snapshot()
+	if len(got) != 1 || got[0] != "api_key" {
+		t.Errorf("counter calls = %v, want [api_key]", got)
+	}
+}
+
+func TestAPIKeyAuth_NoIncrementOnSuccess(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	counter := &fakeDeclineCounter{}
+	h := handler.APIKeyAuth("secret-key", counter, inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-API-Key", "secret-key")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := counter.snapshot(); len(got) != 0 {
+		t.Errorf("counter calls = %v, want [] (no decline on success)", got)
+	}
+}
+
+func TestRateLimit_IncrementsCounterOn429(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	counter := &fakeDeclineCounter{}
+	h := handler.RateLimit(1, 1, counter, inner)
+
+	// First call consumes the bucket.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "1.2.3.4:1000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	// Second call blocked.
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req)
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec2.Code)
+	}
+	got := counter.snapshot()
+	if len(got) != 1 || got[0] != "rate_limit" {
+		t.Errorf("counter calls = %v, want [rate_limit]", got)
+	}
+}
+
+func TestRateLimit_NoIncrementOnAllowed(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	counter := &fakeDeclineCounter{}
+	h := handler.RateLimit(10, 5, counter, inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "1.2.3.4:1000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := counter.snapshot(); len(got) != 0 {
+		t.Errorf("counter calls = %v, want []", got)
 	}
 }
 

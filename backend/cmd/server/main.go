@@ -93,8 +93,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	// without holding an API key and without contributing to the per-IP
 	// bucket.
 	gated := http.Handler(mux)
-	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, gated)
-	gated = apphttp.APIKeyAuth(cfg.APIKey, gated)
+	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, collector, gated)
+	gated = apphttp.APIKeyAuth(cfg.APIKey, collector, gated)
 
 	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {

@@ -87,7 +87,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	opts := []bot.Option{
-		bot.WithMiddlewares(allowlistMiddleware(allowlist, denySender)),
+		bot.WithMiddlewares(allowlistMiddleware(allowlist, denySender, nil)),
 		bot.WithDefaultHandler(defaultHandler(logger)),
 	}
 	opts = append(opts, extraOpts...)

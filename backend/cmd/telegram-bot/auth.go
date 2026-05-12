@@ -10,6 +10,13 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 )
 
+// declineCounter is the narrow port the allowlist middleware uses to record
+// security declines (allowlist kind). nil is tolerated and treated as a
+// no-op so the bot keeps working with no metrics configured.
+type declineCounter interface {
+	Inc(kind string)
+}
+
 // extractUserID pulls the originating user ID out of any update kind we
 // care about. Returns 0 if the update has no user attached — those
 // updates fall through unchanged.
@@ -41,7 +48,7 @@ func extractChatID(u *models.Update) int64 {
 // allowlistMiddleware blocks updates from users outside the allowlist with
 // a polite refusal posted via send. Updates without a user (system events)
 // pass through.
-func allowlistMiddleware(list *auth.Allowlist, send func(ctx context.Context, chatID int64, text string)) bot.Middleware {
+func allowlistMiddleware(list *auth.Allowlist, send func(ctx context.Context, chatID int64, text string), counter declineCounter) bot.Middleware {
 	return func(next bot.HandlerFunc) bot.HandlerFunc {
 		return func(ctx context.Context, b *bot.Bot, u *models.Update) {
 			uid := extractUserID(u)
@@ -50,6 +57,8 @@ func allowlistMiddleware(list *auth.Allowlist, send func(ctx context.Context, ch
 				return
 			}
 			if !list.IsAllowed(uid) {
+				// RED stub: counter param accepted but unused.
+				_ = counter
 				if chatID := extractChatID(u); chatID != 0 {
 					send(ctx, chatID, telegram.MsgDenied)
 				}

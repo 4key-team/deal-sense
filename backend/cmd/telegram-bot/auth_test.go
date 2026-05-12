@@ -122,7 +122,7 @@ func TestAllowlistMiddleware(t *testing.T) {
 				nextCalls++
 			})
 
-			mw := allowlistMiddleware(list, sender.send)
+			mw := allowlistMiddleware(list, sender.send, nil)
 			mw(next)(context.Background(), nil, tt.update)
 
 			if nextCalls != tt.wantNextCalls {
@@ -135,5 +135,56 @@ func TestAllowlistMiddleware(t *testing.T) {
 				t.Errorf("denial text = %q, want %q", sender.sent[0].text, telegram.MsgDenied)
 			}
 		})
+	}
+}
+
+type fakeDeclineCounter struct {
+	mu   sync.Mutex
+	kind []string
+}
+
+func (f *fakeDeclineCounter) Inc(kind string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.kind = append(f.kind, kind)
+}
+
+func TestAllowlistMiddleware_IncrementsCounterOnDeny(t *testing.T) {
+	list := mkAllowlist(t, 42)
+	sender := &recordingSender{}
+	counter := &fakeDeclineCounter{}
+	next := bot.HandlerFunc(func(context.Context, *bot.Bot, *models.Update) {})
+
+	denied := &models.Update{Message: &models.Message{
+		From: &models.User{ID: 99},
+		Chat: models.Chat{ID: 99},
+		Text: "/analyze",
+	}}
+
+	mw := allowlistMiddleware(list, sender.send, counter)
+	mw(next)(context.Background(), nil, denied)
+
+	if len(counter.kind) != 1 || counter.kind[0] != "allowlist" {
+		t.Errorf("counter calls = %v, want [allowlist]", counter.kind)
+	}
+}
+
+func TestAllowlistMiddleware_NoIncrementWhenAllowed(t *testing.T) {
+	list := mkAllowlist(t, 42)
+	sender := &recordingSender{}
+	counter := &fakeDeclineCounter{}
+	next := bot.HandlerFunc(func(context.Context, *bot.Bot, *models.Update) {})
+
+	allowed := &models.Update{Message: &models.Message{
+		From: &models.User{ID: 42},
+		Chat: models.Chat{ID: 42},
+		Text: "/analyze",
+	}}
+
+	mw := allowlistMiddleware(list, sender.send, counter)
+	mw(next)(context.Background(), nil, allowed)
+
+	if len(counter.kind) != 0 {
+		t.Errorf("counter calls = %v, want []", counter.kind)
 	}
 }

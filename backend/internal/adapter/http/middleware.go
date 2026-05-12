@@ -12,6 +12,14 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// DeclineCounter is the narrow port the HTTP middleware uses to record
+// security declines (401, 429). Implementations live in adapter/metrics.
+// nil is tolerated and treated as a no-op — production wires a collector,
+// unit tests typically pass nil.
+type DeclineCounter interface {
+	Inc(kind string)
+}
+
 // CORS wraps a handler with CORS headers for the frontend dev server.
 func CORS(allowOrigin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +86,7 @@ func Recover(logger *slog.Logger, next http.Handler) http.Handler {
 // Defence-in-depth only — the primary rate-limit is the API gateway.
 // Per-key state is kept in-memory; for multi-instance deployments use the
 // gateway's distributed limiter as the source of truth.
-func RateLimit(rps float64, burst int, next http.Handler) http.Handler {
+func RateLimit(rps float64, burst int, counter DeclineCounter, next http.Handler) http.Handler {
 	if rps <= 0 {
 		return next
 	}
@@ -89,6 +97,8 @@ func RateLimit(rps float64, burst int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := remoteIP(r)
 		if !limiters.get(key).Allow() {
+			// RED stub: counter param accepted but unused.
+			_ = counter
 			w.Header().Set("Retry-After", retryAfter)
 			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
@@ -134,12 +144,14 @@ func remoteIP(r *http.Request) string {
 // dev while production deployments inject a real key via env var. CORS must
 // be wrapped outside this middleware so preflight requests succeed without
 // the header.
-func APIKeyAuth(expectedKey string, next http.Handler) http.Handler {
+func APIKeyAuth(expectedKey string, counter DeclineCounter, next http.Handler) http.Handler {
 	if expectedKey == "" {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") != expectedKey {
+			// RED stub: counter param accepted but unused.
+			_ = counter
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
