@@ -47,7 +47,7 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 
 	remaining := make(map[string]usecase.ContentSection, len(sections))
 	for _, s := range sections {
-		remaining[strings.ToLower(strings.TrimSpace(s.Title))] = s
+		remaining[normalizeHeading(s.Title)] = s
 	}
 
 	paras := doc.Paragraphs()
@@ -57,13 +57,13 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 		if text == "" {
 			continue
 		}
-		titleLower := strings.ToLower(text)
+		key := normalizeHeading(text)
 
-		sec, ok := remaining[titleLower]
+		sec, ok := remaining[key]
 		if !ok {
 			continue
 		}
-		delete(remaining, titleLower)
+		delete(remaining, key)
 
 		// Replace the next paragraph's content (the one after the heading).
 		if i+1 < len(paras) {
@@ -75,7 +75,7 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 
 	// Append unmatched sections at end.
 	for _, sec := range sections {
-		if _, ok := remaining[strings.ToLower(strings.TrimSpace(sec.Title))]; !ok {
+		if _, ok := remaining[normalizeHeading(sec.Title)]; !ok {
 			continue
 		}
 		heading, _ := doc.AddParagraph()
@@ -213,7 +213,7 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 
 	remaining := make(map[string]usecase.ContentSection, len(sections))
 	for _, s := range sections {
-		remaining[strings.ToLower(s.Title)] = s
+		remaining[normalizeHeading(s.Title)] = s
 	}
 
 	paras := paragraphRe.FindAllStringIndex(xml, -1)
@@ -230,12 +230,12 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 
 	replaced := make(map[int]string)
 	for _, sec := range sections {
-		titleLower := strings.ToLower(strings.TrimSpace(sec.Title))
+		key := normalizeHeading(sec.Title)
 		for i, pi := range infos {
-			if strings.ToLower(strings.TrimSpace(pi.text)) != titleLower {
+			if normalizeHeading(pi.text) != key {
 				continue
 			}
-			delete(remaining, titleLower)
+			delete(remaining, key)
 			if i+1 < len(infos) {
 				replaced[i+1] = buildParagraphsXML(sec.Content)
 			}
@@ -261,7 +261,7 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 	if len(remaining) > 0 {
 		var appended strings.Builder
 		for _, sec := range sections {
-			if _, ok := remaining[strings.ToLower(sec.Title)]; !ok {
+			if _, ok := remaining[normalizeHeading(sec.Title)]; !ok {
 				continue
 			}
 			appended.WriteString(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>` +
