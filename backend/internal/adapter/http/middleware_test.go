@@ -338,6 +338,79 @@ func TestRateLimit_NoIncrementOnAllowed(t *testing.T) {
 	}
 }
 
+// --- requests_total counter wiring ---
+
+type fakeRequestCounter struct {
+	mu     sync.Mutex
+	events []requestEvent
+}
+
+type requestEvent struct {
+	path   string
+	status string
+}
+
+func (f *fakeRequestCounter) IncRequest(path, status string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, requestEvent{path, status})
+}
+
+func TestMetricsRequests_CountsPathAndStatus(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+	})
+	counter := &fakeRequestCounter{}
+	h := handler.MetricsRequests(counter, inner)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if len(counter.events) != 1 {
+		t.Fatalf("events = %v, want one", counter.events)
+	}
+	got := counter.events[0]
+	if got.path != "/api/proposal/generate" || got.status != "201" {
+		t.Errorf("event = %+v, want {/api/proposal/generate 201}", got)
+	}
+}
+
+func TestMetricsRequests_DefaultStatus200WhenNotWritten(t *testing.T) {
+	// Handlers that return without explicitly writing a status code result
+	// in 200 OK on the wire. The middleware must record that, not 0.
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok")) // implicit 200
+	})
+	counter := &fakeRequestCounter{}
+	h := handler.MetricsRequests(counter, inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/llm/providers", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if len(counter.events) != 1 || counter.events[0].status != "200" {
+		t.Errorf("events = %v, want one with status=200", counter.events)
+	}
+}
+
+func TestMetricsRequests_NilCounter_IsPassthrough(t *testing.T) {
+	called := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+	h := handler.MetricsRequests(nil, inner)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if !called {
+		t.Error("inner handler not invoked")
+	}
+}
+
 func TestRecover(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))

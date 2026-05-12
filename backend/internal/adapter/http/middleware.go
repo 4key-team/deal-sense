@@ -20,6 +20,25 @@ type DeclineCounter interface {
 	Inc(kind string)
 }
 
+// RequestCounter is the narrow port the request-counting middleware uses
+// to record HTTP requests by path + status.
+type RequestCounter interface {
+	IncRequest(path, status string)
+}
+
+// MetricsRequests wraps next with per-request counting via counter.IncRequest.
+// nil counter ⇒ passthrough (no-op for deployments without metrics).
+func MetricsRequests(counter RequestCounter, next http.Handler) http.Handler {
+	if counter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// RED stub: counter param accepted but unused.
+		_ = counter
+		next.ServeHTTP(w, r)
+	})
+}
+
 // CORS wraps a handler with CORS headers for the frontend dev server.
 func CORS(allowOrigin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
