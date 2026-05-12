@@ -30,12 +30,15 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # v7+ of the action is required to run golangci-lint v2.x.
+        # v6 reports "invalid version string 'v2.x', golangci-lint v2
+        # is not supported by golangci-lint-action v6, you must update
+        # to golangci-lint-action v7".
+        uses: golangci/golangci-lint-action@v7
         with:
-          # v2.x is built with Go 1.26+; `latest` still resolves to a
-          # v1.x line (1.64.x) that fails on go.mod `go 1.26` with
-          # "Go language version used to build golangci-lint is lower
-          # than the targeted Go version".
+          # Pinned to match the locally-used version against which
+          # backend/.golangci.yml is authored. Bumping `latest` would
+          # drift across runner upgrades.
           version: v2.12.2
           working-directory: backend
           # Args mirror what the justfile uses locally.
