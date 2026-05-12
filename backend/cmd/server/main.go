@@ -107,6 +107,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	})
 
 	var handler http.Handler = combined
+	handler = apphttp.MetricsRequests(collector, handler)
 	handler = apphttp.CORS("*", handler)
 	handler = apphttp.Logger(logger, handler)
 	handler = apphttp.Recover(logger, handler)

@@ -28,14 +28,18 @@ type RequestCounter interface {
 
 // MetricsRequests wraps next with per-request counting via counter.IncRequest.
 // nil counter ⇒ passthrough (no-op for deployments without metrics).
+//
+// The status reported to the counter mirrors what the client sees: when
+// the inner handler returns without explicitly writing a header,
+// net/http emits 200, and the counter records "200" too.
 func MetricsRequests(counter RequestCounter, next http.Handler) http.Handler {
 	if counter == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// RED stub: counter param accepted but unused.
-		_ = counter
-		next.ServeHTTP(w, r)
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(sw, r)
+		counter.IncRequest(r.URL.Path, strconv.Itoa(sw.status))
 	})
 }
 
