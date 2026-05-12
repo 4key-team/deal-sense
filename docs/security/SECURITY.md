@@ -118,6 +118,33 @@ accidental DESTRUCTIVE classification until Layer 5 lands.
 
 ---
 
+## External-subprocess attack surface (LibreOffice)
+
+Two adapters shell out to `soffice` (LibreOffice headless) inside the
+backend container: `adapter/pdf/libreoffice.go` (DOCX → PDF) and, as of
+v0.16.0, `adapter/parser/doc_converter.go` (DOC → DOCX for legacy Word
+97-2003 input). Both run with the same hardening:
+
+| Concern | Mitigation |
+|---------|------------|
+| Hang on malformed input | `exec.CommandContext` + 60s deadline; `cmd.WaitDelay = 1s` force-closes IO if child processes hold stderr open after kill |
+| Tmp-dir leaks between requests | `os.MkdirTemp` with unique prefix per call (`doc2docx-*`, `docx2pdf-*`) + `defer os.RemoveAll` |
+| Race over shared filenames | Each request has its own isolated tmp dir — no shared paths |
+| Shell injection via filename | `exec.Command` slice form (no shell expansion); filenames inside the converter are constants (`input.doc` / `input.docx`), not user-supplied |
+| Disk write of input perms | `os.WriteFile(..., 0o600)` |
+| Upload size DoS | `maxUploadSize = 50 MB` enforced at HTTP layer (`handler_tender.go:11`); ZIP entries additionally capped at 50 MB decompressed (`usecase/zip_extract.go:18`) |
+
+Residual risks:
+
+- LibreOffice itself is a large attack surface. Network egress from the
+  container should be restricted at the infra layer (Layer 3); the
+  process inside the container should not have outbound internet beyond
+  what the LLM provider needs.
+- Future converters that accept user-controlled filenames must keep the
+  constant-internal-name pattern to retain the shell-injection mitigation.
+
+---
+
 ## Pre-flight checklist before production deploy
 
 - [x] Layer 1: SecurityDirectives compiled into every LLM prompt (ADR-006)
