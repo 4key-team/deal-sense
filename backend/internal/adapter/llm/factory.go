@@ -15,18 +15,25 @@ type ProviderConfig struct {
 	Model    string
 }
 
-// Factory implements usecase.LLMProviderFactory.
+// Factory implements usecase.LLMProviderFactory. When Counter is non-nil,
+// providers created via Create are wrapped in Metered so per-request
+// X-LLM-Provider overrides contribute to dealsense_llm_calls_total too.
 type Factory struct {
-	Logger *slog.Logger
+	Logger  *slog.Logger
+	Counter LLMObserver
 }
 
 func (f Factory) Create(cfg usecase.LLMProviderConfig) (usecase.LLMProvider, error) {
-	return NewLLMProvider(ProviderConfig{
+	p, err := NewLLMProvider(ProviderConfig{
 		Provider: cfg.Provider,
 		BaseURL:  cfg.BaseURL,
 		APIKey:   cfg.APIKey,
 		Model:    cfg.Model,
 	}, f.Logger)
+	if err != nil {
+		return nil, err
+	}
+	return NewMetered(p, f.Counter), nil
 }
 
 // NewLLMProvider creates an LLMProvider based on the provider name.

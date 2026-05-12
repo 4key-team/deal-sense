@@ -57,8 +57,9 @@ func allowlistMiddleware(list *auth.Allowlist, send func(ctx context.Context, ch
 				return
 			}
 			if !list.IsAllowed(uid) {
-				// RED stub: counter param accepted but unused.
-				_ = counter
+				if counter != nil {
+					counter.Inc("allowlist")
+				}
 				if chatID := extractChatID(u); chatID != 0 {
 					send(ctx, chatID, telegram.MsgDenied)
 				}

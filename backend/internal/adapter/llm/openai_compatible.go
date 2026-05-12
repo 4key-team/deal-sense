@@ -105,7 +105,7 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), wrapParseErr(p.config.Name, err)
 	}
 
 	if len(chatResp.Choices) == 0 {

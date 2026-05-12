@@ -45,12 +45,20 @@ func NewMetered(inner usecase.LLMProvider, observer LLMObserver) usecase.LLMProv
 func (m *Metered) Name() string { return m.inner.Name() }
 
 // GenerateCompletion forwards to the inner provider and records the call.
-// RED stub: counters not yet wired — the observer is held but unused so
-// the call is invisible to /metrics until GREEN.
+// Parse errors (wrapping ErrParseResponse) emit an extra decline so
+// provider drift is visible in /metrics independent of generic upstream
+// failures.
 func (m *Metered) GenerateCompletion(ctx context.Context, systemPrompt, userPrompt string) (string, domain.TokenUsage, error) {
 	out, usage, err := m.inner.GenerateCompletion(ctx, systemPrompt, userPrompt)
-	_ = err // RED stub: observer present but not invoked.
-	return out, usage, err
+	if err != nil {
+		m.observer.IncLLMCall(m.inner.Name(), "error")
+		if errors.Is(err, ErrParseResponse) {
+			m.observer.Inc("llm_parse_error")
+		}
+		return out, usage, err
+	}
+	m.observer.IncLLMCall(m.inner.Name(), "ok")
+	return out, usage, nil
 }
 
 // CheckConnection delegates to the inner provider; not counted (CheckConnection

@@ -62,6 +62,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		return fmt.Errorf("init llm provider: %w", err)
 	}
 	logger.Info("llm provider initialized", "provider", provider.Name(), "model", cfg.LLMModel)
+	collector := metrics.NewCollector()
+	provider = llm.NewMetered(provider, collector)
 
 	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader(), parser.NewMDParser())
 	docxTemplate := parser.NewDocxTemplate()
@@ -78,13 +80,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
 	mdRenderer := parser.NewMarkdownRenderer()
-	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
-	collector := metrics.NewCollector()
+	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, Counter: collector}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
 	// Pre-populate endpoint risk gauges so /metrics reflects Layer 4
 	// annotations from the moment the server is reachable, not on the
 	// first matching request.
-	for _, path := range security.NewDefaultEndpointRegistry().Paths() {
-		level, _ := security.NewDefaultEndpointRegistry().Lookup(path)
+	registry := security.NewDefaultEndpointRegistry()
+	for _, path := range registry.Paths() {
+		level, _ := registry.Lookup(path)
 		collector.SetEndpointRisk(path, level.String())
 	}
 	mux := apphttp.NewRouter(h, collector)

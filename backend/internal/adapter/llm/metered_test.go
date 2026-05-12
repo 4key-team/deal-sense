@@ -22,7 +22,7 @@ func (s *stubInner) Name() string { return s.name }
 func (s *stubInner) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
 	return s.out, domain.ZeroTokenUsage(), s.err
 }
-func (s *stubInner) CheckConnection(_ context.Context) error      { return s.err }
+func (s *stubInner) CheckConnection(_ context.Context) error        { return s.err }
 func (s *stubInner) ListModels(_ context.Context) ([]string, error) { return nil, s.err }
 
 type recordingObserver struct {

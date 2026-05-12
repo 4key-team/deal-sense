@@ -97,8 +97,9 @@ func RateLimit(rps float64, burst int, counter DeclineCounter, next http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := remoteIP(r)
 		if !limiters.get(key).Allow() {
-			// RED stub: counter param accepted but unused.
-			_ = counter
+			if counter != nil {
+				counter.Inc("rate_limit")
+			}
 			w.Header().Set("Retry-After", retryAfter)
 			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
@@ -150,8 +151,9 @@ func APIKeyAuth(expectedKey string, counter DeclineCounter, next http.Handler) h
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") != expectedKey {
-			// RED stub: counter param accepted but unused.
-			_ = counter
+			if counter != nil {
+				counter.Inc("api_key")
+			}
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}

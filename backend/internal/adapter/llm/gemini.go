@@ -102,7 +102,7 @@ func (p *Gemini) GenerateCompletion(ctx context.Context, systemPrompt, userPromp
 
 	var gemResp geminiResponse
 	if err := json.Unmarshal(respBody, &gemResp); err != nil {
-		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), wrapParseErr("gemini", err)
 	}
 
 	if len(gemResp.Candidates) == 0 {

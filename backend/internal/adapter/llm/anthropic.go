@@ -98,7 +98,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	var antResp anthropicResponse
 	if err := json.Unmarshal(respBody, &antResp); err != nil {
-		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), wrapParseErr("anthropic", err)
 	}
 
 	if len(antResp.Content) == 0 {
