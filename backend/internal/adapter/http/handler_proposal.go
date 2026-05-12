@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
@@ -36,10 +38,23 @@ func (h *Handler) HandleGenerateProposal(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Parse context files (skip unsupported types)
+	// Parse context files. ZIP archives are extracted; other unsupported
+	// types are skipped silently to keep best-effort behavior.
 	var contextFiles []usecase.FileInput
 	for _, fh := range r.MultipartForm.File["context"] {
-		fi, err := usecase.NewFileInput(fh.Filename, mustReadMultipartFile(fh))
+		data := mustReadMultipartFile(fh)
+		if strings.EqualFold(filepath.Ext(fh.Filename), ".zip") {
+			extracted, err := usecase.ExtractZip(data)
+			if err != nil {
+				h.logger.Debug("zip extraction failed", "file", fh.Filename, "err", err)
+				writeError(w, http.StatusBadRequest, "zip: "+err.Error())
+				return
+			}
+			h.logger.Debug("zip extracted", "file", fh.Filename, "extracted", len(extracted))
+			contextFiles = append(contextFiles, extracted...)
+			continue
+		}
+		fi, err := usecase.NewFileInput(fh.Filename, data)
 		if err != nil {
 			continue
 		}
