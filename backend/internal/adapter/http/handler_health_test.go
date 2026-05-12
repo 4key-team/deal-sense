@@ -56,7 +56,7 @@ func TestHandleReadiness_NoLLMReturns503(t *testing.T) {
 
 func TestRouter_HealthRoutes(t *testing.T) {
 	h := handler.NewHandler(&stubLLM{name: "test"}, nil, &stubParser{content: "x"}, &stubTemplateEngine{result: []byte("doc")}, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
-	mux := handler.NewRouter(h)
+	mux := handler.NewRouter(h, nil)
 
 	for _, path := range []string{"/healthz", "/readyz"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)

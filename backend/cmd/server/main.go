@@ -13,9 +13,11 @@ import (
 
 	apphttp "github.com/daniil/deal-sense/backend/internal/adapter/http"
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
+	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
 	"github.com/daniil/deal-sense/backend/internal/adapter/parser"
 	apppdf "github.com/daniil/deal-sense/backend/internal/adapter/pdf"
 	"github.com/daniil/deal-sense/backend/internal/config"
+	"github.com/daniil/deal-sense/backend/internal/domain/security"
 )
 
 func parseLogLevel(s string) slog.Level {
@@ -77,7 +79,15 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	}
 	mdRenderer := parser.NewMarkdownRenderer()
 	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
-	mux := apphttp.NewRouter(h)
+	collector := metrics.NewCollector()
+	// Pre-populate endpoint risk gauges so /metrics reflects Layer 4
+	// annotations from the moment the server is reachable, not on the
+	// first matching request.
+	for _, path := range security.NewDefaultEndpointRegistry().Paths() {
+		level, _ := security.NewDefaultEndpointRegistry().Lookup(path)
+		collector.SetEndpointRisk(path, level.String())
+	}
+	mux := apphttp.NewRouter(h, collector)
 
 	// Health probes bypass auth + rate limit so orchestrators can hit them
 	// without holding an API key and without contributing to the per-IP
@@ -87,7 +97,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	gated = apphttp.APIKeyAuth(cfg.APIKey, gated)
 
 	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {
 			mux.ServeHTTP(w, r)
 			return
 		}
