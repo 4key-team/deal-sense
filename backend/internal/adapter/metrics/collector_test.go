@@ -141,6 +141,44 @@ func TestCollector_RaceFree_ConcurrentInc(t *testing.T) {
 	}
 }
 
+func TestCollector_EscapesLabelValues(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"backslash", `a\b`, `a\\b`},
+		{"quote", `a"b`, `a\"b`},
+		{"newline", "a\nb", `a\nb`},
+		{"plain", "a/b", `a/b`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := metrics.NewCollector()
+			c.IncRequest(tt.in, "200")
+
+			var buf bytes.Buffer
+			_, _ = c.Render(&buf)
+			needle := `dealsense_requests_total{path="` + tt.want + `",status="200"} 1`
+			if !strings.Contains(buf.String(), needle) {
+				t.Errorf("missing %q\n--- got ---\n%s", needle, buf.String())
+			}
+		})
+	}
+}
+
+func TestCollector_FormatsValueAsInteger(t *testing.T) {
+	// SetEndpointRisk stores 1.0; Render must emit "1", not "1.000000".
+	c := metrics.NewCollector()
+	c.SetEndpointRisk("/api/x", "MODIFY")
+
+	var buf bytes.Buffer
+	_, _ = c.Render(&buf)
+	if !strings.Contains(buf.String(), `} 1`+"\n") {
+		t.Errorf("Render should emit integer-formatted gauge value\n--- got ---\n%s", buf.String())
+	}
+}
+
 func TestCollector_RendersExpositionContentTypeFriendly(t *testing.T) {
 	// Prometheus text format requires LF line endings, no CR.
 	c := metrics.NewCollector()

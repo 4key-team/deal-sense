@@ -17,6 +17,11 @@ type declineCounter interface {
 	Inc(kind string)
 }
 
+// declineKindAllowlist is the canonical kind label emitted when the
+// allowlist middleware blocks an update. Defined here (next to its only
+// caller) to avoid an adapter→cmd back-reference into metrics.
+const declineKindAllowlist = "allowlist"
+
 // extractUserID pulls the originating user ID out of any update kind we
 // care about. Returns 0 if the update has no user attached — those
 // updates fall through unchanged.
@@ -58,7 +63,7 @@ func allowlistMiddleware(list *auth.Allowlist, send func(ctx context.Context, ch
 			}
 			if !list.IsAllowed(uid) {
 				if counter != nil {
-					counter.Inc("allowlist")
+					counter.Inc(declineKindAllowlist)
 				}
 				if chatID := extractChatID(u); chatID != 0 {
 					send(ctx, chatID, telegram.MsgDenied)

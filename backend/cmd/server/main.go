@@ -83,10 +83,14 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, Counter: collector}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
 	// Pre-populate endpoint risk gauges so /metrics reflects Layer 4
 	// annotations from the moment the server is reachable, not on the
-	// first matching request.
+	// first matching request. Lookup over registry.Paths() cannot miss
+	// by construction — Paths() returns only registered keys.
 	registry := security.NewDefaultEndpointRegistry()
 	for _, path := range registry.Paths() {
-		level, _ := registry.Lookup(path)
+		level, err := registry.Lookup(path)
+		if err != nil {
+			return fmt.Errorf("registry.Lookup(%q) failed for path returned by Paths(): %w", path, err)
+		}
 		collector.SetEndpointRisk(path, level.String())
 	}
 	mux := apphttp.NewRouter(h, collector)
@@ -98,8 +102,9 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, collector, gated)
 	gated = apphttp.APIKeyAuth(cfg.APIKey, collector, gated)
 
+	bypass := apphttp.BypassedPaths()
 	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {
+		if _, ok := bypass[r.URL.Path]; ok {
 			mux.ServeHTTP(w, r)
 			return
 		}

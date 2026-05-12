@@ -23,6 +23,10 @@ type LLMObserver interface {
 	Inc(kind string)
 }
 
+// DeclineKindLLMParseError is the canonical decline-kind label emitted
+// when a provider's response cannot be JSON-decoded.
+const DeclineKindLLMParseError = "llm_parse_error"
+
 // Metered wraps a usecase.LLMProvider, counting every GenerateCompletion
 // call via the observer. Parse errors (wrapping ErrParseResponse) emit an
 // additional decline.
@@ -53,7 +57,7 @@ func (m *Metered) GenerateCompletion(ctx context.Context, systemPrompt, userProm
 	if err != nil {
 		m.observer.IncLLMCall(m.inner.Name(), "error")
 		if errors.Is(err, ErrParseResponse) {
-			m.observer.Inc("llm_parse_error")
+			m.observer.Inc(DeclineKindLLMParseError)
 		}
 		return out, usage, err
 	}

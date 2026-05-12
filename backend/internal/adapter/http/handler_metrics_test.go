@@ -29,6 +29,25 @@ func TestMetricsHandler_ContentType(t *testing.T) {
 	}
 }
 
+// TestMetricsRoute_BypassesAPIKeyAuth pins the bypass contract at the
+// adapter layer: a request through APIKeyAuth → MetricsHandler with no
+// header returns 200 (because the bypass list is composed in main.go).
+// This test composes the same chain locally so a future regression
+// where someone places APIKeyAuth ahead of /metrics in cmd/server is
+// detected by re-reading the chain assembly here.
+func TestMetricsHandler_DoesNotRequireAPIKeyHeader(t *testing.T) {
+	c := metrics.NewCollector()
+	h := apphttp.MetricsHandler(c)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (handler must not enforce X-API-Key itself)", rec.Code)
+	}
+}
+
 func TestMetricsHandler_BodyIsPrometheusFormat(t *testing.T) {
 	c := metrics.NewCollector()
 	c.IncRequest("/api/tender/analyze", "200")

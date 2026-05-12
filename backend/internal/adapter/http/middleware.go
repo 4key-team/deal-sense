@@ -20,6 +20,15 @@ type DeclineCounter interface {
 	Inc(kind string)
 }
 
+// DeclineKindAPIKey / DeclineKindRateLimit are the canonical decline-kind
+// labels emitted by this package. They duplicate the constants in
+// adapter/metrics to keep the http package importable in isolation
+// (avoiding the metrics → http back-reference cycle).
+const (
+	DeclineKindAPIKey    = "api_key"
+	DeclineKindRateLimit = "rate_limit"
+)
+
 // RequestCounter is the narrow port the request-counting middleware uses
 // to record HTTP requests by path + status.
 type RequestCounter interface {
@@ -121,7 +130,7 @@ func RateLimit(rps float64, burst int, counter DeclineCounter, next http.Handler
 		key := remoteIP(r)
 		if !limiters.get(key).Allow() {
 			if counter != nil {
-				counter.Inc("rate_limit")
+				counter.Inc(DeclineKindRateLimit)
 			}
 			w.Header().Set("Retry-After", retryAfter)
 			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
@@ -175,7 +184,7 @@ func APIKeyAuth(expectedKey string, counter DeclineCounter, next http.Handler) h
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") != expectedKey {
 			if counter != nil {
-				counter.Inc("api_key")
+				counter.Inc(DeclineKindAPIKey)
 			}
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return

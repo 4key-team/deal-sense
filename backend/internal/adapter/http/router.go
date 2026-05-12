@@ -2,6 +2,17 @@ package http
 
 import "net/http"
 
+// BypassedPaths returns the set of routes that must skip APIKeyAuth +
+// RateLimit when wired in cmd/server. Single source of truth — keep this
+// list in sync with the unconditional routes registered in NewRouter.
+func BypassedPaths() map[string]struct{} {
+	return map[string]struct{}{
+		"/healthz": {},
+		"/readyz":  {},
+		"/metrics": {},
+	}
+}
+
 func NewRouter(h *Handler, m MetricsRenderer) *http.ServeMux {
 	mux := http.NewServeMux()
 
