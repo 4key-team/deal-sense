@@ -18,10 +18,8 @@ type MetricsRenderer interface {
 // without exhausting the per-IP bucket.
 func MetricsHandler(r MetricsRenderer) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		// RED stub: writes nothing, returns 200 with the right header so
-		// the contract test for the header passes; the body assertion
-		// fails until GREEN.
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
+		_, _ = r.Render(w)
 	}
 }
