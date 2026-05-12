@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -47,9 +48,19 @@ func Load() (Config, error) {
 	}, nil
 }
 
-// readSecret is a RED-stub: returns only the plain env, ignores `<NAME>_FILE`.
-// The GREEN commit will replace this with file-aware logic.
+// readSecret resolves a secret from `<NAME>_FILE` (preferred) or plain env
+// `<NAME>`. The file path is read, whitespace-trimmed, and returned. An
+// unreadable `<NAME>_FILE` is a fatal config error — callers should fail
+// startup rather than silently fall back to plain env (an operator who set
+// `<NAME>_FILE` expects exactly that source).
 func readSecret(name string) (string, error) {
+	if path := os.Getenv(name + "_FILE"); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("config: read %s_FILE %q: %w", name, path, err)
+		}
+		return strings.TrimSpace(string(raw)), nil
+	}
 	return os.Getenv(name), nil
 }
 
