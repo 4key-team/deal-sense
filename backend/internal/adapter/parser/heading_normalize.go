@@ -15,21 +15,25 @@ var (
 	multiSpaceRe = regexp.MustCompile(`\s+`)
 )
 
-// normalizeHeading prepares a heading string for fuzzy equality matching
-// between a template paragraph and a section title from the LLM.
-// Transformations, in order:
+// headingKey is the canonical comparable form of a heading string. Two
+// headings match iff their headingKey values are equal — never compare
+// raw strings directly. The type is unexported so callers must go
+// through newHeadingKey, which prevents accidental raw-string comparisons
+// in future code.
+type headingKey string
+
+// newHeadingKey produces a canonical comparison key for a heading by:
 //
-//  1. strip a leading numeric prefix (`1.`, `2)`, `10. `…)
-//  2. collapse internal whitespace runs to a single space
-//  3. lower-case
-//  4. trim leading/trailing space
+//  1. stripping a leading numeric prefix (`1.`, `2)`, `10. `…)
+//  2. collapsing internal whitespace runs to a single space
+//  3. lower-casing
+//  4. trimming leading/trailing space
 //
-// Two strings that produce the same normalized form are treated as the
-// same heading. Substring matches are intentionally NOT supported —
-// that would introduce false positives when one section title contains
-// another ("Цели" vs "Цели проекта").
-func normalizeHeading(s string) string {
+// Substring matches are intentionally NOT supported — that would create
+// false positives when one section title contains another ("Цели" vs
+// "Цели проекта").
+func newHeadingKey(s string) headingKey {
 	s = leadingNumberRe.ReplaceAllString(s, "")
 	s = multiSpaceRe.ReplaceAllString(s, " ")
-	return strings.ToLower(strings.TrimSpace(s))
+	return headingKey(strings.ToLower(strings.TrimSpace(s)))
 }

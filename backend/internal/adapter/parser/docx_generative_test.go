@@ -580,29 +580,39 @@ func TestDocxGenerative_HeadingMatcher_NegativeUnknownTitleAppends(t *testing.T)
 }
 
 func TestDocxGenerative_ZipFallback_HeadingMatcher_StripsNumericPrefix(t *testing.T) {
-	// Same contract as docxgo path, but on zip-fallback (raw XML
-	// manipulation when docxgo can't open the template).
-	doc := `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>
-<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>2. Цель проекта</w:t></w:r></w:p>
-<w:p><w:r><w:t>placeholder</w:t></w:r></w:p>
-</w:body></w:document>`
+	// Same contract as docxgo path but on zip-fallback (raw XML
+	// manipulation, hit in production whenever docxgo cannot open the
+	// template — themed Word docs, complex drawings). Drives the
+	// injectSectionsXML helper directly via the export_test seam so the
+	// test is fast and isolated from the 3 MB bitrix24 fixture.
+	xml := `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:body>` +
+		`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>2. Цель проекта</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>placeholder body</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>3. Объем работ</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>placeholder body 2</w:t></w:r></w:p>` +
+		`</w:body></w:document>`
 
-	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	f, _ := w.Create("word/document.xml")
-	_, _ = f.Write([]byte(doc))
-	_ = w.Close()
-	// Force zip-fallback by corrupting nothing — but docxgo opens this
-	// minimal doc fine. Use a truly malformed style.xml trick? No — the
-	// matcher logic is in injectSectionsXML and is exercised whenever
-	// docxgo fails. The behaviour is identical, so test the public API
-	// path that hits zip-fallback in production (themed templates).
-	//
-	// Practical alternative: drop a real themed docx into testdata. Done
-	// in the regression test below.
-	_ = buf.Bytes()
-	t.Skip("zip-fallback heading matcher contract is covered by the bitrix24-template regression test")
+	g := parser.NewDocxGenerative()
+	out := string(g.InjectSectionsXMLForTest(xml, []usecase.ContentSection{
+		{Title: "Цель проекта", Content: "GOAL"},
+		{Title: "Объем работ", Content: "SCOPE"},
+	}))
+
+	if !strings.Contains(out, "GOAL") {
+		t.Errorf("missing GOAL after numbered heading\n%s", out)
+	}
+	if !strings.Contains(out, "SCOPE") {
+		t.Errorf("missing SCOPE after numbered heading\n%s", out)
+	}
+	// Original "placeholder body" paragraphs replaced — not present.
+	if strings.Contains(out, "placeholder body") {
+		t.Errorf("placeholder body was not replaced\n%s", out)
+	}
+	// No append-duplicate Heading1 at the tail.
+	if strings.Contains(out, `w:val="Heading1"`) {
+		t.Errorf("zip-fallback appended Heading1 duplicate; matcher missed numbered heading\n%s", out)
+	}
 }
 
 // TestDocxGenerative_RegressionBitrix24Template reproduces the bug from
