@@ -98,7 +98,7 @@ export function TenderReport() {
             onFiles={setFiles}
             label={t.dropzone.tender_label}
             hint={t.dropzone.tender_hint}
-            accept=".pdf,.docx,.md,.zip"
+            accept=".pdf,.docx,.doc,.md,.zip"
           />
         </div>
         <Button

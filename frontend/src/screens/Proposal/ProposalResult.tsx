@@ -139,7 +139,7 @@ export function ProposalResult() {
             onFiles={setContextFiles}
             label={t.dropzone.proposal_ctx_label}
             hint={t.dropzone.proposal_ctx_hint}
-            accept=".pdf,.docx,.md,.zip"
+            accept=".pdf,.docx,.doc,.md,.zip"
           />
         </div>
         <Button
