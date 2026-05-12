@@ -29,9 +29,15 @@ type Config struct {
 }
 
 // LoadConfig reads bot configuration from environment variables and returns
-// ErrMissingBotToken / ErrInvalidAllowlistID for malformed input.
+// ErrMissingBotToken / ErrInvalidAllowlistID for malformed input. Secrets
+// (TELEGRAM_BOT_TOKEN, DEAL_SENSE_API_KEY) additionally honour the
+// `<NAME>_FILE` 12-factor pattern; an unreadable *_FILE fails startup.
 func LoadConfig() (Config, error) {
-	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	token, err := readSecret("TELEGRAM_BOT_TOKEN")
+	if err != nil {
+		return Config{}, err
+	}
+	token = strings.TrimSpace(token)
 	if token == "" {
 		return Config{}, ErrMissingBotToken
 	}
@@ -41,13 +47,24 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	apiKey, err := readSecret("DEAL_SENSE_API_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		BotToken:         token,
 		AllowlistUserIDs: ids,
 		APIBaseURL:       cmp.Or(strings.TrimSpace(os.Getenv("API_BASE_URL")), "http://localhost:8080"),
-		APIKey:           os.Getenv("DEAL_SENSE_API_KEY"),
+		APIKey:           apiKey,
 		LogLevel:         strings.ToLower(cmp.Or(strings.TrimSpace(os.Getenv("LOG_LEVEL")), "info")),
 	}, nil
+}
+
+// readSecret is a RED-stub: returns only the plain env, ignores `<NAME>_FILE`.
+// The GREEN commit will replace this with file-aware logic.
+func readSecret(name string) (string, error) {
+	return os.Getenv(name), nil
 }
 
 func parseAllowlist(raw string) ([]int64, error) {

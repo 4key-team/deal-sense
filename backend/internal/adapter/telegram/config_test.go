@@ -2,6 +2,8 @@ package telegram_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -105,5 +107,104 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 	}
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q", cfg.LogLevel)
+	}
+}
+
+// --- *_FILE secrets pattern (12-factor) ---
+
+func TestLoadConfig_BotTokenFromFile(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "tg-token")
+	if err := os.WriteFile(path, []byte("bot:from-file\n"), 0o600); err != nil {
+		t.Fatalf("write tmp: %v", err)
+	}
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	t.Setenv("TELEGRAM_BOT_TOKEN_FILE", path)
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BotToken != "bot:from-file" {
+		t.Errorf("BotToken = %q, want bot:from-file (whitespace stripped)", cfg.BotToken)
+	}
+}
+
+func TestLoadConfig_APIKeyFromFile(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "ds-key")
+	if err := os.WriteFile(path, []byte("shared-from-file"), 0o600); err != nil {
+		t.Fatalf("write tmp: %v", err)
+	}
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+	t.Setenv("DEAL_SENSE_API_KEY", "")
+	t.Setenv("DEAL_SENSE_API_KEY_FILE", path)
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.APIKey != "shared-from-file" {
+		t.Errorf("APIKey = %q, want shared-from-file", cfg.APIKey)
+	}
+}
+
+func TestLoadConfig_BotTokenFile_TakesPrecedence(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "tg-token")
+	if err := os.WriteFile(path, []byte("from-file"), 0o600); err != nil {
+		t.Fatalf("write tmp: %v", err)
+	}
+	t.Setenv("TELEGRAM_BOT_TOKEN", "from-plain-env")
+	t.Setenv("TELEGRAM_BOT_TOKEN_FILE", path)
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BotToken != "from-file" {
+		t.Errorf("BotToken = %q, want from-file (FILE wins over plain env)", cfg.BotToken)
+	}
+}
+
+func TestLoadConfig_BotTokenFile_ErrorOnUnreadable(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	t.Setenv("TELEGRAM_BOT_TOKEN_FILE", "/this/path/does/not/exist")
+
+	_, err := telegram.LoadConfig()
+	if err == nil {
+		t.Fatal("expected error for unreadable TELEGRAM_BOT_TOKEN_FILE, got nil")
+	}
+	// An unreadable file must surface the underlying read error rather than
+	// silently fall through to ErrMissingBotToken — operator who set *_FILE
+	// expects exactly that source.
+	if errors.Is(err, telegram.ErrMissingBotToken) {
+		t.Errorf("err = %v, want file-read error, not ErrMissingBotToken (fall-through is unsafe)", err)
+	}
+}
+
+func TestLoadConfig_APIKeyFile_ErrorOnUnreadable(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+	t.Setenv("DEAL_SENSE_API_KEY", "")
+	t.Setenv("DEAL_SENSE_API_KEY_FILE", "/this/path/does/not/exist")
+
+	_, err := telegram.LoadConfig()
+	if err == nil {
+		t.Fatal("expected error for unreadable DEAL_SENSE_API_KEY_FILE, got nil")
+	}
+}
+
+func TestLoadConfig_BotTokenFile_EmptyAfterTrim(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "tg-token")
+	if err := os.WriteFile(path, []byte("   \n"), 0o600); err != nil {
+		t.Fatalf("write tmp: %v", err)
+	}
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	t.Setenv("TELEGRAM_BOT_TOKEN_FILE", path)
+
+	_, err := telegram.LoadConfig()
+	if !errors.Is(err, telegram.ErrMissingBotToken) {
+		t.Fatalf("err = %v, want %v (whitespace-only file = missing token)", err, telegram.ErrMissingBotToken)
 	}
 }
