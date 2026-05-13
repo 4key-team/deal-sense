@@ -9,8 +9,8 @@ import "time"
 const skipSentinel = "-"
 
 // WizardStep names the question currently waiting for user input. The wizard
-// advances from StepName through StepExtra and lands on StepConfirm, after
-// which the draft is persisted and the session cleared.
+// advances from StepName through StepExtra; once the StepExtra answer is
+// processed the draft is persisted and the session cleared.
 type WizardStep string
 
 const (
@@ -26,8 +26,8 @@ const (
 
 // ProfileDraft accumulates user answers as the wizard walks through the
 // steps. It is intentionally a mutable builder — the final immutable
-// domain.CompanyProfile is constructed via domain.NewCompanyProfile when
-// StepConfirm is reached.
+// domain.CompanyProfile is constructed via domain.NewCompanyProfile after
+// StepExtra is filled.
 type ProfileDraft struct {
 	Name            string
 	TeamSize        string
