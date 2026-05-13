@@ -3,6 +3,7 @@ package telegram_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +11,56 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/adapter/telegram"
 	"github.com/daniil/deal-sense/backend/internal/domain"
 )
+
+// recordingHandler is an slog.Handler that captures every record so tests
+// can assert what the handler under test logged. Not goroutine-safe — only
+// use it from a single test goroutine.
+type recordingHandler struct {
+	records []slog.Record
+	attrs   []slog.Attr
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	// Snapshot attrs so later WithAttrs calls don't mutate older records.
+	clone := r.Clone()
+	for _, a := range h.attrs {
+		clone.AddAttrs(a)
+	}
+	h.records = append(h.records, clone)
+	return nil
+}
+func (h *recordingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	cp := *h
+	cp.attrs = append(append([]slog.Attr{}, h.attrs...), attrs...)
+	return &cp
+}
+func (h *recordingHandler) WithGroup(string) slog.Handler { return h }
+
+// recordOfMessage returns the first record whose Message equals msg, or nil.
+func recordOfMessage(h *recordingHandler, msg string) *slog.Record {
+	for i := range h.records {
+		if h.records[i].Message == msg {
+			return &h.records[i]
+		}
+	}
+	return nil
+}
+
+// attrValue extracts the first attribute matching key from a record.
+func attrValue(r *slog.Record, key string) (slog.Value, bool) {
+	var found slog.Value
+	var ok bool
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			found = a.Value
+			ok = true
+			return false
+		}
+		return true
+	})
+	return found, ok
+}
 
 // fakeProfileStore is an in-memory ProfileStore for handler tests. It tracks
 // call counts so tests can assert side-effects on the store directly.
@@ -414,6 +465,51 @@ func TestProfileHandler_WizardInput_StoreSetError_RepliesError(t *testing.T) {
 	}
 	if _, ok := sessions.Get(42); ok {
 		t.Error("session should be cleared even on save error to avoid stuck state")
+	}
+}
+
+// --- observability (slog) -----------------------------------------------
+
+func TestProfileHandler_Edit_LogsWizardStartedAtInfo(t *testing.T) {
+	rh := &recordingHandler{}
+	logger := slog.New(rh)
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep, telegram.WithProfileLogger(logger))
+
+	if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile edit"}); err != nil {
+		t.Fatalf("HandleCommand: %v", err)
+	}
+	rec := recordOfMessage(rh, "wizard started")
+	if rec == nil {
+		msgs := make([]string, 0, len(rh.records))
+		for _, r := range rh.records {
+			msgs = append(msgs, r.Message)
+		}
+		t.Fatalf("no 'wizard started' log record found; saw: %v", msgs)
+	}
+	if rec.Level != slog.LevelInfo {
+		t.Errorf("level = %s, want Info", rec.Level)
+	}
+	chatID, ok := attrValue(rec, "chat_id")
+	if !ok {
+		t.Fatal("record missing chat_id attr")
+	}
+	if chatID.Int64() != 42 {
+		t.Errorf("chat_id = %d, want 42", chatID.Int64())
+	}
+}
+
+func TestProfileHandler_NilLogger_DoesNotPanic(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	// No WithProfileLogger — handler must default to a no-op logger.
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile edit"}); err != nil {
+		t.Fatalf("HandleCommand: %v", err)
 	}
 }
 
