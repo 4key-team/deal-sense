@@ -87,6 +87,13 @@ func (uc *GenerateProposal) Execute(
 ) (*domain.Proposal, domain.TokenUsage, error) {
 	noUsage := domain.ZeroTokenUsage()
 
+	// Markdown templates use a separate hybrid pipeline (ADR-013):
+	// `##` headings define the structure, empty sections are LLM-filled,
+	// pre-filled bodies are passed through verbatim.
+	if IsMarkdownTemplate(templateName) && len(templateData) > 0 {
+		return uc.executeMarkdown(ctx, templateName, templateData, contextFiles, userParams)
+	}
+
 	// Determine mode: clean (no template) or template-based.
 	isClean := len(templateData) == 0 && uc.generative != nil
 
