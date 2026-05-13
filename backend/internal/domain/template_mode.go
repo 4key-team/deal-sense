@@ -7,6 +7,10 @@ const (
 	ModePlaceholder TemplateMode = "placeholder"
 	ModeGenerative  TemplateMode = "generative"
 	ModeClean       TemplateMode = "clean"
+	// ModeMarkdown processes a `.md` template whose `##` headings drive
+	// the document structure. Empty sections are filled by the LLM,
+	// pre-filled sections are passed through verbatim.
+	ModeMarkdown TemplateMode = "markdown"
 )
 
 func ParseTemplateMode(s string) (TemplateMode, error) {
@@ -17,6 +21,8 @@ func ParseTemplateMode(s string) (TemplateMode, error) {
 		return ModeGenerative, nil
 	case "clean":
 		return ModeClean, nil
+	case "markdown":
+		return ModeMarkdown, nil
 	default:
 		return "", ErrInvalidTemplateMode
 	}
