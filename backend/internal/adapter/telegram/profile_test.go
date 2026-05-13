@@ -199,8 +199,8 @@ func TestProfileHandler_StoreGetError_PropagatesAsReply(t *testing.T) {
 		// surface only transport-level errors via return — assert that pattern.
 		t.Fatalf("HandleCommand should not return store-read errors directly: %v", err)
 	}
-	if len(rep.texts) == 0 || !strings.Contains(strings.ToLower(rep.texts[0]), "ошибка") {
-		t.Errorf("expected error reply, got %v", rep.texts)
+	if len(rep.texts) == 0 || !strings.Contains(rep.texts[0], "❌") {
+		t.Errorf("expected error reply (❌ marker), got %v", rep.texts)
 	}
 }
 
@@ -409,8 +409,8 @@ func TestProfileHandler_WizardInput_StoreSetError_RepliesError(t *testing.T) {
 	})
 
 	last := rep.texts[len(rep.texts)-1]
-	if !strings.Contains(strings.ToLower(last), "ошибка") {
-		t.Errorf("expected save-error reply, got %q", last)
+	if !strings.Contains(last, "❌") {
+		t.Errorf("expected save-error reply (❌ marker), got %q", last)
 	}
 	if _, ok := sessions.Get(42); ok {
 		t.Error("session should be cleared even on save error to avoid stuck state")

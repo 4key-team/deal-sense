@@ -16,8 +16,8 @@ const (
 	msgProfileShowFmt     = "Текущий профиль:\n\n%s\n\nКоманды: /profile edit — редактировать, /profile clear — сбросить."
 	msgProfileCleared     = "Профиль удалён."
 	msgProfileUnknownCmd  = "Неизвестная подкоманда. Доступно: /profile, /profile edit, /profile clear."
-	msgProfileLoadError   = "❌ Ошибка чтения профиля:"
-	msgProfileSaveError   = "❌ Ошибка сохранения профиля:"
+	msgProfileLoadError   = "❌ Профиль временно недоступен. Попробуйте позже."
+	msgProfileSaveError   = "❌ Не удалось сохранить профиль. Попробуйте позже."
 	msgWizardStart        = "Заполним профиль компании. На каждый вопрос отвечайте одним сообщением. Прервать — /cancel.\n\nКак называется ваша компания?"
 	msgWizardTeamSize     = "Сколько человек в команде?"
 	msgWizardExperience   = "Сколько лет опыта в разработке?"
@@ -36,4 +36,9 @@ const (
 	MsgDenied         = "🚫 Доступ запрещён."
 	MsgDownloadFailed = "❌ Не удалось скачать файл:"
 	MsgFallbackHint   = "Используйте /analyze или /generate ответом на файл."
+
+	// DefaultCompanyFallback is the placeholder profile fed to the LLM when
+	// a chat has no per-chat company profile saved. It lives next to the
+	// other user-visible strings so all bot semantics stay in one file.
+	DefaultCompanyFallback = "Software development company"
 )

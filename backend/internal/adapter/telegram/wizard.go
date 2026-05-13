@@ -2,6 +2,12 @@ package telegram
 
 import "time"
 
+// skipSentinel is the single-character answer that means "skip this question"
+// (treated as an empty value) in the profile wizard. It is part of the
+// ubiquitous language shared between the wizard prompts (see messages.go)
+// and the input parsers.
+const skipSentinel = "-"
+
 // WizardStep names the question currently waiting for user input. The wizard
 // advances from StepName through StepExtra and lands on StepConfirm, after
 // which the draft is persisted and the session cleared.

@@ -21,10 +21,6 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 )
 
-// defaultCompanyProfile is the static company description fed into every
-// /analyze call. Per-user profile support is backlog.
-const defaultCompanyProfile = "Software development company"
-
 // docDownloader returns the file body and resolved filename for a Telegram
 // Document. The default impl talks to the real Telegram API; tests inject
 // a deterministic version.
@@ -110,7 +106,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 
 	replier := &botReplier{b: b, logger: logger}
 	profileHandler = telegramadapter.NewProfileHandler(profiles, wizardSessions, replier)
-	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, defaultCompanyProfile)
+	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback)
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,

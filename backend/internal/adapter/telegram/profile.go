@@ -43,10 +43,15 @@ func (h *ProfileHandler) HandleCommand(ctx context.Context, u *Update) error {
 	}
 }
 
+// Handler convention: bot-business errors (store read/write failure) surface
+// as a stable user-facing Reply — internal err.Error() is not leaked. The
+// transport error from the Reply itself is what bubbles up to the caller
+// (so the bot runtime can log it once).
+
 func (h *ProfileHandler) showProfile(ctx context.Context, chatID int64) error {
 	p, ok, err := h.profiles.Get(ctx, chatID)
 	if err != nil {
-		return h.replier.Reply(ctx, chatID, fmt.Sprintf("%s %s", msgProfileLoadError, err.Error()))
+		return h.replier.Reply(ctx, chatID, msgProfileLoadError)
 	}
 	if !ok {
 		return h.replier.Reply(ctx, chatID, msgProfileEmpty)
@@ -66,7 +71,7 @@ func (h *ProfileHandler) startWizard(ctx context.Context, chatID int64) error {
 
 func (h *ProfileHandler) clearProfile(ctx context.Context, chatID int64) error {
 	if err := h.profiles.Clear(ctx, chatID); err != nil {
-		return h.replier.Reply(ctx, chatID, fmt.Sprintf("%s %s", msgProfileSaveError, err.Error()))
+		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
 	return h.replier.Reply(ctx, chatID, msgProfileCleared)
 }
@@ -141,19 +146,19 @@ func (h *ProfileHandler) finalize(ctx context.Context, chatID int64, d *ProfileD
 		if errors.Is(err, domain.ErrEmptyCompany) {
 			return h.replier.Reply(ctx, chatID, msgWizardEmptyProfile)
 		}
-		return h.replier.Reply(ctx, chatID, fmt.Sprintf("%s %s", msgProfileSaveError, err.Error()))
+		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
 	if err := h.profiles.Set(ctx, chatID, profile); err != nil {
-		return h.replier.Reply(ctx, chatID, fmt.Sprintf("%s %s", msgProfileSaveError, err.Error()))
+		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
 	return h.replier.Reply(ctx, chatID, fmt.Sprintf(msgWizardConfirmFmt, profile.Render()))
 }
 
 // parseList splits a comma-separated answer into trimmed, non-empty items.
-// "-" is the agreed sentinel for "skip" and yields nil.
+// skipSentinel ("-") is the agreed answer for "skip" and yields nil.
 func parseList(text string) []string {
 	s := strings.TrimSpace(text)
-	if s == "" || s == "-" {
+	if s == "" || s == skipSentinel {
 		return nil
 	}
 	parts := strings.Split(s, ",")
@@ -169,11 +174,11 @@ func parseList(text string) []string {
 	return out
 }
 
-// parseSentinel returns "" for the "-" skip marker, otherwise the trimmed
-// answer.
+// parseSentinel returns "" for the skipSentinel marker, otherwise the
+// trimmed answer.
 func parseSentinel(text string) string {
 	s := strings.TrimSpace(text)
-	if s == "-" {
+	if s == skipSentinel {
 		return ""
 	}
 	return s
