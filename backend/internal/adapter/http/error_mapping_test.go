@@ -4,11 +4,11 @@ import "testing"
 
 func TestMapErrorToUserMessage(t *testing.T) {
 	tests := []struct {
-		name    string
-		err     string
-		lang    string
-		wantRu  string
-		wantEn  string
+		name   string
+		err    string
+		lang   string
+		wantRu string
+		wantEn string
 	}{
 		{
 			name:   "rate limit",

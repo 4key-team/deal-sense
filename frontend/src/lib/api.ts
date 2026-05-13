@@ -51,6 +51,7 @@ interface StoredSettings {
   apiKey?: string;
   url?: string;
   model?: string;
+  dealSenseApiKey?: string;
 }
 
 function apiHeaders(): Record<string, string> {
@@ -60,6 +61,7 @@ function apiHeaders(): Record<string, string> {
   if (s.providerId) headers["X-LLM-Provider"] = s.providerId;
   if (s.url) headers["X-LLM-URL"] = s.url;
   if (s.model) headers["X-LLM-Model"] = s.model;
+  if (s.dealSenseApiKey) headers["X-API-Key"] = s.dealSenseApiKey;
   return headers;
 }
 

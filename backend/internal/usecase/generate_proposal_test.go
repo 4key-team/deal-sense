@@ -87,15 +87,22 @@ type stubLLM struct {
 	usage    domain.TokenUsage
 	err      error
 	name     string
+	// captured prompts — populated by GenerateCompletion so tests can
+	// assert which system prompt the use case selected (clean vs placeholder
+	// vs generative).
+	systemPromptSeen string
+	userPromptSeen   string
 }
 
-func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
+func (s *stubLLM) GenerateCompletion(_ context.Context, system, user string) (string, domain.TokenUsage, error) {
+	s.systemPromptSeen = system
+	s.userPromptSeen = user
 	return s.response, s.usage, s.err
 }
 
-func (s *stubLLM) CheckConnection(_ context.Context) error            { return s.err }
-func (s *stubLLM) ListModels(_ context.Context) ([]string, error)     { return nil, nil }
-func (s *stubLLM) Name() string                                       { return s.name }
+func (s *stubLLM) CheckConnection(_ context.Context) error        { return s.err }
+func (s *stubLLM) ListModels(_ context.Context) ([]string, error) { return nil, nil }
+func (s *stubLLM) Name() string                                   { return s.name }
 
 func TestGenerateProposal_Execute(t *testing.T) {
 	llmResp := `{"params":{"client_name":"Acme","summary":"Great project"},"sections":[{"title":"Резюме","status":"ai","tokens":120}],"summary":"КП сгенерировано"}`
@@ -180,12 +187,12 @@ func TestGenerateProposal_Execute(t *testing.T) {
 			wantSecs:   1,
 		},
 		{
-			name:     "empty section title skipped",
-			tmplName: "proposal.docx",
-			tmplData: []byte("template"),
-			llmResp:  `{"params":{"x":"y"},"sections":[{"title":"","status":"ai","tokens":50},{"title":"Valid","status":"ai","tokens":30}],"summary":"ok"}`,
+			name:       "empty section title skipped",
+			tmplName:   "proposal.docx",
+			tmplData:   []byte("template"),
+			llmResp:    `{"params":{"x":"y"},"sections":[{"title":"","status":"ai","tokens":50},{"title":"Valid","status":"ai","tokens":30}],"summary":"ok"}`,
 			tmplResult: []byte("filled"),
-			wantSecs: 1,
+			wantSecs:   1,
 		},
 	}
 
@@ -394,9 +401,9 @@ func TestGenerateProposal_PDFGeneration(t *testing.T) {
 	llmResp := `{"params":{"client_name":"Acme"},"sections":[{"title":"Intro","status":"ai","tokens":50}],"summary":"ok"}`
 
 	tests := []struct {
-		name       string
-		pdfGen     *stubPDFGenerator
-		wantPDF    bool
+		name    string
+		pdfGen  *stubPDFGenerator
+		wantPDF bool
 	}{
 		{
 			name:    "pdf generator produces output",
@@ -611,5 +618,61 @@ func TestGenerateProposal_PlaceholderMode_WithGenerativeEngine(t *testing.T) {
 	}
 	if result.Mode() != domain.ModePlaceholder {
 		t.Errorf("Mode() = %q, want placeholder", result.Mode())
+	}
+}
+
+// TestGenerateProposal_PromptSelectionByMode pins which system prompt is
+// chosen by Execute for each TemplateMode. Bug fixed in this pair: clean
+// mode was using the placeholder prompt, whose JSON schema has no
+// `content` field — LLM happily returned sections with empty content
+// and GenerateClean rendered headings without bodies.
+func TestGenerateProposal_PromptSelectionByMode(t *testing.T) {
+	const (
+		placeholderMarker = "PROMPT_PLACEHOLDER_MARKER"
+		generativeMarker  = "PROMPT_GENERATIVE_MARKER"
+	)
+
+	tests := []struct {
+		name         string
+		templateData []byte
+		wantMarker   string
+	}{
+		{
+			name:         "clean mode (no template) must use generative prompt",
+			templateData: nil,
+			wantMarker:   generativeMarker,
+		},
+		{
+			name:         "generative mode (template without placeholders) uses generative prompt",
+			templateData: makeTestDocxForUsecase(`<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>No placeholders here</w:t></w:r></w:p></w:body></w:document>`),
+			wantMarker:   generativeMarker,
+		},
+		{
+			name:         "placeholder mode (template with {{x}}) uses placeholder prompt",
+			templateData: makeTestDocxForUsecase(`<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello {{client}}</w:t></w:r></w:p></w:body></w:document>`),
+			wantMarker:   placeholderMarker,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			llmResp := `{"meta":{"client":"Acme"},"sections":[{"title":"Intro","content":"hello","status":"ai","tokens":10}],"summary":"s"}`
+			llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(10, 10)}
+			parser := &stubParser{content: "parsed"}
+			tmplEng := &stubTemplateEngine{result: []byte("filled")}
+			genEng := &stubGenerativeEngine{result: []byte("clean-or-fill")}
+
+			uc := usecase.NewGenerateProposal(llm, parser, tmplEng, placeholderMarker)
+			uc.SetGenerativeEngine(genEng, generativeMarker)
+
+			_, _, err := uc.Execute(t.Context(), "tpl.docx", tt.templateData, nil, nil)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if llm.systemPromptSeen != tt.wantMarker {
+				t.Errorf("system prompt = %q, want %q", llm.systemPromptSeen, tt.wantMarker)
+			}
+		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -124,9 +125,9 @@ func TestDocxGenerative_GenerativeFill(t *testing.T) {
 			wantNotContain: []string{"**", "###", "|---|", "[ваш email](mailto:x)"},
 		},
 		{
-			name:       "empty sections — no modification",
-			paragraphs: []struct{ text, style string }{{"Original", ""}},
-			sections:   nil,
+			name:         "empty sections — no modification",
+			paragraphs:   []struct{ text, style string }{{"Original", ""}},
+			sections:     nil,
 			wantContains: []string{"Original"},
 		},
 	}
@@ -484,4 +485,220 @@ func TestDocxGenerative_GenerateClean_EmptyInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("result is not valid DOCX: %v", err)
 	}
+}
+
+// --- Heading-matcher normalization (Bug #1A) ---
+//
+// Real-world templates use numbered headings like "2. Цель проекта" while
+// the LLM returns plain "Цель проекта". Without normalization the matcher
+// fails and every section gets appended at the end of the document,
+// duplicating headings. These tests pin the contract.
+
+func TestDocxGenerative_HeadingMatcher_StripsNumericPrefix(t *testing.T) {
+	ctx := context.Background()
+	tmpl := makeDocxFixture([]struct{ text, style string }{
+		{"Title", "Title"},
+		{"2. Цель проекта", "Heading2"},
+		{"placeholder body", ""}, // gets replaced
+		{"3. Объем работ (MVP)", "Heading2"},
+		{"placeholder body 2", ""},
+	})
+
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, tmpl, []usecase.ContentSection{
+		{Title: "Цель проекта", Content: "filled goal content"},
+		{Title: "Объем работ (MVP)", Content: "filled scope content"},
+	})
+	if err != nil {
+		t.Fatalf("GenerativeFill: %v", err)
+	}
+
+	texts := docxParagraphTexts(result)
+	joined := strings.Join(texts, "\n")
+	if !strings.Contains(joined, "filled goal content") {
+		t.Errorf("missing filled goal content under '2. Цель проекта'\n--- got ---\n%s", joined)
+	}
+	if !strings.Contains(joined, "filled scope content") {
+		t.Errorf("missing filled scope content under '3. Объем работ (MVP)'\n--- got ---\n%s", joined)
+	}
+	// Sections must not be appended at the end as new Heading1 duplicates.
+	if strings.Count(joined, "Цель проекта") != 1 {
+		t.Errorf("'Цель проекта' must appear once (no append-duplicate); got %d times\n%s",
+			strings.Count(joined, "Цель проекта"), joined)
+	}
+	if strings.Count(joined, "Объем работ") != 1 {
+		t.Errorf("'Объем работ' must appear once; got %d times\n%s",
+			strings.Count(joined, "Объем работ"), joined)
+	}
+}
+
+func TestDocxGenerative_HeadingMatcher_CollapsesWhitespace(t *testing.T) {
+	ctx := context.Background()
+	// Real Word templates often carry trailing/double spaces inside runs
+	// (see Bitrix24 template paragraph 029 "Технологический стек  ").
+	tmpl := makeDocxFixture([]struct{ text, style string }{
+		{"Технологический  стек  ", "Heading3"}, // double + trailing spaces
+		{"placeholder body", ""},
+	})
+
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, tmpl, []usecase.ContentSection{
+		{Title: "Технологический стек", Content: "Go + React"},
+	})
+	if err != nil {
+		t.Fatalf("GenerativeFill: %v", err)
+	}
+
+	joined := strings.Join(docxParagraphTexts(result), "\n")
+	if !strings.Contains(joined, "Go + React") {
+		t.Errorf("missing content under whitespace-noisy heading\n--- got ---\n%s", joined)
+	}
+}
+
+func TestDocxGenerative_HeadingMatcher_NegativeUnknownTitleAppends(t *testing.T) {
+	// Unrelated LLM titles must still be appended at the end (existing
+	// behaviour), not silently dropped. Normalization must not introduce
+	// false positives.
+	ctx := context.Background()
+	tmpl := makeDocxFixture([]struct{ text, style string }{
+		{"1. Введение", "Heading2"},
+		{"intro body", ""},
+	})
+
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(ctx, tmpl, []usecase.ContentSection{
+		{Title: "Архитектура", Content: "arch content"},
+	})
+	if err != nil {
+		t.Fatalf("GenerativeFill: %v", err)
+	}
+
+	joined := strings.Join(docxParagraphTexts(result), "\n")
+	if !strings.Contains(joined, "Архитектура") {
+		t.Errorf("unmatched LLM title must be appended at the end\n--- got ---\n%s", joined)
+	}
+}
+
+func TestDocxGenerative_ZipFallback_HeadingMatcher_StripsNumericPrefix(t *testing.T) {
+	// Same contract as docxgo path but on zip-fallback (raw XML
+	// manipulation, hit in production whenever docxgo cannot open the
+	// template — themed Word docs, complex drawings). Drives the
+	// injectSectionsXML helper directly via the export_test seam so the
+	// test is fast and isolated from the 3 MB bitrix24 fixture.
+	xml := `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+		`<w:body>` +
+		`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>2. Цель проекта</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>placeholder body</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>3. Объем работ</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>placeholder body 2</w:t></w:r></w:p>` +
+		`</w:body></w:document>`
+
+	g := parser.NewDocxGenerative()
+	out := string(g.InjectSectionsXMLForTest(xml, []usecase.ContentSection{
+		{Title: "Цель проекта", Content: "GOAL"},
+		{Title: "Объем работ", Content: "SCOPE"},
+	}))
+
+	if !strings.Contains(out, "GOAL") {
+		t.Errorf("missing GOAL after numbered heading\n%s", out)
+	}
+	if !strings.Contains(out, "SCOPE") {
+		t.Errorf("missing SCOPE after numbered heading\n%s", out)
+	}
+	// Original "placeholder body" paragraphs replaced — not present.
+	if strings.Contains(out, "placeholder body") {
+		t.Errorf("placeholder body was not replaced\n%s", out)
+	}
+	// No append-duplicate Heading1 at the tail.
+	if strings.Contains(out, `w:val="Heading1"`) {
+		t.Errorf("zip-fallback appended Heading1 duplicate; matcher missed numbered heading\n%s", out)
+	}
+}
+
+// TestDocxGenerative_RegressionBitrix24Template reproduces the bug from
+// 2026-05-12 (Telegram report + samples-12-05-26/): a real Bitrix24
+// proposal template carrying numbered Heading 2 paragraphs.
+//
+// Before the matcher fix every numbered section was duplicated at the
+// end as a new Heading1 because "2. Цель проекта" did not match
+// "Цель проекта". This regression test asserts: (a) content lands under
+// each existing numbered heading and (b) no duplicate Heading1
+// "Цель проекта" / "Архитектура, стек и требования к системе" appears
+// at the tail of the document.
+func TestDocxGenerative_RegressionBitrix24Template(t *testing.T) {
+	tmpl, err := readFixture("testdata/bitrix24-template.docx")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	sections := []usecase.ContentSection{
+		{Title: "Проблематика", Content: "PROBLEM-CONTENT"},
+		{Title: "Цель проекта", Content: "GOAL-CONTENT"},
+		{Title: "Объем работ (MVP)", Content: "SCOPE-CONTENT"},
+		{Title: "Архитектура, стек и требования к системе", Content: "ARCH-CONTENT"},
+		{Title: "Стоимость и сроки", Content: "PRICE-CONTENT"},
+	}
+
+	g := parser.NewDocxGenerative()
+	result, err := g.GenerativeFill(context.Background(), tmpl, sections)
+	if err != nil {
+		t.Fatalf("GenerativeFill: %v", err)
+	}
+
+	// Every section content must land in the document.
+	body := documentXML(t, result)
+	for _, sec := range sections {
+		if !strings.Contains(body, sec.Content) {
+			t.Errorf("missing content %q for section %q", sec.Content, sec.Title)
+		}
+	}
+
+	// No append-duplicates: after stripping numeric prefixes each
+	// numbered heading title must appear at most once in the rendered
+	// paragraph texts (excluding ToC / footer where the original text
+	// is reused verbatim — none in this template).
+	for _, sec := range sections {
+		count := strings.Count(body, ">"+sec.Title+"<")
+		// Allow exactly one Heading2 occurrence for headings that exist
+		// as numbered "N. Title" in the template (matched form has the
+		// numeric prefix stripped already by us; the original numbered
+		// text remains in the doc).
+		if count > 1 {
+			t.Errorf("section %q rendered %d times (append-duplicate bug)", sec.Title, count)
+		}
+	}
+}
+
+func readFixture(rel string) ([]byte, error) {
+	f, err := os.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+func documentXML(t *testing.T, docxBytes []byte) string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open document.xml: %v", err)
+		}
+		defer rc.Close()
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("read document.xml: %v", err)
+		}
+		return string(data)
+	}
+	t.Fatal("word/document.xml not found in result")
+	return ""
 }

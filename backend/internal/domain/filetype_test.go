@@ -20,6 +20,8 @@ func TestParseFileType(t *testing.T) {
 		{name: "docx with dot", input: ".docx", want: domain.FileTypeDOCX},
 		{name: "md without dot", input: "md", want: domain.FileTypeMD},
 		{name: "md with dot", input: ".md", want: domain.FileTypeMD},
+		{name: "doc without dot", input: "doc", want: domain.FileTypeDOC},
+		{name: "doc with dot", input: ".doc", want: domain.FileTypeDOC},
 		{name: "unsupported txt", input: "txt", wantErr: domain.ErrInvalidFileType},
 		{name: "unsupported empty", input: "", wantErr: domain.ErrInvalidFileType},
 		{name: "unsupported xlsx", input: "xlsx", wantErr: domain.ErrInvalidFileType},

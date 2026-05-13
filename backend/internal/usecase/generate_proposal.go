@@ -59,11 +59,11 @@ func (uc *GenerateProposal) log() *slog.Logger {
 }
 
 type proposalLLMResponse struct {
-	Params   map[string]string      `json:"params"`
-	Meta     map[string]string      `json:"meta"`
-	Sections []proposalLLMSection   `json:"sections"`
-	Summary  string                 `json:"summary"`
-	Log      []proposalLLMLog       `json:"log"`
+	Params   map[string]string    `json:"params"`
+	Meta     map[string]string    `json:"meta"`
+	Sections []proposalLLMSection `json:"sections"`
+	Summary  string               `json:"summary"`
+	Log      []proposalLLMLog     `json:"log"`
 }
 
 type proposalLLMSection struct {
@@ -143,9 +143,12 @@ func (uc *GenerateProposal) Execute(
 	}
 	proposal.SetMode(mode)
 
-	// Select system prompt based on mode.
+	// Select system prompt based on mode. Both Generative and Clean modes
+	// need the generative prompt because its JSON schema declares the
+	// `content` field on each section — the placeholder-mode prompt does
+	// not, leaving GenerateClean/GenerativeFill with empty bodies.
 	systemPrompt := uc.systemPrompt
-	if mode == domain.ModeGenerative {
+	if mode == domain.ModeGenerative || mode == domain.ModeClean {
 		systemPrompt = uc.generativePrompt
 	}
 

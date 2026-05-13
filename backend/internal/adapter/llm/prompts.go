@@ -1,7 +1,88 @@
+// Package llm contains the LLM adapter implementations. Prompts are
+// composed by wrapping inner (raw) prompt functions through the
+// domain SecurityPolicy decorator, so the юр firewall cannot be silently
+// bypassed by introducing a new prompt without the security prefix.
 package llm
 
-// TenderAnalysisPrompt returns the system prompt for tender analysis.
+import (
+	"sync/atomic"
+
+	"github.com/daniil/deal-sense/backend/internal/domain/security"
+)
+
+// wrappedPrompts holds all three security-wrapped prompt functions. It is
+// stored behind an atomic.Pointer so that concurrent readers (each HTTP
+// request) and the (test-only) reloader cannot race.
+type wrappedPrompts struct {
+	tender     func(string) string
+	proposal   func(string) string
+	generative func(string) string
+}
+
+// prompts is the live bundle. Reads from production code (TenderAnalysisPrompt
+// etc.) and writes from initWrappedPrompts go through the atomic.Pointer.
+var prompts atomic.Pointer[wrappedPrompts] //nolint:gochecknoglobals // testable seam
+
+// policyLoader is the source of the security policy. Overridable via
+// export_test.go to exercise the panic branch. Reads are guarded by
+// policyLoaderMu so tests don't race the production init() call.
+var (
+	policyLoader   = security.NewDefaultPolicy //nolint:gochecknoglobals // testable seam
+	policyLoaderMu atomicLoader                //nolint:gochecknoglobals // testable seam
+)
+
+// atomicLoader wraps a single mutex around policyLoader assignment. We use a
+// dedicated type so the seam stays explicit rather than scattering a bare
+// mutex over package state.
+type atomicLoader struct {
+	atomic.Pointer[func() (*security.Policy, error)]
+}
+
+func init() {
+	initWrappedPrompts()
+}
+
+// initWrappedPrompts loads the active SecurityPolicy and atomically swaps
+// the wrapped prompt bundle. Panics if the policy is invalid — fail-fast is
+// correct for a security guard. Safe to call concurrently with prompt reads.
+func initWrappedPrompts() {
+	loader := policyLoader
+	if l := policyLoaderMu.Load(); l != nil {
+		loader = *l
+	}
+	p, err := loader()
+	if err != nil {
+		panic("llm: default security policy init failed: " + err.Error())
+	}
+	prompts.Store(&wrappedPrompts{
+		tender:     p.Wrap(rawTenderAnalysisPrompt),
+		proposal:   p.Wrap(rawProposalGenerationPrompt),
+		generative: p.Wrap(rawGenerativeProposalPrompt),
+	})
+}
+
+// TenderAnalysisPrompt returns the security-wrapped system prompt for
+// tender analysis.
 func TenderAnalysisPrompt(langName string) string {
+	return prompts.Load().tender(langName)
+}
+
+// ProposalGenerationPrompt returns the security-wrapped system prompt for
+// placeholder-mode proposal generation.
+func ProposalGenerationPrompt(langName string) string {
+	return prompts.Load().proposal(langName)
+}
+
+// GenerativeProposalPrompt returns the security-wrapped system prompt for
+// generative (no-placeholder) proposal mode.
+func GenerativeProposalPrompt(langName string) string {
+	return prompts.Load().generative(langName)
+}
+
+// rawTenderAnalysisPrompt is the inner prompt without the security prefix.
+// Exported only for tests in this package; production callers must use
+// TenderAnalysisPrompt to get the security guard.
+func rawTenderAnalysisPrompt(langName string) string {
 	return `You are a tender analysis expert. Analyze tender documents against a company profile.
 Respond ONLY with a JSON object (no markdown, no code fences):
 {
@@ -18,8 +99,7 @@ Extract 3-5 pros, 2-4 cons, and 6-10 key requirements from the tender documents.
 IMPORTANT: Respond in ` + langName + `.`
 }
 
-// ProposalGenerationPrompt returns the system prompt for proposal generation.
-func ProposalGenerationPrompt(langName string) string {
+func rawProposalGenerationPrompt(langName string) string {
 	return `You are a commercial proposal expert. Generate content for a proposal template based on provided context.
 Respond ONLY with a JSON object (no markdown, no code fences):
 {
@@ -40,8 +120,7 @@ Rules:
 IMPORTANT: Respond in ` + langName + `.`
 }
 
-// GenerativeProposalPrompt returns the system prompt for generative (no-placeholder) proposal mode.
-func GenerativeProposalPrompt(langName string) string {
+func rawGenerativeProposalPrompt(langName string) string {
 	return `You are a commercial proposal expert. The template has NO placeholders — generate full content for each section.
 Respond ONLY with a JSON object (no markdown, no code fences):
 {

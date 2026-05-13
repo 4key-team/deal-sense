@@ -198,8 +198,12 @@ func TestParseRequirementStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			got, err := domain.ParseRequirementStatus(tt.input)
-			if got != tt.want { t.Errorf("got %q, want %q", got, tt.want) }
-			if !errors.Is(err, tt.err) { t.Errorf("err = %v, want %v", err, tt.err) }
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+			if !errors.Is(err, tt.err) {
+				t.Errorf("err = %v, want %v", err, tt.err)
+			}
 		})
 	}
 }

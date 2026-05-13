@@ -1,0 +1,44 @@
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.26"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - unused
+    - misspell
+    - unconvert
+    - bodyclose
+
+  settings:
+    errcheck:
+      # _ = f.Close() style discards are intentional in places we already
+      # documented (see internal/adapter/http/handler.go:mustReadMultipartFile).
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+
+  exclusions:
+    rules:
+      # Test files allow unused exports and discarded errors more freely.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unused
+      # docxgo's builder API returns errors that only fire on detached
+      # runs/paragraphs — impossible in our flow. Suppress here rather
+      # than annotating every line.
+      - path: internal/adapter/parser/docx_generative\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -98,7 +98,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp anthropicResponse
-		json.Unmarshal(respBody, &errResp)
+		_ = json.Unmarshal(respBody, &errResp) // best-effort parse of error body
 		msg := "unknown error"
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
@@ -108,7 +108,7 @@ func (p *Anthropic) GenerateCompletion(ctx context.Context, systemPrompt, userPr
 
 	var antResp anthropicResponse
 	if err := json.Unmarshal(respBody, &antResp); err != nil {
-		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), wrapParseErr("anthropic", err)
 	}
 
 	if len(antResp.Content) == 0 {

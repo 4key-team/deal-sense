@@ -35,4 +35,25 @@ describe("storage", () => {
     localStorage.setItem("ds:broken", "not json{");
     expect(getItem("broken", "safe")).toBe("safe");
   });
+
+  it("setItem returns true on success", () => {
+    expect(setItem("ok", "val")).toBe(true);
+  });
+
+  it("setItem returns false on quota error instead of throwing", () => {
+    // Stub localStorage.setItem to simulate the quota exception that
+    // Chrome throws when total origin storage exceeds ~5 MB.
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      const err = new Error("Setting the value exceeded the quota.");
+      err.name = "QuotaExceededError";
+      throw err;
+    };
+    try {
+      expect(() => setItem("big", "x".repeat(10))).not.toThrow();
+      expect(setItem("big", "x".repeat(10))).toBe(false);
+    } finally {
+      Storage.prototype.setItem = original;
+    }
+  });
 });

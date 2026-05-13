@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,12 +9,25 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	handler "github.com/daniil/deal-sense/backend/internal/adapter/http"
+	"github.com/daniil/deal-sense/backend/internal/domain"
 	"github.com/daniil/deal-sense/backend/internal/usecase"
 )
+
+type recordingParser struct {
+	content string
+	parsed  []string
+}
+
+func (s *recordingParser) Parse(_ context.Context, name string, _ []byte) (string, error) {
+	s.parsed = append(s.parsed, name)
+	return s.content, nil
+}
+func (s *recordingParser) Supports(_ domain.FileType) bool { return true }
 
 type stubTemplateEngine struct {
 	result []byte
@@ -388,6 +402,62 @@ func TestHandleGenerateProposal(t *testing.T) {
 
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+		}
+	})
+
+	t.Run("zip in context: valid archive extracted to inner files", func(t *testing.T) {
+		var zipBuf bytes.Buffer
+		zw := zip.NewWriter(&zipBuf)
+		fw, _ := zw.Create("brief.pdf")
+		fw.Write([]byte("brief content"))
+		zw.Close()
+
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("doc")}
+		parser := &recordingParser{content: "text"}
+		h := handler.NewHandler(llm, nil, parser, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		tw, _ := w.CreateFormFile("template", "offer.docx")
+		tw.Write([]byte("template"))
+		cw, _ := w.CreateFormFile("context", "ctx.zip")
+		cw.Write(zipBuf.Bytes())
+		w.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.HandleGenerateProposal(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+		if !slices.Contains(parser.parsed, "brief.pdf") {
+			t.Errorf("parser was not called with extracted brief.pdf; parsed=%v", parser.parsed)
+		}
+	})
+
+	t.Run("zip in context: invalid archive returns 400", func(t *testing.T) {
+		llm := &stubLLM{response: llmResp, name: "test"}
+		tmpl := &stubTemplateEngine{result: []byte("doc")}
+		h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
+
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		tw, _ := w.CreateFormFile("template", "offer.docx")
+		tw.Write([]byte("template"))
+		cw, _ := w.CreateFormFile("context", "broken.zip")
+		cw.Write([]byte("not a zip"))
 		w.Close()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)

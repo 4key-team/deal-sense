@@ -1,0 +1,37 @@
+name: security-weekly
+
+# Weekly regression sweep against the Layer 2 ASR suite. Catches drift
+# after Layer 1 prompt edits or upstream LLM provider changes that might
+# silently alter prompt behavior (e.g. provider documentation lists a new
+# canonical refusal that breaks our marker assertions).
+#
+# Real-LLM BarkingDog scans are a separate manual workflow when a
+# staging API key is available; this job runs the structural ASR suite
+# only.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  asr:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: ASR scan (Layer 2, structural)
+        run: go test ./tests/security/ -v -count=1 -timeout 10m

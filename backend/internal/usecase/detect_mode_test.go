@@ -62,13 +62,13 @@ func TestDetectTemplateMode(t *testing.T) {
 			want: domain.ModeGenerative,
 		},
 		{
-			name: "invalid zip",
-			data: []byte("not a zip"),
+			name:    "invalid zip",
+			data:    []byte("not a zip"),
 			wantErr: true,
 		},
 		{
-			name: "empty template",
-			data: nil,
+			name:    "empty template",
+			data:    nil,
 			wantErr: true,
 		},
 	}

@@ -13,9 +13,11 @@ import (
 
 	apphttp "github.com/daniil/deal-sense/backend/internal/adapter/http"
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
+	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
 	"github.com/daniil/deal-sense/backend/internal/adapter/parser"
 	apppdf "github.com/daniil/deal-sense/backend/internal/adapter/pdf"
 	"github.com/daniil/deal-sense/backend/internal/config"
+	"github.com/daniil/deal-sense/backend/internal/domain/security"
 )
 
 func parseLogLevel(s string) slog.Level {
@@ -33,7 +35,11 @@ func parseLogLevel(s string) slog.Level {
 
 func main() {
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		os.Exit(1)
+	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: parseLogLevel(cfg.LogLevel)}))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -57,8 +63,16 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		return fmt.Errorf("init llm provider: %w", err)
 	}
 	logger.Info("llm provider initialized", "provider", provider.Name(), "model", cfg.LLMModel)
+	collector := metrics.NewCollector()
+	provider = llm.NewMetered(provider, collector)
 
-	docParser := parser.NewComposite(parser.NewPDFParser(), parser.NewDocxReader(), parser.NewMDParser())
+	docConverter := parser.NewDocConverter()
+	docParser := parser.NewComposite(
+		parser.NewPDFParser(),
+		parser.NewDocxReader(),
+		parser.NewMDParser(),
+		parser.NewDocParser(docConverter),
+	)
 	docxTemplate := parser.NewDocxTemplate()
 	docxGenerative := parser.NewDocxGenerative()
 	pdfGen := apppdf.NewMarotoPDFGenerator()
@@ -73,22 +87,51 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		{ID: "custom", Name: "Custom", Models: []string{}},
 	}
 	mdRenderer := parser.NewMarkdownRenderer()
-	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
-	mux := apphttp.NewRouter(h)
+	h := apphttp.NewHandler(provider, llm.Factory{Logger: logger, Counter: collector, SOCKS5Proxy: cfg.LLMSOCKS5Proxy}, docParser, docxTemplate, llm.TenderAnalysisPrompt, llm.ProposalGenerationPrompt, providers, logger, pdfGen, docxToPDF, docxGenerative, llm.GenerativeProposalPrompt, mdRenderer)
+	// Pre-populate endpoint risk gauges so /metrics reflects Layer 4
+	// annotations from the moment the server is reachable, not on the
+	// first matching request. Lookup over registry.Paths() cannot miss
+	// by construction — Paths() returns only registered keys.
+	registry := security.NewDefaultEndpointRegistry()
+	for _, path := range registry.Paths() {
+		level, err := registry.Lookup(path)
+		if err != nil {
+			return fmt.Errorf("registry.Lookup(%q) failed for path returned by Paths(): %w", path, err)
+		}
+		collector.SetEndpointRisk(path, level.String())
+	}
+	mux := apphttp.NewRouter(h, collector)
 
-	var handler http.Handler = mux
+	// Health probes bypass auth + rate limit so orchestrators can hit them
+	// without holding an API key and without contributing to the per-IP
+	// bucket.
+	gated := http.Handler(mux)
+	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, collector, gated)
+	gated = apphttp.APIKeyAuth(cfg.APIKey, collector, gated)
+
+	bypass := apphttp.BypassedPaths()
+	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bypass[r.URL.Path]; ok {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		gated.ServeHTTP(w, r)
+	})
+
+	var handler http.Handler = combined
+	handler = apphttp.MetricsRequests(collector, handler)
 	handler = apphttp.CORS("*", handler)
 	handler = apphttp.Logger(logger, handler)
 	handler = apphttp.Recover(logger, handler)
-
-	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      handler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  60 * time.Second,
-		BaseContext:  func(_ net.Listener) context.Context { return ctx },
+	if cfg.APIKey != "" {
+		logger.Info("api key auth enabled")
 	}
+	if cfg.RateLimitRPS > 0 {
+		logger.Info("rate limit enabled", "rps", cfg.RateLimitRPS, "burst", cfg.RateLimitBurst)
+	}
+
+	srv := newHTTPServer(":"+cfg.Port, handler)
+	srv.BaseContext = func(_ net.Listener) context.Context { return ctx }
 
 	errCh := make(chan error, 1)
 	go func() {

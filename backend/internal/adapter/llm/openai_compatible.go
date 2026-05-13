@@ -105,7 +105,7 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp chatResponse
-		json.Unmarshal(respBody, &errResp)
+		_ = json.Unmarshal(respBody, &errResp) // best-effort parse of error body
 		msg := "unknown error"
 		if errResp.Error != nil {
 			msg = errResp.Error.Message
@@ -115,7 +115,7 @@ func (p *OpenAICompatible) GenerateCompletion(ctx context.Context, systemPrompt,
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return "", domain.ZeroTokenUsage(), fmt.Errorf("parse response: %w", err)
+		return "", domain.ZeroTokenUsage(), wrapParseErr(p.config.Name, err)
 	}
 
 	if len(chatResp.Choices) == 0 {

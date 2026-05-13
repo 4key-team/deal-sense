@@ -45,9 +45,9 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 		return buf.Bytes(), nil
 	}
 
-	remaining := make(map[string]usecase.ContentSection, len(sections))
+	remaining := make(map[headingKey]usecase.ContentSection, len(sections))
 	for _, s := range sections {
-		remaining[strings.ToLower(strings.TrimSpace(s.Title))] = s
+		remaining[newHeadingKey(s.Title)] = s
 	}
 
 	paras := doc.Paragraphs()
@@ -57,13 +57,13 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 		if text == "" {
 			continue
 		}
-		titleLower := strings.ToLower(text)
+		key := newHeadingKey(text)
 
-		sec, ok := remaining[titleLower]
+		sec, ok := remaining[key]
 		if !ok {
 			continue
 		}
-		delete(remaining, titleLower)
+		delete(remaining, key)
 
 		// Replace the next paragraph's content (the one after the heading).
 		if i+1 < len(paras) {
@@ -75,13 +75,13 @@ func (g *DocxGenerative) GenerativeFill(_ context.Context, template []byte, sect
 
 	// Append unmatched sections at end.
 	for _, sec := range sections {
-		if _, ok := remaining[strings.ToLower(strings.TrimSpace(sec.Title))]; !ok {
+		if _, ok := remaining[newHeadingKey(sec.Title)]; !ok {
 			continue
 		}
 		heading, _ := doc.AddParagraph()
 		heading.SetStyle(docxdomain.StyleIDHeading1)
 		hr, _ := heading.AddRun()
-		hr.SetText(sec.Title)
+		_ = hr.SetText(sec.Title) //nolint:errcheck // docxgo SetText returns nil on detached runs only
 
 		g.addContentParagraphs(doc, sec.Content)
 	}
@@ -160,7 +160,7 @@ func (g *DocxGenerative) GenerateClean(_ context.Context, input usecase.ContentI
 		heading, _ := doc.AddParagraph()
 		heading.SetStyle(docxdomain.StyleIDHeading1)
 		hr, _ := heading.AddRun()
-		hr.SetText(sec.Title)
+		_ = hr.SetText(sec.Title) //nolint:errcheck // docxgo SetText returns nil on detached runs only
 
 		g.addContentParagraphs(doc, sec.Content)
 	}
@@ -199,10 +199,10 @@ func (g *DocxGenerative) generativeFillZip(template []byte, sections []usecase.C
 		header := f.FileHeader
 		header.UncompressedSize64 = uint64(len(content))
 		fw, _ := w.CreateHeader(&header)
-		fw.Write(content)
+		_, _ = fw.Write(content) //nolint:errcheck // write to in-memory bytes.Buffer
 	}
 
-	w.Close()
+	_ = w.Close() //nolint:errcheck // close of in-memory zip writer
 	return buf.Bytes(), nil
 }
 
@@ -211,9 +211,9 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 		return []byte(xml)
 	}
 
-	remaining := make(map[string]usecase.ContentSection, len(sections))
+	remaining := make(map[headingKey]usecase.ContentSection, len(sections))
 	for _, s := range sections {
-		remaining[strings.ToLower(s.Title)] = s
+		remaining[newHeadingKey(s.Title)] = s
 	}
 
 	paras := paragraphRe.FindAllStringIndex(xml, -1)
@@ -230,12 +230,12 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 
 	replaced := make(map[int]string)
 	for _, sec := range sections {
-		titleLower := strings.ToLower(strings.TrimSpace(sec.Title))
+		key := newHeadingKey(sec.Title)
 		for i, pi := range infos {
-			if strings.ToLower(strings.TrimSpace(pi.text)) != titleLower {
+			if newHeadingKey(pi.text) != key {
 				continue
 			}
-			delete(remaining, titleLower)
+			delete(remaining, key)
 			if i+1 < len(infos) {
 				replaced[i+1] = buildParagraphsXML(sec.Content)
 			}
@@ -261,7 +261,7 @@ func (g *DocxGenerative) injectSectionsXML(xml string, sections []usecase.Conten
 	if len(remaining) > 0 {
 		var appended strings.Builder
 		for _, sec := range sections {
-			if _, ok := remaining[strings.ToLower(sec.Title)]; !ok {
+			if _, ok := remaining[newHeadingKey(sec.Title)]; !ok {
 				continue
 			}
 			appended.WriteString(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>` +
@@ -386,4 +386,3 @@ func ensureListBulletStyle(stylesXML []byte) []byte {
 
 // Ensure DocxGenerative implements GenerativeEngine at compile time.
 var _ usecase.GenerativeEngine = (*DocxGenerative)(nil)
-

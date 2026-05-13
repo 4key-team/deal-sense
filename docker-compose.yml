@@ -11,6 +11,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.anthropic.com}
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5}
+      - DEAL_SENSE_API_KEY=${DEAL_SENSE_API_KEY:-}
       - LLM_SOCKS5_PROXY=${LLM_SOCKS5_PROXY:-}
     restart: unless-stopped
 
@@ -23,3 +24,19 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  telegram-bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.telegram-bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ALLOWLIST_USER_IDS=${ALLOWLIST_USER_IDS}
+      - API_BASE_URL=http://backend:8080
+      - DEAL_SENSE_API_KEY=${DEAL_SENSE_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      - backend
+    restart: unless-stopped
+    profiles:
+      - telegram

@@ -47,10 +47,10 @@ func (t *DocxTemplate) Fill(_ context.Context, template []byte, params map[strin
 		header := f.FileHeader
 		header.UncompressedSize64 = uint64(len(content))
 		fw, _ := w.CreateHeader(&header)
-		fw.Write(content)
+		_, _ = fw.Write(content) //nolint:errcheck // write to in-memory bytes.Buffer
 	}
 
-	w.Close()
+	_ = w.Close() //nolint:errcheck // close of in-memory zip writer
 	return buf.Bytes(), nil
 }
 
