@@ -512,6 +512,7 @@ func TestProfileHandler_LogsEvents(t *testing.T) {
 		wantMsg  string
 		wantLvl  slog.Level
 		wantStep string // optional: empty means no step attr check
+		wantErr  bool   // failure events must carry an "err" attr
 	}{
 		{
 			name: "profile load failed",
@@ -527,6 +528,7 @@ func TestProfileHandler_LogsEvents(t *testing.T) {
 			},
 			wantMsg: "profile load failed",
 			wantLvl: slog.LevelError,
+			wantErr: true,
 		},
 		{
 			name: "profile cleared",
@@ -555,6 +557,7 @@ func TestProfileHandler_LogsEvents(t *testing.T) {
 			},
 			wantMsg: "profile clear failed",
 			wantLvl: slog.LevelError,
+			wantErr: true,
 		},
 		{
 			name: "wizard cancelled",
@@ -621,6 +624,7 @@ func TestProfileHandler_LogsEvents(t *testing.T) {
 			},
 			wantMsg: "profile save failed",
 			wantLvl: slog.LevelError,
+			wantErr: true,
 		},
 		{
 			name: "wizard completed",
@@ -672,6 +676,14 @@ func TestProfileHandler_LogsEvents(t *testing.T) {
 					t.Errorf("step attr missing for %q", tt.wantMsg)
 				} else if step.String() != tt.wantStep {
 					t.Errorf("step = %q, want %q", step.String(), tt.wantStep)
+				}
+			}
+			if tt.wantErr {
+				errAttr, ok := attrValue(rec, "err")
+				if !ok {
+					t.Errorf("err attr missing on failure event %q (operators need it for debugging)", tt.wantMsg)
+				} else if errAttr.String() == "" {
+					t.Errorf("err attr empty on %q", tt.wantMsg)
 				}
 			}
 		})
