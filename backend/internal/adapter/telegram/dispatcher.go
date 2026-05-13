@@ -5,6 +5,25 @@ import (
 	"strings"
 )
 
+// ShouldRouteToProfile reports whether a text message should be handled by
+// the profile/wizard router rather than the generic fallback. It is the
+// predicate behind RouteWizardOrProfile, exposed so the runtime can use it
+// as a bot.MatchFunc without duplicating the heuristic.
+//
+// Returns true if either the message starts with the /profile command or a
+// wizard session is currently active for chatID.
+func ShouldRouteToProfile(text string, chatID int64, sessions WizardSessions) bool {
+	trimmed := strings.TrimSpace(text)
+	if strings.HasPrefix(trimmed, "/profile") {
+		return true
+	}
+	if trimmed == "" {
+		return false
+	}
+	_, ok := sessions.Get(chatID)
+	return ok
+}
+
 // RouteWizardOrProfile routes a text message to the profile handler when the
 // message either targets /profile or is part of an in-flight wizard. It
 // returns true when the profile handler consumed the message; the caller's
