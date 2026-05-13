@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/telegram"
+	"github.com/daniil/deal-sense/backend/internal/domain"
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
 )
 
@@ -57,7 +58,7 @@ func (f *fakeAPI) GenerateProposal(context.Context, usecase.GenerateProposalRequ
 func TestAnalyzeHandler_NoDocument_AsksForFile(t *testing.T) {
 	rep := &fakeReplier{}
 	api := &fakeAPI{}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, UserID: 7, Text: "/analyze"})
 	if err != nil {
@@ -89,7 +90,7 @@ func TestAnalyzeHandler_Success_CallsAPIAndReplies(t *testing.T) {
 			Cons:    []usecase.ProConItem{{Title: "c1", Desc: "d1"}},
 		},
 	}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	doc := &telegram.Document{FileID: "f1", Filename: "tender.pdf", Data: []byte("PDF")}
 	err := h.Handle(context.Background(), &telegram.Update{
@@ -124,7 +125,7 @@ func TestAnalyzeHandler_Success_CallsAPIAndReplies(t *testing.T) {
 func TestAnalyzeHandler_APIError_ReportsToUser(t *testing.T) {
 	rep := &fakeReplier{}
 	api := &fakeAPI{err: errors.New("backend exploded")}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	doc := &telegram.Document{Filename: "t.pdf", Data: []byte("x")}
 	err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc, Text: "/analyze"})
@@ -143,13 +144,108 @@ func TestAnalyzeHandler_ReplierError_Propagates(t *testing.T) {
 	repErr := errors.New("network blip")
 	rep := &fakeReplier{err: repErr}
 	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	err := h.Handle(context.Background(), &telegram.Update{
 		ChatID: 1, Document: &telegram.Document{Filename: "x.pdf", Data: []byte("x")},
 	})
 	if !errors.Is(err, repErr) {
 		t.Errorf("Handle err = %v, want to wrap %v", err, repErr)
+	}
+}
+
+// --- per-chat profile tests ---------------------------------------------
+
+func TestAnalyzeHandler_NoProfileForChat_UsesFallback(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	store := newFakeProfileStore()
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback when no profile saved", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_ProfileExists_UsesRenderedProfile(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "HIGH"}}
+	prof, err := domain.NewCompanyProfile("Acme", "15", "", []string{"Go", "React"}, nil, nil, "", "")
+	if err != nil {
+		t.Fatalf("NewCompanyProfile: %v", err)
+	}
+	store := newFakeProfileStore()
+	store.data[42] = prof
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if !strings.Contains(api.gotReq.CompanyProfile, "Company: Acme") {
+		t.Errorf("CompanyProfile = %q, want rendered per-chat profile", api.gotReq.CompanyProfile)
+	}
+	if !strings.Contains(api.gotReq.CompanyProfile, "Tech stack: Go, React") {
+		t.Errorf("CompanyProfile missing tech stack, got %q", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_ProfileForDifferentChat_FallbackUsed(t *testing.T) {
+	// Confirms per-chat isolation: profile saved for chat 7 must NOT leak
+	// into chat 42's analyze call.
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	prof, _ := domain.NewCompanyProfile("Leak", "", "", nil, nil, nil, "", "")
+	store := newFakeProfileStore()
+	store.data[7] = prof
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if strings.Contains(api.gotReq.CompanyProfile, "Leak") {
+		t.Errorf("chat 7 profile leaked into chat 42 analyze: %q", api.gotReq.CompanyProfile)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_StoreReadError_FallsBackInsteadOfFailing(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	store := newFakeProfileStore()
+	store.getErr = errors.New("disk gone")
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 1 {
+		t.Fatalf("api.calls = %d, want 1 (analyze should proceed despite profile read error)", api.calls)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback after store read error", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_NilProfileStore_UsesFallback(t *testing.T) {
+	// Defensive: until wiring is complete a nil ProfileStore is acceptable.
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Fallback Co")
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback when ProfileStore nil", api.gotReq.CompanyProfile)
 	}
 }
 
