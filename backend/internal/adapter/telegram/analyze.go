@@ -3,6 +3,8 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
@@ -34,6 +36,21 @@ type Replier interface {
 	ReplyDocument(ctx context.Context, chatID int64, filename string, data []byte, caption string) error
 }
 
+// AnalyzeOption tunes an AnalyzeHandler. Use WithAnalyzeLogger to wire an
+// slog.Logger; further options can be added without breaking callers.
+type AnalyzeOption func(*AnalyzeHandler)
+
+// WithAnalyzeLogger injects a logger for structured observability events
+// (profile lookup outcomes, store errors). Nil is ignored — handler keeps
+// its discard default.
+func WithAnalyzeLogger(l *slog.Logger) AnalyzeOption {
+	return func(h *AnalyzeHandler) {
+		if l != nil {
+			h.logger = l
+		}
+	}
+}
+
 // AnalyzeHandler implements the /analyze command flow. The per-chat company
 // profile is fetched from ProfileStore; if it is missing or the store errors
 // the fallback string is used so analyze never blocks on profile lookup.
@@ -42,12 +59,24 @@ type AnalyzeHandler struct {
 	profiles usecase.ProfileStore
 	replier  Replier
 	fallback string
+	logger   *slog.Logger
 }
 
 // NewAnalyzeHandler wires the dependencies for /analyze. profiles may be nil
-// — analyze degrades gracefully to fallback in that case.
-func NewAnalyzeHandler(api usecase.APIClient, profiles usecase.ProfileStore, replier Replier, fallback string) *AnalyzeHandler {
-	return &AnalyzeHandler{api: api, profiles: profiles, replier: replier, fallback: fallback}
+// — analyze degrades gracefully to fallback in that case. Options are
+// applied after defaults; omitting WithAnalyzeLogger discards events.
+func NewAnalyzeHandler(api usecase.APIClient, profiles usecase.ProfileStore, replier Replier, fallback string, opts ...AnalyzeOption) *AnalyzeHandler {
+	h := &AnalyzeHandler{
+		api:      api,
+		profiles: profiles,
+		replier:  replier,
+		fallback: fallback,
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // Handle routes /analyze. Without an attached document it asks the user to
@@ -69,15 +98,22 @@ func (h *AnalyzeHandler) Handle(ctx context.Context, u *Update) error {
 
 // profileFor returns the per-chat profile's rendered text or the fallback.
 // Lookup errors fall back rather than aborting — a missing profile is a soft
-// failure for analyze.
+// failure for analyze. The lookup outcome is logged so operators can tell
+// "user used per-chat profile" from "user fell back to defaults".
 func (h *AnalyzeHandler) profileFor(ctx context.Context, chatID int64) string {
 	if h.profiles == nil {
 		return h.fallback
 	}
 	p, ok, err := h.profiles.Get(ctx, chatID)
-	if err != nil || !ok {
+	if err != nil {
+		h.logger.ErrorContext(ctx, "profile lookup failed; using fallback", "chat_id", chatID, "err", err)
 		return h.fallback
 	}
+	if !ok {
+		h.logger.InfoContext(ctx, "no per-chat profile; using fallback", "chat_id", chatID)
+		return h.fallback
+	}
+	h.logger.DebugContext(ctx, "per-chat profile applied", "chat_id", chatID)
 	return p.Render()
 }
 

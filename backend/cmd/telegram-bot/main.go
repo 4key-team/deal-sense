@@ -107,7 +107,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 
 	replier := &botReplier{b: b, logger: logger}
 	profileHandler := telegramadapter.NewProfileHandler(profiles, wizardSessions, replier, telegramadapter.WithProfileLogger(logger))
-	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback)
+	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback, telegramadapter.WithAnalyzeLogger(logger))
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
@@ -125,7 +125,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		"api_key_set", cfg.APIKey != "",
 	)
 
-	go wizardSessions.Run(ctx, wizardSweepInterval)
+	go runWizardSweeper(ctx, wizardSessions, wizardSweepInterval, logger)
 
 	b.Start(ctx)
 	logger.Info("telegram bot stopped")
@@ -177,6 +177,27 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 			ChatID: u.Message.Chat.ID,
 			Text:   telegramadapter.MsgFallbackHint,
 		})
+	}
+}
+
+// runWizardSweeper drives the wizard-session TTL sweep on a ticker and logs
+// non-zero evictions. Lives at the cmd layer so observability stays out of
+// the adapter (sessions.Run remains a pure utility for unit tests).
+func runWizardSweeper(ctx context.Context, sessions *telegramadapter.InMemoryWizardSessions, tick time.Duration, logger *slog.Logger) {
+	if err := ctx.Err(); err != nil {
+		return
+	}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := sessions.Sweep(); n > 0 {
+				logger.Info("wizard sessions swept", "removed", n)
+			}
+		}
 	}
 }
 
