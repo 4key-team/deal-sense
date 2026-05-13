@@ -14,13 +14,13 @@ import (
 // fakeProfileStore is an in-memory ProfileStore for handler tests. It tracks
 // call counts so tests can assert side-effects on the store directly.
 type fakeProfileStore struct {
-	mu        sync.Mutex
-	data      map[int64]*domain.CompanyProfile
-	getErr    error
-	setErr    error
-	clearErr  error
-	setCalls  int
-	clrCalls  int
+	mu       sync.Mutex
+	data     map[int64]*domain.CompanyProfile
+	getErr   error
+	setErr   error
+	clearErr error
+	setCalls int
+	clrCalls int
 }
 
 func newFakeProfileStore() *fakeProfileStore {
@@ -294,14 +294,14 @@ func TestProfileHandler_WizardInput_FullFlow_PersistsProfile(t *testing.T) {
 	h := telegram.NewProfileHandler(store, sessions, rep)
 
 	runFullWizard(t, h, 42, []string{
-		"Acme Corp",                   // name
-		"15",                          // team size
-		"7",                           // experience
-		"Go, React, Postgres",         // tech stack
-		"ISO 9001, SOC2",              // certs
-		"backend, mobile",             // specs
-		"Sberbank, Yandex",            // key clients
-		"Remote-first",                // extra
+		"Acme Corp",           // name
+		"15",                  // team size
+		"7",                   // experience
+		"Go, React, Postgres", // tech stack
+		"ISO 9001, SOC2",      // certs
+		"backend, mobile",     // specs
+		"Sberbank, Yandex",    // key clients
+		"Remote-first",        // extra
 	})
 
 	if store.setCalls != 1 {
@@ -349,12 +349,12 @@ func TestProfileHandler_WizardInput_DashSentinelTreatedAsEmpty(t *testing.T) {
 	runFullWizard(t, h, 42, []string{
 		"Acme Corp",
 		"15",
-		"",     // experience left blank
-		"Go",   // stack
-		"-",    // certs skipped
+		"",   // experience left blank
+		"Go", // stack
+		"-",  // certs skipped
 		"backend",
-		"-",    // clients skipped
-		"-",    // extra skipped
+		"-", // clients skipped
+		"-", // extra skipped
 	})
 
 	saved := store.data[42]

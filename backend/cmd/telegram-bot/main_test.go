@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -59,6 +60,7 @@ func TestRun_StartsAndStops(t *testing.T) {
 		AllowlistUserIDs: []int64{42},
 		APIBaseURL:       "http://example.invalid",
 		LogLevel:         "info",
+		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -104,6 +106,7 @@ func TestRun_BotInitFails(t *testing.T) {
 	cfg := telegramadapter.Config{
 		BotToken:         "test-token",
 		AllowlistUserIDs: []int64{1},
+		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
 	}
 	err := run(t.Context(), discardLogger(), cfg, []bot.Option{
 		// Unreachable Telegram API → bot.New fails on getMe call.
@@ -154,6 +157,7 @@ func TestRun_DenyMiddlewareSendsNotice(t *testing.T) {
 	cfg := telegramadapter.Config{
 		BotToken:         "t",
 		AllowlistUserIDs: []int64{42},
+		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

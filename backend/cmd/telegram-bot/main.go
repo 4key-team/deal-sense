@@ -16,6 +16,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/dealsenseapi"
+	"github.com/daniil/deal-sense/backend/internal/adapter/profilestore"
 	telegramadapter "github.com/daniil/deal-sense/backend/internal/adapter/telegram"
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 )
@@ -72,6 +73,12 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 
 	api := dealsenseapi.NewHTTPClient(cfg.APIBaseURL, cfg.APIKey, &http.Client{Timeout: 5 * time.Minute})
 
+	profiles, err := profilestore.NewFileStore(cfg.ProfileStorePath)
+	if err != nil {
+		return fmt.Errorf("profile store: %w", err)
+	}
+	wizardSessions := telegramadapter.NewInMemoryWizardSessions()
+
 	// botRef captures the constructed bot for closures that need to send
 	// messages but are themselves constructed before bot.New (middlewares
 	// must be passed to bot.New as options). Using a pointer-to-pointer
@@ -86,9 +93,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		}
 	}
 
+	// fallbackHandlerRef is filled after bot construction so the default
+	// handler can route /profile and wizard input before falling through.
+	var profileHandler *telegramadapter.ProfileHandler
+
 	opts := []bot.Option{
 		bot.WithMiddlewares(allowlistMiddleware(allowlist, denySender, nil)),
-		bot.WithDefaultHandler(defaultHandler(logger)),
+		bot.WithDefaultHandler(profileAwareDefaultHandler(logger, &profileHandler, wizardSessions)),
 	}
 	opts = append(opts, extraOpts...)
 
@@ -98,9 +109,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	replier := &botReplier{b: b, logger: logger}
-	// Per-chat profile store is wired separately (Pair 7+); passing nil here
-	// makes analyze fall back to defaultCompanyProfile cleanly.
-	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, nil, replier, defaultCompanyProfile)
+	profileHandler = telegramadapter.NewProfileHandler(profiles, wizardSessions, replier)
+	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, defaultCompanyProfile)
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
@@ -157,6 +167,45 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
 		if u.Message == nil {
 			return
+		}
+		logger.Debug("fallback", "text", u.Message.Text)
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: u.Message.Chat.ID,
+			Text:   telegramadapter.MsgFallbackHint,
+		})
+	}
+}
+
+// profileAwareDefaultHandler routes text through the profile/wizard router
+// before falling back to the generic hint. The ProfileHandler pointer is
+// resolved lazily — it is constructed after bot.New because it needs the bot
+// replier, which itself needs the constructed bot.
+func profileAwareDefaultHandler(
+	logger *slog.Logger,
+	phRef **telegramadapter.ProfileHandler,
+	sessions telegramadapter.WizardSessions,
+) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
+		if u.Message == nil {
+			return
+		}
+		ph := *phRef
+		if ph != nil {
+			dto := &telegramadapter.Update{
+				ChatID: u.Message.Chat.ID,
+				Text:   u.Message.Text,
+			}
+			if u.Message.From != nil {
+				dto.UserID = u.Message.From.ID
+			}
+			handled, err := telegramadapter.RouteWizardOrProfile(ctx, dto, ph, sessions)
+			if err != nil {
+				logger.Error("profile/wizard route", "err", err)
+				return
+			}
+			if handled {
+				return
+			}
 		}
 		logger.Debug("fallback", "text", u.Message.Text)
 		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{

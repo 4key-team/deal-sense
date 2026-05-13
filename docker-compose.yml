@@ -34,8 +34,14 @@ services:
       - API_BASE_URL=http://backend:8080
       - DEAL_SENSE_API_KEY=${DEAL_SENSE_API_KEY:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - TELEGRAM_PROFILE_STORE_PATH=/data/telegram-profiles.json
+    volumes:
+      - telegram-bot-data:/data
     depends_on:
       - backend
     restart: unless-stopped
     profiles:
       - telegram
+
+volumes:
+  telegram-bot-data:

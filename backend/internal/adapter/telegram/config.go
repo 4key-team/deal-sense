@@ -26,6 +26,7 @@ type Config struct {
 	APIBaseURL       string
 	APIKey           string
 	LogLevel         string
+	ProfileStorePath string
 }
 
 // LoadConfig reads bot configuration from environment variables and returns
@@ -58,6 +59,7 @@ func LoadConfig() (Config, error) {
 		APIBaseURL:       cmp.Or(strings.TrimSpace(os.Getenv("API_BASE_URL")), "http://localhost:8080"),
 		APIKey:           apiKey,
 		LogLevel:         strings.ToLower(cmp.Or(strings.TrimSpace(os.Getenv("LOG_LEVEL")), "info")),
+		ProfileStorePath: cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_PROFILE_STORE_PATH")), "/data/telegram-profiles.json"),
 	}, nil
 }
 
