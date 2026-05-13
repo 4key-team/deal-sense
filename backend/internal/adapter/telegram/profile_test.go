@@ -204,6 +204,220 @@ func TestProfileHandler_StoreGetError_PropagatesAsReply(t *testing.T) {
 	}
 }
 
+// --- HandleWizardInput tests --------------------------------------------
+
+// runFullWizard pushes the eight wizard answers through HandleWizardInput in
+// order and returns the final reply texts collected by rep. Helper for the
+// happy-path full-flow test plus its dash-sentinel variant.
+func runFullWizard(t *testing.T, h *telegram.ProfileHandler, rep *fakeReplier, sessions telegram.WizardSessions, chatID int64, answers []string) {
+	t.Helper()
+	// Start the wizard so the session exists at StepName.
+	if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: chatID, Text: "/profile edit"}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	for i, ans := range answers {
+		if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: chatID, Text: ans}); err != nil {
+			t.Fatalf("HandleWizardInput #%d (%q): %v", i, ans, err)
+		}
+	}
+	_ = sessions
+}
+
+func TestProfileHandler_WizardInput_NoSession_NoOp(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "Acme"})
+	if err != nil {
+		t.Errorf("HandleWizardInput on absent session should be no-op, got err=%v", err)
+	}
+	if len(rep.texts) != 0 {
+		t.Errorf("expected no reply on no-session input, got %v", rep.texts)
+	}
+}
+
+func TestProfileHandler_WizardInput_Cancel_ClearsSessionAndReplies(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepName, Draft: &telegram.ProfileDraft{Name: "Acme"}})
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "/cancel"}); err != nil {
+		t.Fatalf("HandleWizardInput: %v", err)
+	}
+	if _, ok := sessions.Get(42); ok {
+		t.Error("session should be cleared after /cancel")
+	}
+	if len(rep.texts) != 1 || !strings.Contains(strings.ToLower(rep.texts[0]), "отмен") {
+		t.Errorf("expected cancellation reply, got %v", rep.texts)
+	}
+	if store.setCalls != 0 {
+		t.Error("Cancel must not persist anything")
+	}
+}
+
+func TestProfileHandler_WizardInput_StepNameAdvancesToTeamSize(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep)
+	// Start wizard.
+	if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile edit"}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	rep.texts = nil // ignore start reply
+
+	if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "Acme Corp"}); err != nil {
+		t.Fatalf("HandleWizardInput: %v", err)
+	}
+	state, ok := sessions.Get(42)
+	if !ok {
+		t.Fatal("session should still exist mid-wizard")
+	}
+	if state.Step != telegram.StepTeamSize {
+		t.Errorf("Step = %q, want %q", state.Step, telegram.StepTeamSize)
+	}
+	if state.Draft.Name != "Acme Corp" {
+		t.Errorf("Draft.Name = %q, want %q", state.Draft.Name, "Acme Corp")
+	}
+	if len(rep.texts) != 1 || !strings.Contains(rep.texts[0], "команд") {
+		t.Errorf("expected team-size question, got %v", rep.texts)
+	}
+}
+
+func TestProfileHandler_WizardInput_FullFlow_PersistsProfile(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	runFullWizard(t, h, rep, sessions, 42, []string{
+		"Acme Corp",                   // name
+		"15",                          // team size
+		"7",                           // experience
+		"Go, React, Postgres",         // tech stack
+		"ISO 9001, SOC2",              // certs
+		"backend, mobile",             // specs
+		"Sberbank, Yandex",            // key clients
+		"Remote-first",                // extra
+	})
+
+	if store.setCalls != 1 {
+		t.Fatalf("store.Set calls = %d, want 1", store.setCalls)
+	}
+	saved, ok := store.data[42]
+	if !ok {
+		t.Fatal("profile should be saved for chat 42")
+	}
+	render := saved.Render()
+	wants := []string{
+		"Company: Acme Corp",
+		"Team: 15 people",
+		"Experience: 7 years",
+		"Tech stack: Go, React, Postgres",
+		"Certifications: ISO 9001, SOC2",
+		"Specializations: backend, mobile",
+		"Key clients/projects: Sberbank, Yandex",
+		"Additional: Remote-first",
+	}
+	for _, w := range wants {
+		if !strings.Contains(render, w) {
+			t.Errorf("saved profile missing %q\nrender: %s", w, render)
+		}
+	}
+	if _, ok := sessions.Get(42); ok {
+		t.Error("session should be cleared after final step")
+	}
+	// Last reply must echo the saved profile preview.
+	if len(rep.texts) == 0 {
+		t.Fatal("expected confirmation reply at end of wizard")
+	}
+	last := rep.texts[len(rep.texts)-1]
+	if !strings.Contains(last, "Company: Acme Corp") {
+		t.Errorf("confirmation reply should embed Render(), got %q", last)
+	}
+}
+
+func TestProfileHandler_WizardInput_DashSentinelTreatedAsEmpty(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	runFullWizard(t, h, rep, sessions, 42, []string{
+		"Acme Corp",
+		"15",
+		"",     // experience left blank
+		"Go",   // stack
+		"-",    // certs skipped
+		"backend",
+		"-",    // clients skipped
+		"-",    // extra skipped
+	})
+
+	saved := store.data[42]
+	if saved == nil {
+		t.Fatal("profile should be saved")
+	}
+	render := saved.Render()
+	for _, forbidden := range []string{"Experience:", "Certifications:", "Key clients", "Additional:"} {
+		if strings.Contains(render, forbidden) {
+			t.Errorf("Render should omit %q for blank/dash answers, got %q", forbidden, render)
+		}
+	}
+	for _, want := range []string{"Company: Acme Corp", "Team: 15 people", "Tech stack: Go", "Specializations: backend"} {
+		if !strings.Contains(render, want) {
+			t.Errorf("Render missing %q\nrender: %s", want, render)
+		}
+	}
+}
+
+func TestProfileHandler_WizardInput_AllDash_ReplyEmptyProfileHint(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	// All answers are dashes / empty — NewCompanyProfile must reject.
+	runFullWizard(t, h, rep, sessions, 42, []string{
+		"-", "-", "-", "-", "-", "-", "-", "-",
+	})
+
+	if store.setCalls != 0 {
+		t.Errorf("store.Set must not be called when profile is empty (got %d)", store.setCalls)
+	}
+	if _, ok := sessions.Get(42); ok {
+		t.Error("session should be cleared after empty-profile rejection")
+	}
+	last := rep.texts[len(rep.texts)-1]
+	if !strings.Contains(strings.ToLower(last), "пуст") {
+		t.Errorf("expected empty-profile hint, got %q", last)
+	}
+}
+
+func TestProfileHandler_WizardInput_StoreSetError_RepliesError(t *testing.T) {
+	rep := &fakeReplier{}
+	store := newFakeProfileStore()
+	store.setErr = errors.New("disk full")
+	sessions := telegram.NewInMemoryWizardSessions()
+	h := telegram.NewProfileHandler(store, sessions, rep)
+
+	runFullWizard(t, h, rep, sessions, 42, []string{
+		"Acme", "15", "7", "Go", "-", "backend", "-", "-",
+	})
+
+	last := rep.texts[len(rep.texts)-1]
+	if !strings.Contains(strings.ToLower(last), "ошибка") {
+		t.Errorf("expected save-error reply, got %q", last)
+	}
+	if _, ok := sessions.Get(42); ok {
+		t.Error("session should be cleared even on save error to avoid stuck state")
+	}
+}
+
 func TestProfileHandler_UnknownSubcommand_RepliesUsageHint(t *testing.T) {
 	rep := &fakeReplier{}
 	store := newFakeProfileStore()
