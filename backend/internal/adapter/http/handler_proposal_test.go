@@ -501,3 +501,48 @@ func TestHandleGenerateProposal(t *testing.T) {
 		}
 	})
 }
+
+// TestHandleGenerateProposal_MarkdownTemplate is the legacy /generate
+// counterpart of the streaming markdown test. The Telegram bot adapter
+// posts to this endpoint (it does not use SSE), so a regression here
+// would surface first in the bot path. End-to-end check: .md template
+// in, mode=markdown out, docx attachment populated.
+func TestHandleGenerateProposal_MarkdownTemplate(t *testing.T) {
+	llmResp := `{"meta":{"client":"Acme"},"sections":[{"title":"Intro","content":"LLM intro","status":"ai","tokens":40}],"summary":"Done","log":[]}`
+	llm := &stubLLM{response: llmResp, name: "test"}
+	tmpl := &stubTemplateEngine{result: []byte("should-not-fire")}
+	genEng := &stubGenerativeEngine{result: []byte("md-clean-docx")}
+	h := handler.NewHandler(llm, nil, &stubParser{content: "n/a"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, genEng, stubPrompt, nil)
+
+	mdTemplate := []byte("# Doc\n## Intro\n\n## Pricing\nFixed: 1 200 000 RUB.\n")
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	fw, _ := w.CreateFormFile("template", "template.md")
+	fw.Write(mdTemplate)
+	w.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/proposal/generate", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.HandleGenerateProposal(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["mode"] != "markdown" {
+		t.Errorf("mode = %v, want markdown", resp["mode"])
+	}
+	if resp["docx"] == nil || resp["docx"] == "" {
+		t.Error("expected non-empty docx base64 in response")
+	}
+	sections, _ := resp["sections"].([]any)
+	if len(sections) != 2 {
+		t.Errorf("sections len = %d, want 2 (Intro + Pricing)", len(sections))
+	}
+}
