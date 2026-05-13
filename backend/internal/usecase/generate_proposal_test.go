@@ -676,3 +676,66 @@ func TestGenerateProposal_PromptSelectionByMode(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateProposal_MarkdownMode(t *testing.T) {
+	mdTemplate := []byte(`# Документ
+- **client:** ACME LLC
+
+## Введение
+
+## Цена и сроки
+Фиксированная цена: 1 200 000 ₽, срок 6 недель.
+
+## Заключение
+`)
+
+	llmResp := `{
+		"meta":{"client":"ACME LLC"},
+		"sections":[
+			{"title":"Введение","content":"LLM intro","status":"ai","tokens":40},
+			{"title":"Цена и сроки","content":"LLM should-be-ignored","status":"ai","tokens":30},
+			{"title":"Заключение","content":"LLM closing","status":"ai","tokens":25}
+		],
+		"summary":"Done",
+		"log":[]
+	}`
+	llm := &stubLLM{response: llmResp, name: "test", usage: domain.NewTokenUsage(100, 200)}
+	parser := &stubParser{content: "n/a"}
+	tmplEng := &stubTemplateEngine{result: []byte("placeholder-should-not-fire")}
+	genEng := &stubGenerativeEngine{result: []byte("md-clean-output")}
+
+	uc := usecase.NewGenerateProposal(llm, parser, tmplEng, "placeholder prompt")
+	uc.SetGenerativeEngine(genEng, "generative prompt")
+
+	result, _, err := uc.Execute(t.Context(), "template.md", mdTemplate, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Mode() != domain.ModeMarkdown {
+		t.Errorf("Mode() = %q, want %q", result.Mode(), domain.ModeMarkdown)
+	}
+	if !genEng.cleanCalled {
+		t.Error("expected GenerateClean to be called for markdown mode")
+	}
+	if genEng.called {
+		t.Error("GenerativeFill must NOT be called for markdown mode")
+	}
+	if string(result.Result()) != "md-clean-output" {
+		t.Errorf("Result() = %q, want md-clean-output", result.Result())
+	}
+
+	// Three sections expected: two LLM-filled + one preserved-from-md.
+	sections := result.Sections()
+	if len(sections) != 3 {
+		t.Fatalf("Sections len = %d, want 3 (%+v)", len(sections), sections)
+	}
+
+	titles := []string{sections[0].Title(), sections[1].Title(), sections[2].Title()}
+	want := []string{"Введение", "Цена и сроки", "Заключение"}
+	for i, w := range want {
+		if titles[i] != w {
+			t.Errorf("Sections[%d].Title = %q, want %q", i, titles[i], w)
+		}
+	}
+}
