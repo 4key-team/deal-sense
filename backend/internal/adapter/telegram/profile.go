@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -11,17 +13,44 @@ import (
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
 )
 
+// ProfileOption tunes a ProfileHandler. Use the helpers (WithProfileLogger,
+// …) to construct them.
+type ProfileOption func(*ProfileHandler)
+
+// WithProfileLogger injects an slog.Logger for structured event logging.
+// Defaults to a discard handler if the option is omitted, so handler
+// behaviour is identical with or without logging configured.
+func WithProfileLogger(l *slog.Logger) ProfileOption {
+	return func(h *ProfileHandler) {
+		if l != nil {
+			h.logger = l
+		}
+	}
+}
+
 // ProfileHandler implements the /profile command and the wizard that fills
-// it. Persistence lives in ProfileStore; per-chat wizard state in WizardSessions.
+// it. Persistence lives in ProfileStore; per-chat wizard state in
+// WizardSessions. Logger is optional — by default events are discarded.
 type ProfileHandler struct {
 	profiles usecase.ProfileStore
 	sessions WizardSessions
 	replier  Replier
+	logger   *slog.Logger
 }
 
-// NewProfileHandler wires the dependencies for /profile.
-func NewProfileHandler(profiles usecase.ProfileStore, sessions WizardSessions, replier Replier) *ProfileHandler {
-	return &ProfileHandler{profiles: profiles, sessions: sessions, replier: replier}
+// NewProfileHandler wires the dependencies for /profile. Pass options to
+// configure optional behaviour (e.g. WithProfileLogger).
+func NewProfileHandler(profiles usecase.ProfileStore, sessions WizardSessions, replier Replier, opts ...ProfileOption) *ProfileHandler {
+	h := &ProfileHandler{
+		profiles: profiles,
+		sessions: sessions,
+		replier:  replier,
+		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // HandleCommand dispatches on the subcommand following "/profile".
@@ -51,6 +80,7 @@ func (h *ProfileHandler) HandleCommand(ctx context.Context, u *Update) error {
 func (h *ProfileHandler) showProfile(ctx context.Context, chatID int64) error {
 	p, ok, err := h.profiles.Get(ctx, chatID)
 	if err != nil {
+		h.logger.ErrorContext(ctx, "profile load failed", "chat_id", chatID, "err", err)
 		return h.replier.Reply(ctx, chatID, msgProfileLoadError)
 	}
 	if !ok {
@@ -66,13 +96,16 @@ func (h *ProfileHandler) startWizard(ctx context.Context, chatID int64) error {
 		Draft:     &ProfileDraft{},
 		StartedAt: time.Now(),
 	})
+	h.logger.InfoContext(ctx, "wizard started", "chat_id", chatID)
 	return h.replier.Reply(ctx, chatID, msgWizardStart)
 }
 
 func (h *ProfileHandler) clearProfile(ctx context.Context, chatID int64) error {
 	if err := h.profiles.Clear(ctx, chatID); err != nil {
+		h.logger.ErrorContext(ctx, "profile clear failed", "chat_id", chatID, "err", err)
 		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
+	h.logger.InfoContext(ctx, "profile cleared", "chat_id", chatID)
 	return h.replier.Reply(ctx, chatID, msgProfileCleared)
 }
 
@@ -89,8 +122,10 @@ func (h *ProfileHandler) HandleWizardInput(ctx context.Context, u *Update) error
 	text := strings.TrimSpace(u.Text)
 	if text == "/cancel" {
 		h.sessions.Clear(u.ChatID)
+		h.logger.InfoContext(ctx, "wizard cancelled", "chat_id", u.ChatID, "step", string(state.Step))
 		return h.replier.Reply(ctx, u.ChatID, msgWizardCancelled)
 	}
+	h.logger.DebugContext(ctx, "wizard step advance", "chat_id", u.ChatID, "step", string(state.Step))
 
 	switch state.Step {
 	case StepName:
@@ -144,13 +179,17 @@ func (h *ProfileHandler) finalize(ctx context.Context, chatID int64, d *ProfileD
 	)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmptyCompany) {
+			h.logger.InfoContext(ctx, "wizard rejected empty profile", "chat_id", chatID)
 			return h.replier.Reply(ctx, chatID, msgWizardEmptyProfile)
 		}
+		h.logger.ErrorContext(ctx, "profile build failed", "chat_id", chatID, "err", err)
 		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
 	if err := h.profiles.Set(ctx, chatID, profile); err != nil {
+		h.logger.ErrorContext(ctx, "profile save failed", "chat_id", chatID, "err", err)
 		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
+	h.logger.InfoContext(ctx, "wizard completed", "chat_id", chatID)
 	return h.replier.Reply(ctx, chatID, fmt.Sprintf(msgWizardConfirmFmt, profile.Render()))
 }
 

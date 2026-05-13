@@ -106,7 +106,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	replier := &botReplier{b: b, logger: logger}
-	profileHandler := telegramadapter.NewProfileHandler(profiles, wizardSessions, replier)
+	profileHandler := telegramadapter.NewProfileHandler(profiles, wizardSessions, replier, telegramadapter.WithProfileLogger(logger))
 	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback)
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
