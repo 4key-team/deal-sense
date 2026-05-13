@@ -21,6 +21,11 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 )
 
+// wizardSweepInterval is how often the in-memory wizard session store is
+// scanned for stale entries. The TTL itself is owned by the session store
+// (defaultSessionTTL); the sweep cadence just needs to be << TTL.
+const wizardSweepInterval = 5 * time.Minute
+
 // docDownloader returns the file body and resolved filename for a Telegram
 // Document. The default impl talks to the real Telegram API; tests inject
 // a deterministic version.
@@ -119,6 +124,9 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		"allowlist_size", len(cfg.AllowlistUserIDs),
 		"api_key_set", cfg.APIKey != "",
 	)
+
+	go wizardSessions.Run(ctx, wizardSweepInterval)
+
 	b.Start(ctx)
 	logger.Info("telegram bot stopped")
 	return nil
