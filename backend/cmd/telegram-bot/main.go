@@ -75,10 +75,10 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 	wizardSessions := telegramadapter.NewInMemoryWizardSessions()
 
-	// botRef captures the constructed bot for closures that need to send
-	// messages but are themselves constructed before bot.New (middlewares
-	// must be passed to bot.New as options). Using a pointer-to-pointer
-	// closure rather than a package-level mutable seam.
+	// botRef captures the constructed bot so the deny-notice middleware can
+	// send messages. The middleware is built before bot.New (it has to be —
+	// it goes into the Option set), so we hand it a pointer that's filled in
+	// by the line below; b stays nil only for the duration of bot.New itself.
 	var b *bot.Bot
 	denySender := func(ctx context.Context, chatID int64, text string) {
 		if b == nil {
@@ -89,13 +89,9 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		}
 	}
 
-	// fallbackHandlerRef is filled after bot construction so the default
-	// handler can route /profile and wizard input before falling through.
-	var profileHandler *telegramadapter.ProfileHandler
-
 	opts := []bot.Option{
 		bot.WithMiddlewares(allowlistMiddleware(allowlist, denySender, nil)),
-		bot.WithDefaultHandler(profileAwareDefaultHandler(logger, &profileHandler, wizardSessions)),
+		bot.WithDefaultHandler(defaultHandler(logger)),
 	}
 	opts = append(opts, extraOpts...)
 
@@ -105,7 +101,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	replier := &botReplier{b: b, logger: logger}
-	profileHandler = telegramadapter.NewProfileHandler(profiles, wizardSessions, replier)
+	profileHandler := telegramadapter.NewProfileHandler(profiles, wizardSessions, replier)
 	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback)
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
@@ -113,6 +109,10 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/generate", bot.MatchTypePrefix,
 		makeGenerateHandler(generateHandler, b, defaultDocDownloader, logger))
+	b.RegisterHandlerMatchFunc(
+		profileMatcher(wizardSessions),
+		makeProfileRouteHandler(profileHandler, wizardSessions, logger),
+	)
 
 	logger.Info("telegram bot starting",
 		"api_base", cfg.APIBaseURL,
@@ -172,42 +172,41 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
-// profileAwareDefaultHandler routes text through the profile/wizard router
-// before falling back to the generic hint. The ProfileHandler pointer is
-// resolved lazily — it is constructed after bot.New because it needs the bot
-// replier, which itself needs the constructed bot.
-func profileAwareDefaultHandler(
-	logger *slog.Logger,
-	phRef **telegramadapter.ProfileHandler,
+// profileMatcher returns a bot.MatchFunc that delegates to the adapter's
+// ShouldRouteToProfile predicate. The bot library invokes the matcher per
+// incoming update; if it returns true the paired handler runs and the
+// default handler is skipped.
+func profileMatcher(sessions telegramadapter.WizardSessions) bot.MatchFunc {
+	return func(u *models.Update) bool {
+		if u.Message == nil {
+			return false
+		}
+		return telegramadapter.ShouldRouteToProfile(u.Message.Text, u.Message.Chat.ID, sessions)
+	}
+}
+
+// makeProfileRouteHandler adapts the library's HandlerFunc to our Update DTO
+// and delegates routing to RouteWizardOrProfile. The match guarantees the
+// route returns handled=true, so we only log transport errors here.
+func makeProfileRouteHandler(
+	ph *telegramadapter.ProfileHandler,
 	sessions telegramadapter.WizardSessions,
+	logger *slog.Logger,
 ) bot.HandlerFunc {
-	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
+	return func(ctx context.Context, _ *bot.Bot, u *models.Update) {
 		if u.Message == nil {
 			return
 		}
-		ph := *phRef
-		if ph != nil {
-			dto := &telegramadapter.Update{
-				ChatID: u.Message.Chat.ID,
-				Text:   u.Message.Text,
-			}
-			if u.Message.From != nil {
-				dto.UserID = u.Message.From.ID
-			}
-			handled, err := telegramadapter.RouteWizardOrProfile(ctx, dto, ph, sessions)
-			if err != nil {
-				logger.Error("profile/wizard route", "err", err)
-				return
-			}
-			if handled {
-				return
-			}
-		}
-		logger.Debug("fallback", "text", u.Message.Text)
-		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+		dto := &telegramadapter.Update{
 			ChatID: u.Message.Chat.ID,
-			Text:   telegramadapter.MsgFallbackHint,
-		})
+			Text:   u.Message.Text,
+		}
+		if u.Message.From != nil {
+			dto.UserID = u.Message.From.ID
+		}
+		if _, err := telegramadapter.RouteWizardOrProfile(ctx, dto, ph, sessions); err != nil {
+			logger.Error("profile/wizard route", "chat_id", dto.ChatID, "err", err)
+		}
 	}
 }
 
