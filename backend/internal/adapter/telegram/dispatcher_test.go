@@ -146,6 +146,40 @@ func TestRouteWizardOrProfile_CancelWithoutSession_NotHandled(t *testing.T) {
 	}
 }
 
+// --- ShouldRouteToProfile (matcher predicate) ---------------------------
+
+func TestShouldRouteToProfile(t *testing.T) {
+	sessions := telegram.NewInMemoryWizardSessions()
+	sessions.Set(7, &telegram.WizardState{ChatID: 7, Step: telegram.StepName, Draft: &telegram.ProfileDraft{}})
+
+	tests := []struct {
+		name   string
+		text   string
+		chatID int64
+		want   bool
+	}{
+		{"profile command", "/profile", 42, true},
+		{"profile edit", "/profile edit", 42, true},
+		{"profile clear", "/profile clear", 42, true},
+		{"profile with leading whitespace", "  /profile", 42, true},
+		{"free text + active session", "Acme Corp", 7, true},
+		{"cancel + active session", "/cancel", 7, true},
+		{"free text + no session", "hello bot", 42, false},
+		{"cancel + no session", "/cancel", 42, false},
+		{"analyze command + no session", "/analyze", 42, false},
+		{"generate + active session for other chat", "/generate", 99, false},
+		{"empty text + no session", "", 42, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := telegram.ShouldRouteToProfile(tt.text, tt.chatID, sessions)
+			if got != tt.want {
+				t.Errorf("ShouldRouteToProfile(%q, %d) = %v, want %v", tt.text, tt.chatID, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRouteWizardOrProfile_ProfileCommandTakesPrecedenceOverSession(t *testing.T) {
 	// User typed /profile edit while a wizard was already running — handle
 	// the command (resets wizard) instead of routing as wizard input.
