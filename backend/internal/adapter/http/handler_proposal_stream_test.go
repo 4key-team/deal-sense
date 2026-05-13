@@ -101,6 +101,56 @@ func TestHandleGenerateProposalStream(t *testing.T) {
 	}
 }
 
+// TestHandleGenerateProposalStream_BehindMiddleware is a regression
+// guard for the bug discovered live on 2026-05-13: the Logger
+// middleware wraps the ResponseWriter in statusWriter, and a direct
+// `w.(http.Flusher)` type assertion in the SSE handler used to fail
+// on the wrapped writer — production returned HTTP 500 with body
+// `streaming not supported by server`. Now uses http.ResponseController
+// which transparently unwraps; this test wires the handler through
+// the same Logger middleware as production to keep that path covered.
+func TestHandleGenerateProposalStream_BehindMiddleware(t *testing.T) {
+	handler.SetSSEKeepAliveForTest(t, 100*time.Millisecond)
+
+	llmResp := `{"params":{},"sections":[{"title":"S","status":"ai","tokens":1}],"summary":"OK"}`
+	llm := &slowStubLLM{response: llmResp, usage: domain.NewTokenUsage(10, 20), delay: 250 * time.Millisecond}
+	tmpl := &stubTemplateEngine{result: []byte("filled-docx")}
+	h := handler.NewHandler(llm, nil, &stubParser{content: "text"}, tmpl, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/proposal/generate-stream", h.HandleGenerateProposalStream)
+	wrapped := handler.Logger(testLogger, mux)
+	srv := httptest.NewServer(wrapped)
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("template", "offer.docx")
+	fw.Write([]byte("template"))
+	mw.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/proposal/generate-stream", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := readAllWithTimeout(resp.Body, 500*time.Millisecond)
+		t.Fatalf("status = %d, want 200; body=%q", resp.StatusCode, body)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Errorf("Content-Type = %q, want text/event-stream*", ct)
+	}
+
+	body, _ := readAllWithTimeout(resp.Body, 3*time.Second)
+	if !strings.Contains(body, "event: result") {
+		t.Errorf("expected `event: result` through middleware, body=%q", body)
+	}
+}
+
 func TestHandleGenerateProposalStream_LLMError(t *testing.T) {
 	handler.SetSSEKeepAliveForTest(t, 100*time.Millisecond)
 

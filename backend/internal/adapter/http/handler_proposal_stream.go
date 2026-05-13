@@ -105,27 +105,33 @@ func (h *Handler) HandleGenerateProposalStream(w http.ResponseWriter, r *http.Re
 		uc.SetMDGenerator(h.mdGen)
 	}
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "streaming not supported by server")
-		return
-	}
-
+	// ResponseController transparently unwraps middleware wrappers
+	// (e.g. the Logger's statusWriter) so we can Flush() and
+	// SetWriteDeadline() without losing the streaming capability of
+	// the underlying connection. Direct `w.(http.Flusher)` type
+	// assertion fails on wrapped writers.
+	rc := http.NewResponseController(w)
 	// Disable the server-wide WriteTimeout for this connection so it
-	// can stay open as long as the LLM is thinking. Each progress
-	// frame is a separate Write, but http.Server's WriteTimeout is a
-	// hard deadline from response-start, not per-Write — without this
-	// reset, a generation longer than WriteTimeout drops mid-stream.
-	if rc := http.NewResponseController(w); rc != nil {
-		_ = rc.SetWriteDeadline(time.Time{}) //nolint:errcheck // best-effort; handler still works if not supported
-	}
+	// can stay open as long as the LLM is thinking. http.Server's
+	// WriteTimeout is a hard deadline from response-start, not
+	// per-Write — without this reset a generation longer than
+	// WriteTimeout drops mid-stream.
+	_ = rc.SetWriteDeadline(time.Time{}) //nolint:errcheck // best-effort; handler still works if not supported
 
+	// Set headers BEFORE the first Flush so they actually reach the
+	// client; flushing first triggers an implicit WriteHeader(200)
+	// with the default header set and races our explicit one.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // disables proxy buffering when behind nginx
 	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
+	if err := rc.Flush(); err != nil {
+		// Not flushable means events will buffer until the goroutine
+		// finishes — the client still gets a valid SSE stream at the
+		// end, just without the keep-alive cadence. Log and continue.
+		h.logger.Warn("sse flush unsupported by underlying writer", "err", err)
+	}
 
 	type genResult struct {
 		proposal *domain.Proposal
@@ -148,7 +154,7 @@ func (h *Handler) HandleGenerateProposalStream(w http.ResponseWriter, r *http.Re
 			h.logger.Debug("sse write failed", "event", event, "err", err)
 			return
 		}
-		flusher.Flush()
+		_ = rc.Flush() //nolint:errcheck // best-effort per-frame flush
 	}
 
 	for {

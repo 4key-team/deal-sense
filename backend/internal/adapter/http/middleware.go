@@ -79,6 +79,16 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// Flush forwards to the underlying writer so SSE handlers wrapped by
+// this middleware can still stream. Without this, http.ResponseController
+// also unwraps to find the Flusher, but exposing it directly keeps the
+// older `w.(http.Flusher)` type-assertion idiom working too.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Logger logs every request with method, path, status, duration.
 func Logger(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
