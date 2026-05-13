@@ -27,6 +27,7 @@ func NewRouter(h *Handler, m MetricsRenderer) *http.ServeMux {
 	mux.HandleFunc("GET /api/llm/models", h.HandleListModels)
 	mux.HandleFunc("POST /api/tender/analyze", h.HandleAnalyzeTender)
 	mux.HandleFunc("POST /api/proposal/generate", h.HandleGenerateProposal)
+	mux.HandleFunc("POST /api/proposal/generate-stream", h.HandleGenerateProposalStream)
 
 	return mux
 }
