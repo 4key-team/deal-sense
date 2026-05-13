@@ -217,3 +217,35 @@ func TestHandleAnalyzeTender_WithDocx(t *testing.T) {
 		t.Errorf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 }
+
+// TestHandleAnalyzeTender_CompanyProfileReachesLLMPrompt is a proof
+// that company_profile from the multipart form actually flows all the
+// way down into the LLM user prompt. Without this, a regression in
+// either handler_tender.go OR usecase/analyze_tender.go could silently
+// strip the profile and the LLM would assess every tender against the
+// fallback "Software development company" stub.
+func TestHandleAnalyzeTender_CompanyProfileReachesLLMPrompt(t *testing.T) {
+	llmResp := `{"verdict":"go","risk":"low","score":90,"summary":"ok","pros":[],"cons":[],"requirements":[],"effort":"~5h"}`
+	llm := &stubLLM{response: llmResp, name: "test"}
+	p := &stubParser{content: "tender body text"}
+	h := handler.NewHandler(llm, nil, p, nil, stubPrompt, stubPrompt, nil, testLogger, nil, nil, nil, nil, nil)
+
+	profile := "Acme Corp. Team: 10 people. Stack: Go, React. ISO 27001 certified."
+
+	req := makeMultipartRequest(t,
+		map[string][]byte{"spec.pdf": []byte("data")},
+		map[string]string{"company_profile": profile},
+	)
+	rec := httptest.NewRecorder()
+	h.HandleAnalyzeTender(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(llm.userPromptSeen, profile) {
+		t.Errorf("LLM userPrompt did NOT contain company profile.\nWant substring: %q\nGot prompt:     %q", profile, llm.userPromptSeen)
+	}
+	if !strings.Contains(llm.userPromptSeen, "tender body text") {
+		t.Errorf("LLM userPrompt missing tender body text: %q", llm.userPromptSeen)
+	}
+}
