@@ -42,6 +42,18 @@ func NewCompanyProfile(
 	return p, nil
 }
 
+// Accessors return the validated, trimmed/filtered fields. They exist for
+// serialisation in adapters (e.g. profilestore) — the VO itself remains
+// immutable from outside.
+func (p *CompanyProfile) Name() string              { return p.name }
+func (p *CompanyProfile) TeamSize() string          { return p.teamSize }
+func (p *CompanyProfile) Experience() string        { return p.experience }
+func (p *CompanyProfile) TechStack() []string       { return p.techStack }
+func (p *CompanyProfile) Certifications() []string  { return p.certifications }
+func (p *CompanyProfile) Specializations() []string { return p.specializations }
+func (p *CompanyProfile) KeyClients() string        { return p.keyClients }
+func (p *CompanyProfile) Extra() string             { return p.extra }
+
 func (p *CompanyProfile) isEmpty() bool {
 	return p.name == "" &&
 		p.teamSize == "" &&

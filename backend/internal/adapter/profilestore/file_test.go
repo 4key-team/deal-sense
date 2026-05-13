@@ -158,7 +158,7 @@ func TestFileStore_ConcurrentDifferentChats_NoRace(t *testing.T) {
 	prof := newProfileT(t)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		wg.Add(1)
 		go func(id int64) {
 			defer wg.Done()
