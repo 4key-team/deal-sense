@@ -209,7 +209,7 @@ func TestProfileHandler_StoreGetError_PropagatesAsReply(t *testing.T) {
 // runFullWizard pushes the eight wizard answers through HandleWizardInput in
 // order and returns the final reply texts collected by rep. Helper for the
 // happy-path full-flow test plus its dash-sentinel variant.
-func runFullWizard(t *testing.T, h *telegram.ProfileHandler, rep *fakeReplier, sessions telegram.WizardSessions, chatID int64, answers []string) {
+func runFullWizard(t *testing.T, h *telegram.ProfileHandler, chatID int64, answers []string) {
 	t.Helper()
 	// Start the wizard so the session exists at StepName.
 	if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: chatID, Text: "/profile edit"}); err != nil {
@@ -220,7 +220,6 @@ func runFullWizard(t *testing.T, h *telegram.ProfileHandler, rep *fakeReplier, s
 			t.Fatalf("HandleWizardInput #%d (%q): %v", i, ans, err)
 		}
 	}
-	_ = sessions
 }
 
 func TestProfileHandler_WizardInput_NoSession_NoOp(t *testing.T) {
@@ -294,7 +293,7 @@ func TestProfileHandler_WizardInput_FullFlow_PersistsProfile(t *testing.T) {
 	sessions := telegram.NewInMemoryWizardSessions()
 	h := telegram.NewProfileHandler(store, sessions, rep)
 
-	runFullWizard(t, h, rep, sessions, 42, []string{
+	runFullWizard(t, h, 42, []string{
 		"Acme Corp",                   // name
 		"15",                          // team size
 		"7",                           // experience
@@ -347,7 +346,7 @@ func TestProfileHandler_WizardInput_DashSentinelTreatedAsEmpty(t *testing.T) {
 	sessions := telegram.NewInMemoryWizardSessions()
 	h := telegram.NewProfileHandler(store, sessions, rep)
 
-	runFullWizard(t, h, rep, sessions, 42, []string{
+	runFullWizard(t, h, 42, []string{
 		"Acme Corp",
 		"15",
 		"",     // experience left blank
@@ -382,7 +381,7 @@ func TestProfileHandler_WizardInput_AllDash_ReplyEmptyProfileHint(t *testing.T) 
 	h := telegram.NewProfileHandler(store, sessions, rep)
 
 	// All answers are dashes / empty — NewCompanyProfile must reject.
-	runFullWizard(t, h, rep, sessions, 42, []string{
+	runFullWizard(t, h, 42, []string{
 		"-", "-", "-", "-", "-", "-", "-", "-",
 	})
 
@@ -405,7 +404,7 @@ func TestProfileHandler_WizardInput_StoreSetError_RepliesError(t *testing.T) {
 	sessions := telegram.NewInMemoryWizardSessions()
 	h := telegram.NewProfileHandler(store, sessions, rep)
 
-	runFullWizard(t, h, rep, sessions, 42, []string{
+	runFullWizard(t, h, 42, []string{
 		"Acme", "15", "7", "Go", "-", "backend", "-", "-",
 	})
 

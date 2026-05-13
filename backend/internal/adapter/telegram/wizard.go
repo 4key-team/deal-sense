@@ -16,7 +16,6 @@ const (
 	StepSpecializations WizardStep = "specializations"
 	StepKeyClients      WizardStep = "key_clients"
 	StepExtra           WizardStep = "extra"
-	StepConfirm         WizardStep = "confirm"
 )
 
 // ProfileDraft accumulates user answers as the wizard walks through the
