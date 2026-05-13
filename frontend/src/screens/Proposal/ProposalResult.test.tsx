@@ -62,7 +62,7 @@ describe("ProposalResult generating phase", () => {
 
   it("shows spinner during generation", async () => {
     let resolveGen!: () => void;
-    vi.spyOn(api, "generateProposal").mockReturnValue(
+    vi.spyOn(api, "generateProposalStream").mockReturnValue(
       new Promise((resolve) => {
         resolveGen = () => resolve(MOCK_RESULT);
       }),
@@ -85,7 +85,7 @@ describe("ProposalResult result phase (RU)", () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem("ds:lang", "ru");
-    vi.spyOn(api, "generateProposal").mockResolvedValue(MOCK_RESULT);
+    vi.spyOn(api, "generateProposalStream").mockResolvedValue(MOCK_RESULT);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -164,7 +164,7 @@ describe("ProposalResult error phase", () => {
   beforeEach(() => { localStorage.clear(); localStorage.setItem("ds:lang", "ru"); });
 
   it("shows error on failure", async () => {
-    vi.spyOn(api, "generateProposal").mockRejectedValue(new Error("Server error"));
+    vi.spyOn(api, "generateProposalStream").mockRejectedValue(new Error("Server error"));
 
     const user = userEvent.setup();
     renderWithProviders(<ProposalResult />);
@@ -179,7 +179,7 @@ describe("ProposalResult error phase", () => {
   });
 
   it("retries from error state", async () => {
-    vi.spyOn(api, "generateProposal")
+    vi.spyOn(api, "generateProposalStream")
       .mockRejectedValueOnce(new Error("fail"))
       .mockResolvedValueOnce(MOCK_RESULT);
 
@@ -202,7 +202,7 @@ describe("ProposalResult (EN)", () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem("ds:lang", "en");
-    vi.spyOn(api, "generateProposal").mockResolvedValue(MOCK_RESULT);
+    vi.spyOn(api, "generateProposalStream").mockResolvedValue(MOCK_RESULT);
   });
 
   afterEach(() => vi.restoreAllMocks());
