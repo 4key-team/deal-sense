@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -650,6 +651,132 @@ func TestBotReplier_PropagatesError(t *testing.T) {
 	r := &botReplier{b: failingBot(t), logger: discardLogger()}
 	if err := r.Reply(context.Background(), 1, "hello"); err == nil {
 		t.Error("expected error on failed SendMessage")
+	}
+}
+
+// --- runWizardSweeper observability tests --------------------------------
+
+// bufferHandler is a goroutine-safe slog.Handler that captures records.
+type bufferHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *bufferHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *bufferHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+func (h *bufferHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *bufferHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *bufferHandler) find(msg string) *slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := range h.records {
+		if h.records[i].Message == msg {
+			return &h.records[i]
+		}
+	}
+	return nil
+}
+
+func TestRunWizardSweeper_LogsNonZeroEvictions(t *testing.T) {
+	base := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	sessions := telegramadapter.NewInMemoryWizardSessions(
+		telegramadapter.WithSessionTTL(1*time.Minute),
+		telegramadapter.WithSessionClock(func() time.Time { return base }),
+	)
+	sessions.Set(42, &telegramadapter.WizardState{ChatID: 42, StartedAt: base.Add(-10 * time.Minute)})
+
+	bh := &bufferHandler{}
+	logger := slog.New(bh)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger)
+		close(done)
+	}()
+
+	// Poll for the eviction log.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if bh.find("wizard sessions swept") != nil {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	rec := bh.find("wizard sessions swept")
+	if rec == nil {
+		t.Fatal("expected 'wizard sessions swept' log record within 500ms")
+	}
+	if rec.Level != slog.LevelInfo {
+		t.Errorf("level = %s, want Info", rec.Level)
+	}
+	var removed int64
+	rec.Attrs(func(a slog.Attr) bool {
+		if a.Key == "removed" {
+			removed = a.Value.Int64()
+			return false
+		}
+		return true
+	})
+	if removed < 1 {
+		t.Errorf("removed attr = %d, want >= 1", removed)
+	}
+}
+
+func TestRunWizardSweeper_SilentWhenNothingToEvict(t *testing.T) {
+	base := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	sessions := telegramadapter.NewInMemoryWizardSessions(
+		telegramadapter.WithSessionTTL(1*time.Minute),
+		telegramadapter.WithSessionClock(func() time.Time { return base }),
+	)
+	sessions.Set(7, &telegramadapter.WizardState{ChatID: 7, StartedAt: base})
+
+	bh := &bufferHandler{}
+	logger := slog.New(bh)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger)
+		close(done)
+	}()
+
+	// Let the sweeper tick a few times.
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	<-done
+
+	if rec := bh.find("wizard sessions swept"); rec != nil {
+		t.Errorf("unexpected sweep log on no-op runs: %+v", rec)
+	}
+}
+
+func TestRunWizardSweeper_ReturnsImmediatelyIfCtxAlreadyDone(t *testing.T) {
+	sessions := telegramadapter.NewInMemoryWizardSessions()
+	logger := slog.New(&bufferHandler{})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Error("runWizardSweeper did not return on already-canceled ctx")
 	}
 }
 

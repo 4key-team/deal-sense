@@ -3,6 +3,7 @@ package telegram_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -246,6 +247,84 @@ func TestAnalyzeHandler_NilProfileStore_UsesFallback(t *testing.T) {
 	}
 	if api.gotReq.CompanyProfile != "Fallback Co" {
 		t.Errorf("CompanyProfile = %q, want fallback when ProfileStore nil", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_ProfileFor_LogsLookupOutcome(t *testing.T) {
+	// Confirms profileFor emits one log record per lookup branch so operators
+	// can tell "per-chat profile applied" from "fallback".
+	prof, _ := domain.NewCompanyProfile("Acme", "", "", nil, nil, nil, "", "")
+
+	tests := []struct {
+		name        string
+		store       usecase.ProfileStore
+		wantMsg     string
+		wantLevel   slog.Level
+		wantProfile string
+	}{
+		{
+			name:        "profile present → debug + per-chat profile applied",
+			store:       func() *fakeProfileStore { s := newFakeProfileStore(); s.data[42] = prof; return s }(),
+			wantMsg:     "per-chat profile applied",
+			wantLevel:   slog.LevelDebug,
+			wantProfile: prof.Render(),
+		},
+		{
+			name:        "no profile → info + fallback",
+			store:       newFakeProfileStore(),
+			wantMsg:     "no per-chat profile; using fallback",
+			wantLevel:   slog.LevelInfo,
+			wantProfile: "Fallback Co",
+		},
+		{
+			name:        "store error → error + fallback",
+			store:       func() *fakeProfileStore { s := newFakeProfileStore(); s.getErr = errors.New("disk gone"); return s }(),
+			wantMsg:     "profile lookup failed; using fallback",
+			wantLevel:   slog.LevelError,
+			wantProfile: "Fallback Co",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rh := &recordingHandler{}
+			logger := slog.New(rh)
+			rep := &fakeReplier{}
+			api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+			h := telegram.NewAnalyzeHandler(api, tt.store, rep, "Fallback Co", telegram.WithAnalyzeLogger(logger))
+
+			doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+			if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+				t.Fatalf("Handle: %v", err)
+			}
+			if api.gotReq.CompanyProfile != tt.wantProfile {
+				t.Errorf("CompanyProfile = %q, want %q", api.gotReq.CompanyProfile, tt.wantProfile)
+			}
+			rec := recordOfMessage(rh, tt.wantMsg)
+			if rec == nil {
+				seen := make([]string, 0, len(rh.records))
+				for _, r := range rh.records {
+					seen = append(seen, r.Message)
+				}
+				t.Fatalf("no %q log record; saw %v", tt.wantMsg, seen)
+			}
+			if rec.Level != tt.wantLevel {
+				t.Errorf("level = %s, want %s", rec.Level, tt.wantLevel)
+			}
+			chatID, ok := attrValue(rec, "chat_id")
+			if !ok || chatID.Int64() != 42 {
+				t.Errorf("chat_id attr missing or wrong: ok=%v val=%v", ok, chatID)
+			}
+		})
+	}
+}
+
+func TestAnalyzeHandler_NilLogger_DoesNotPanic(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co")
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
 	}
 }
 
