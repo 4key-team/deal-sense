@@ -356,7 +356,7 @@ var nopDownloader docDownloader = func(context.Context, *bot.Bot, *models.Docume
 func TestMakeAnalyzeHandler_NoDocument_RepliesAttachPrompt(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	api := &stubAPIClient{}
-	ah := telegramadapter.NewAnalyzeHandler(api, &botReplier{b: b, logger: discardLogger()}, "profile")
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "profile")
 
 	h := makeAnalyzeHandler(ah, b, nopDownloader, discardLogger())
 	h(context.Background(), b, &models.Update{
@@ -373,7 +373,7 @@ func TestMakeAnalyzeHandler_NoDocument_RepliesAttachPrompt(t *testing.T) {
 func TestMakeAnalyzeHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	api := &stubAPIClient{}
-	ah := telegramadapter.NewAnalyzeHandler(api, &botReplier{b: b, logger: discardLogger()}, "")
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
 	h := makeAnalyzeHandler(ah, b, nopDownloader, discardLogger())
 	h(context.Background(), b, &models.Update{})
 	if api.calls != 0 || sends.Load() != 0 {
@@ -384,7 +384,7 @@ func TestMakeAnalyzeHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
 func TestMakeAnalyzeHandler_WithDocument_DownloadsAndCallsAPI(t *testing.T) {
 	b, _ := stubBotForSend(t)
 	api := &stubAPIClient{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW", Score: 0.1}}
-	ah := telegramadapter.NewAnalyzeHandler(api, &botReplier{b: b, logger: discardLogger()}, "profile")
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "profile")
 
 	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
 		return []byte("PDF"), doc.FileName, nil
@@ -414,7 +414,7 @@ func TestMakeAnalyzeHandler_LogsHandleError(t *testing.T) {
 	// Replier returns error → AnalyzeHandler.Handle returns it → handler logs.
 	b := failingBot(t)
 	api := &stubAPIClient{}
-	ah := telegramadapter.NewAnalyzeHandler(api, &botReplier{b: b, logger: discardLogger()}, "")
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
 	h := makeAnalyzeHandler(ah, b, nopDownloader, discardLogger())
 	// No-document message → handler asks user to attach; failing bot makes
 	// the Reply error which the handler then logs.
@@ -538,7 +538,7 @@ func TestMakeGenerateHandler_DownloadError_RepliesToUser(t *testing.T) {
 func TestMakeAnalyzeHandler_DownloadError_RepliesToUser(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	api := &stubAPIClient{}
-	ah := telegramadapter.NewAnalyzeHandler(api, &botReplier{b: b, logger: discardLogger()}, "")
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
 
 	failingDL := docDownloader(func(context.Context, *bot.Bot, *models.Document) ([]byte, string, error) {
 		return nil, "", errors.New("boom")

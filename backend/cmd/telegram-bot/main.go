@@ -98,7 +98,9 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	replier := &botReplier{b: b, logger: logger}
-	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, replier, defaultCompanyProfile)
+	// Per-chat profile store is wired separately (Pair 7+); passing nil here
+	// makes analyze fall back to defaultCompanyProfile cleanly.
+	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, nil, replier, defaultCompanyProfile)
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
