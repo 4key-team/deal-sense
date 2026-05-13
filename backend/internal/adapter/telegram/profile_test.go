@@ -501,6 +501,183 @@ func TestProfileHandler_Edit_LogsWizardStartedAtInfo(t *testing.T) {
 	}
 }
 
+func TestProfileHandler_LogsEvents(t *testing.T) {
+	// Table-driven backfill: every Info/Debug/Error event in profile.go gets
+	// one row asserting message, level, chat_id attr, and (where applicable)
+	// the step attr. Keeps observability honest as new commands are added.
+	tests := []struct {
+		name     string
+		setup    func() (*fakeProfileStore, *telegram.InMemoryWizardSessions)
+		action   func(t *testing.T, h *telegram.ProfileHandler)
+		wantMsg  string
+		wantLvl  slog.Level
+		wantStep string // optional: empty means no step attr check
+	}{
+		{
+			name: "profile load failed",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				s := newFakeProfileStore()
+				s.getErr = errors.New("disk gone")
+				return s, telegram.NewInMemoryWizardSessions()
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile"}); err != nil {
+					t.Fatalf("HandleCommand: %v", err)
+				}
+			},
+			wantMsg: "profile load failed",
+			wantLvl: slog.LevelError,
+		},
+		{
+			name: "profile cleared",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				return newFakeProfileStore(), telegram.NewInMemoryWizardSessions()
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile clear"}); err != nil {
+					t.Fatalf("HandleCommand: %v", err)
+				}
+			},
+			wantMsg: "profile cleared",
+			wantLvl: slog.LevelInfo,
+		},
+		{
+			name: "profile clear failed",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				s := newFakeProfileStore()
+				s.clearErr = errors.New("disk gone")
+				return s, telegram.NewInMemoryWizardSessions()
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile clear"}); err != nil {
+					t.Fatalf("HandleCommand: %v", err)
+				}
+			},
+			wantMsg: "profile clear failed",
+			wantLvl: slog.LevelError,
+		},
+		{
+			name: "wizard cancelled",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepTeamSize, Draft: &telegram.ProfileDraft{Name: "Acme"}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "/cancel"}); err != nil {
+					t.Fatalf("HandleWizardInput: %v", err)
+				}
+			},
+			wantMsg:  "wizard cancelled",
+			wantLvl:  slog.LevelInfo,
+			wantStep: string(telegram.StepTeamSize),
+		},
+		{
+			name: "wizard step advance",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepName, Draft: &telegram.ProfileDraft{}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "Acme"}); err != nil {
+					t.Fatalf("HandleWizardInput: %v", err)
+				}
+			},
+			wantMsg:  "wizard step advance",
+			wantLvl:  slog.LevelDebug,
+			wantStep: string(telegram.StepName),
+		},
+		{
+			name: "wizard rejected empty profile",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				// Land on the last step with an entirely empty draft so the
+				// next input commits ""empty profile"" to NewCompanyProfile.
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepExtra, Draft: &telegram.ProfileDraft{}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "-"}); err != nil {
+					t.Fatalf("HandleWizardInput: %v", err)
+				}
+			},
+			wantMsg: "wizard rejected empty profile",
+			wantLvl: slog.LevelInfo,
+		},
+		{
+			name: "profile save failed",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				store := newFakeProfileStore()
+				store.setErr = errors.New("disk full")
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepExtra, Draft: &telegram.ProfileDraft{Name: "Acme"}})
+				return store, sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "-"}); err != nil {
+					t.Fatalf("HandleWizardInput: %v", err)
+				}
+			},
+			wantMsg: "profile save failed",
+			wantLvl: slog.LevelError,
+		},
+		{
+			name: "wizard completed",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepExtra, Draft: &telegram.ProfileDraft{Name: "Acme"}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "-"}); err != nil {
+					t.Fatalf("HandleWizardInput: %v", err)
+				}
+			},
+			wantMsg: "wizard completed",
+			wantLvl: slog.LevelInfo,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rh := &recordingHandler{}
+			logger := slog.New(rh)
+			store, sessions := tt.setup()
+			rep := &fakeReplier{}
+			h := telegram.NewProfileHandler(store, sessions, rep, telegram.WithProfileLogger(logger))
+
+			tt.action(t, h)
+
+			rec := recordOfMessage(rh, tt.wantMsg)
+			if rec == nil {
+				seen := make([]string, 0, len(rh.records))
+				for _, r := range rh.records {
+					seen = append(seen, r.Message)
+				}
+				t.Fatalf("no %q log record; saw %v", tt.wantMsg, seen)
+			}
+			if rec.Level != tt.wantLvl {
+				t.Errorf("level = %s, want %s", rec.Level, tt.wantLvl)
+			}
+			chatID, ok := attrValue(rec, "chat_id")
+			if !ok {
+				t.Error("chat_id attr missing")
+			} else if chatID.Int64() != 42 {
+				t.Errorf("chat_id = %d, want 42", chatID.Int64())
+			}
+			if tt.wantStep != "" {
+				step, ok := attrValue(rec, "step")
+				if !ok {
+					t.Errorf("step attr missing for %q", tt.wantMsg)
+				} else if step.String() != tt.wantStep {
+					t.Errorf("step = %q, want %q", step.String(), tt.wantStep)
+				}
+			}
+		})
+	}
+}
+
 func TestProfileHandler_NilLogger_DoesNotPanic(t *testing.T) {
 	rep := &fakeReplier{}
 	store := newFakeProfileStore()
