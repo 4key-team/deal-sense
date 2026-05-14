@@ -40,8 +40,8 @@ const (
 	// MsgStart greets the user. The shape mirrors MsgHelp's command list
 	// so the very first interaction with the bot shows what's possible.
 	MsgStart = "👋 Deal Sense — AI-помощник по тендерам.\n\n" +
-		"📋 /analyze — анализ тендерного документа (PDF/DOCX)\n" +
-		"📝 /generate — генерация КП по шаблону (DOCX/MD)\n" +
+		"📋 /analyze — анализ тендера (PDF, DOCX, DOC, MD или ZIP-архив)\n" +
+		"📝 /generate — генерация КП по шаблону (DOCX, MD или ZIP)\n" +
 		"👤 /profile — профиль вашей компании (контекст для LLM)\n" +
 		"❓ /help — все команды\n\n" +
 		"Чтобы начать: пришлите команду, затем файл — или файл с подписью команды."
@@ -50,10 +50,13 @@ const (
 	// registered handlers; update both when wiring changes.
 	MsgHelp = "📚 Команды бота:\n\n" +
 		"📋 /analyze — анализ тендера.\n" +
-		"   Пришлите команду, затем файл PDF/DOCX отдельным сообщением.\n" +
+		"   Форматы: PDF, DOCX, DOC (Word 97-2003), MD, ZIP-архив.\n" +
+		"   Пришлите команду, затем файл отдельным сообщением.\n" +
 		"   Или: файл с подписью /analyze в одном сообщении.\n\n" +
 		"📝 /generate — генерация КП по шаблону.\n" +
-		"   Пришлите команду, затем шаблон DOCX/MD отдельным сообщением.\n" +
+		"   Форматы шаблона: DOCX (плейсхолдеры или генеративный),\n" +
+		"   MD (smart+plain), ZIP с шаблоном внутри.\n" +
+		"   Пришлите команду, затем шаблон отдельным сообщением.\n" +
 		"   Или: шаблон с подписью /generate в одном сообщении.\n\n" +
 		"👤 /profile — текущий профиль компании.\n" +
 		"   /profile edit — заполнить / обновить.\n" +
