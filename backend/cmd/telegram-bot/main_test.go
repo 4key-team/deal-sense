@@ -416,7 +416,7 @@ func TestMakeAnalyzeHandler_NoDocument_RepliesAttachPrompt(t *testing.T) {
 	api := &stubAPIClient{}
 	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "profile")
 
-	h := makeAnalyzeHandler(ah, b, nopDownloader, discardLogger())
+	h := makeAnalyzeHandler(ah, b, nopDownloader, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/analyze"},
 	})
@@ -432,7 +432,7 @@ func TestMakeAnalyzeHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	api := &stubAPIClient{}
 	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
-	h := makeAnalyzeHandler(ah, b, nopDownloader, discardLogger())
+	h := makeAnalyzeHandler(ah, b, nopDownloader, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{})
 	if api.calls != 0 || sends.Load() != 0 {
 		t.Errorf("expected no work for update without message; api=%d sends=%d", api.calls, sends.Load())
@@ -448,7 +448,7 @@ func TestMakeAnalyzeHandler_WithDocument_DownloadsAndCallsAPI(t *testing.T) {
 		return []byte("PDF"), doc.FileName, nil
 	})
 
-	h := makeAnalyzeHandler(ah, b, dl, discardLogger())
+	h := makeAnalyzeHandler(ah, b, dl, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{
 			Chat:     models.Chat{ID: 5},
@@ -473,7 +473,7 @@ func TestMakeAnalyzeHandler_LogsHandleError(t *testing.T) {
 	b := failingBot(t)
 	api := &stubAPIClient{}
 	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
-	h := makeAnalyzeHandler(ah, b, nopDownloader, discardLogger())
+	h := makeAnalyzeHandler(ah, b, nopDownloader, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	// No-document message → handler asks user to attach; failing bot makes
 	// the Reply error which the handler then logs.
 	h(context.Background(), b, &models.Update{
@@ -487,7 +487,7 @@ func TestMakeGenerateHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	api := &stubAPIClient{}
 	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
-	h := makeGenerateHandler(gh, b, nopDownloader, discardLogger())
+	h := makeGenerateHandler(gh, b, nopDownloader, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{})
 	if api.calls != 0 || sends.Load() != 0 {
 		t.Errorf("expected no work for update without message; api=%d sends=%d", api.calls, sends.Load())
@@ -499,7 +499,7 @@ func TestMakeGenerateHandler_NoDocument_AsksForTemplate(t *testing.T) {
 	api := &stubAPIClient{}
 	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
 
-	h := makeGenerateHandler(gh, b, nopDownloader, discardLogger())
+	h := makeGenerateHandler(gh, b, nopDownloader, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/generate"},
 	})
@@ -550,7 +550,7 @@ func TestMakeGenerateHandler_WithTemplate_DownloadsAndCallsAPI(t *testing.T) {
 		return []byte("TEMPLATE"), doc.FileName, nil
 	})
 
-	h := makeGenerateHandler(gh, b, dl, discardLogger())
+	h := makeGenerateHandler(gh, b, dl, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{
 			Chat:     models.Chat{ID: 5},
@@ -578,7 +578,7 @@ func TestMakeGenerateHandler_DownloadError_RepliesToUser(t *testing.T) {
 		return nil, "", errors.New("boom")
 	})
 
-	h := makeGenerateHandler(gh, b, failingDL, discardLogger())
+	h := makeGenerateHandler(gh, b, failingDL, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{
 			Chat:     models.Chat{ID: 5},
@@ -602,7 +602,7 @@ func TestMakeAnalyzeHandler_DownloadError_RepliesToUser(t *testing.T) {
 		return nil, "", errors.New("boom")
 	})
 
-	h := makeAnalyzeHandler(ah, b, failingDL, discardLogger())
+	h := makeAnalyzeHandler(ah, b, failingDL, telegramadapter.NewInMemoryPendingCommandSessions(), discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{
 			Chat:     models.Chat{ID: 5},
@@ -614,6 +614,151 @@ func TestMakeAnalyzeHandler_DownloadError_RepliesToUser(t *testing.T) {
 	}
 	if sends.Load() != 1 {
 		t.Errorf("expected one user-facing error reply, sends=%d", sends.Load())
+	}
+}
+
+// --- pending command (Bug-B: two-step file workflow) --------------------
+
+func TestMakeAnalyzeHandler_NoDocument_SetsPendingAnalyze(t *testing.T) {
+	b, _ := stubBotForSend(t)
+	api := &stubAPIClient{}
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
+	pending := telegramadapter.NewInMemoryPendingCommandSessions()
+
+	h := makeAnalyzeHandler(ah, b, nopDownloader, pending, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/analyze"},
+	})
+
+	kind, ok := pending.Get(5)
+	if !ok {
+		t.Fatal("pending must be set after /analyze without document")
+	}
+	if kind != telegramadapter.PendingAnalyze {
+		t.Errorf("pending kind = %q, want analyze", kind)
+	}
+}
+
+func TestMakeAnalyzeHandler_WithDocument_ClearsAnyPending(t *testing.T) {
+	b, _ := stubBotForSend(t)
+	api := &stubAPIClient{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW", Score: 0.1}}
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
+	pending := telegramadapter.NewInMemoryPendingCommandSessions()
+	pending.Set(5, telegramadapter.PendingGenerate) // stale prior state
+
+	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
+		return []byte("PDF"), doc.FileName, nil
+	})
+	h := makeAnalyzeHandler(ah, b, dl, pending, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{
+			Chat:     models.Chat{ID: 5},
+			Text:     "/analyze",
+			Document: &models.Document{FileID: "f", FileName: "tender.pdf"},
+		},
+	})
+
+	if _, ok := pending.Get(5); ok {
+		t.Error("pending must be cleared after successful processing")
+	}
+}
+
+func TestMakeGenerateHandler_NoDocument_SetsPendingGenerate(t *testing.T) {
+	b, _ := stubBotForSend(t)
+	api := &stubAPIClient{}
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+	pending := telegramadapter.NewInMemoryPendingCommandSessions()
+
+	h := makeGenerateHandler(gh, b, nopDownloader, pending, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/generate"},
+	})
+
+	kind, ok := pending.Get(5)
+	if !ok {
+		t.Fatal("pending must be set after /generate without document")
+	}
+	if kind != telegramadapter.PendingGenerate {
+		t.Errorf("pending kind = %q, want generate", kind)
+	}
+}
+
+func TestPendingDocumentMatcher_Cases(t *testing.T) {
+	pending := telegramadapter.NewInMemoryPendingCommandSessions()
+	pending.Set(5, telegramadapter.PendingAnalyze)
+
+	match := pendingDocumentMatcher(pending)
+	cases := []struct {
+		name   string
+		update *models.Update
+		want   bool
+	}{
+		{"nil update", nil, false},
+		{"no message", &models.Update{}, false},
+		{"text only, pending exists", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "hi"}}, false},
+		{"document, no pending for this chat", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 99}, Document: &models.Document{FileID: "f"}}}, false},
+		{"document with pending for chat", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Document: &models.Document{FileID: "f"}}}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := match(tc.update); got != tc.want {
+				t.Errorf("matcher = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMakePendingDispatcher_PendingAnalyze_DispatchesAndClears(t *testing.T) {
+	b, _ := stubBotForSend(t)
+	api := &stubAPIClient{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW", Score: 0.1}}
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+	pending := telegramadapter.NewInMemoryPendingCommandSessions()
+	pending.Set(5, telegramadapter.PendingAnalyze)
+
+	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
+		return []byte("PDF"), doc.FileName, nil
+	})
+	h := makePendingDispatcher(ah, gh, pending, b, dl, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{
+			Chat:     models.Chat{ID: 5},
+			Document: &models.Document{FileID: "f", FileName: "tender.pdf"},
+		},
+	})
+
+	if api.calls != 1 {
+		t.Errorf("api.AnalyzeTender called %d times, want 1", api.calls)
+	}
+	if _, ok := pending.Get(5); ok {
+		t.Error("dispatcher must clear pending after dispatch")
+	}
+}
+
+func TestMakePendingDispatcher_PendingGenerate_DispatchesToGenerate(t *testing.T) {
+	b, _ := stubBotForSend(t)
+	api := &stubGenerateAPI{resp: &usecase.GenerateProposalResponse{Mode: "placeholder", DOCX: []byte("DOCX")}}
+	ah := telegramadapter.NewAnalyzeHandler(nil, nil, &botReplier{b: b, logger: discardLogger()}, "")
+	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+	pending := telegramadapter.NewInMemoryPendingCommandSessions()
+	pending.Set(5, telegramadapter.PendingGenerate)
+
+	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
+		return []byte("TPL"), doc.FileName, nil
+	})
+	h := makePendingDispatcher(ah, gh, pending, b, dl, discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{
+			Chat:     models.Chat{ID: 5},
+			Document: &models.Document{FileID: "f", FileName: "tpl.docx"},
+		},
+	})
+
+	if api.calls != 1 {
+		t.Errorf("api.GenerateProposal called %d times, want 1", api.calls)
+	}
+	if _, ok := pending.Get(5); ok {
+		t.Error("dispatcher must clear pending after dispatch")
 	}
 }
 
