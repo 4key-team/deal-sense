@@ -35,8 +35,11 @@ services:
       - DEAL_SENSE_API_KEY=${DEAL_SENSE_API_KEY:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TELEGRAM_PROFILE_STORE_PATH=/data/telegram-profiles.json
+      - METRICS_PORT=${TELEGRAM_METRICS_PORT:-9091}
     volumes:
       - telegram-bot-data:/data
+    ports:
+      - "127.0.0.1:${TELEGRAM_METRICS_PORT:-9091}:${TELEGRAM_METRICS_PORT:-9091}"
     depends_on:
       - backend
     restart: unless-stopped
