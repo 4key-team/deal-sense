@@ -83,6 +83,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		return fmt.Errorf("profile store: %w", err)
 	}
 	wizardSessions := telegramadapter.NewInMemoryWizardSessions()
+	pendingSessions := telegramadapter.NewInMemoryPendingCommandSessions()
 	collector := metrics.NewCollector()
 
 	// botRef captures the constructed bot so the deny-notice middleware can
@@ -124,12 +125,16 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/help", bot.MatchTypePrefix,
 		helpHandler(logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
-		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, logger))
+		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, pendingSessions, logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/generate", bot.MatchTypePrefix,
-		makeGenerateHandler(generateHandler, b, defaultDocDownloader, logger))
+		makeGenerateHandler(generateHandler, b, defaultDocDownloader, pendingSessions, logger))
 	b.RegisterHandlerMatchFunc(
 		profileMatcher(wizardSessions),
 		makeProfileRouteHandler(profileHandler, wizardSessions, logger),
+	)
+	b.RegisterHandlerMatchFunc(
+		pendingDocumentMatcher(pendingSessions),
+		makePendingDispatcher(analyzeHandler, generateHandler, pendingSessions, b, defaultDocDownloader, logger),
 	)
 
 	logger.Info("telegram bot starting",
@@ -298,7 +303,10 @@ func makeProfileRouteHandler(
 
 // makeGenerateHandler converts the library Update into our DTO (downloading
 // the attached template via dl) and delegates to the GenerateHandler.
-func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docDownloader, logger *slog.Logger) bot.HandlerFunc {
+// The pending sessions store tracks the two-step "command, then file" flow:
+// when the user types /generate without a template, we mark the chat as
+// awaiting a generate-template so the next bare upload is routed correctly.
+func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docDownloader, pending *telegramadapter.InMemoryPendingCommandSessions, logger *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, _ *bot.Bot, u *models.Update) {
 		if u.Message == nil {
 			return
@@ -313,6 +321,9 @@ func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docD
 
 		doc := documentFromMessage(u.Message)
 		if doc != nil {
+			if pending != nil {
+				pending.Clear(u.Message.Chat.ID)
+			}
 			data, filename, err := dl(ctx, b, doc)
 			if err != nil {
 				logger.Error("download template", "err", err)
@@ -327,6 +338,8 @@ func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docD
 				Filename: filename,
 				Data:     data,
 			}
+		} else if pending != nil {
+			pending.Set(u.Message.Chat.ID, telegramadapter.PendingGenerate)
 		}
 
 		if err := h.Handle(ctx, dto); err != nil {
@@ -337,7 +350,8 @@ func makeGenerateHandler(h *telegramadapter.GenerateHandler, b *bot.Bot, dl docD
 
 // makeAnalyzeHandler converts the library Update into our DTO (downloading
 // any attached document via dl) and delegates to the AnalyzeHandler.
-func makeAnalyzeHandler(h *telegramadapter.AnalyzeHandler, b *bot.Bot, dl docDownloader, logger *slog.Logger) bot.HandlerFunc {
+// See makeGenerateHandler for the pending-sessions contract.
+func makeAnalyzeHandler(h *telegramadapter.AnalyzeHandler, b *bot.Bot, dl docDownloader, pending *telegramadapter.InMemoryPendingCommandSessions, logger *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, _ *bot.Bot, u *models.Update) {
 		if u.Message == nil {
 			return
@@ -352,6 +366,9 @@ func makeAnalyzeHandler(h *telegramadapter.AnalyzeHandler, b *bot.Bot, dl docDow
 
 		doc := documentFromMessage(u.Message)
 		if doc != nil {
+			if pending != nil {
+				pending.Clear(u.Message.Chat.ID)
+			}
 			data, filename, err := dl(ctx, b, doc)
 			if err != nil {
 				logger.Error("download document", "err", err)
@@ -366,10 +383,65 @@ func makeAnalyzeHandler(h *telegramadapter.AnalyzeHandler, b *bot.Bot, dl docDow
 				Filename: filename,
 				Data:     data,
 			}
+		} else if pending != nil {
+			pending.Set(u.Message.Chat.ID, telegramadapter.PendingAnalyze)
 		}
 
 		if err := h.Handle(ctx, dto); err != nil {
 			logger.Error("analyze handle", "err", err)
+		}
+	}
+}
+
+// pendingDocumentMatcher returns a MatchFunc that fires when an incoming
+// message carries a document AND a pending command exists for that chat.
+// Use to register a high-priority handler before the bot's default
+// fallback so bare uploads after /analyze or /generate land in the right
+// pipeline.
+func pendingDocumentMatcher(pending *telegramadapter.InMemoryPendingCommandSessions) bot.MatchFunc {
+	return func(u *models.Update) bool {
+		if u == nil || u.Message == nil {
+			return false
+		}
+		if documentFromMessage(u.Message) == nil {
+			return false
+		}
+		_, ok := pending.Get(u.Message.Chat.ID)
+		return ok
+	}
+}
+
+// makePendingDispatcher returns a handler that reads the chat's pending
+// command and routes the incoming document to the matching inner handler
+// (analyze or generate), clearing the pending state on entry so a single
+// upload triggers exactly one pipeline.
+func makePendingDispatcher(
+	ah *telegramadapter.AnalyzeHandler,
+	gh *telegramadapter.GenerateHandler,
+	pending *telegramadapter.InMemoryPendingCommandSessions,
+	b *bot.Bot,
+	dl docDownloader,
+	logger *slog.Logger,
+) bot.HandlerFunc {
+	return func(ctx context.Context, _ *bot.Bot, u *models.Update) {
+		if u == nil || u.Message == nil {
+			return
+		}
+		kind, ok := pending.Get(u.Message.Chat.ID)
+		if !ok {
+			return
+		}
+		// Clear up front — even if the inner handler errs, we don't want a
+		// stale state pointing at a half-failed previous attempt.
+		pending.Clear(u.Message.Chat.ID)
+
+		switch kind {
+		case telegramadapter.PendingAnalyze:
+			makeAnalyzeHandler(ah, b, dl, nil, logger)(ctx, b, u)
+		case telegramadapter.PendingGenerate:
+			makeGenerateHandler(gh, b, dl, nil, logger)(ctx, b, u)
+		default:
+			logger.Warn("pending dispatcher: unknown kind", "kind", string(kind))
 		}
 	}
 }
