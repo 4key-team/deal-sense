@@ -119,6 +119,10 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback, telegramadapter.WithAnalyzeLogger(logger))
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypePrefix,
+		startHandler(logger))
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/help", bot.MatchTypePrefix,
+		helpHandler(logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
 		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/generate", bot.MatchTypePrefix,
@@ -195,6 +199,35 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: u.Message.Chat.ID,
 			Text:   telegramadapter.MsgFallbackHint,
+		})
+	}
+}
+
+// startHandler greets the user on /start with the same command list
+// MsgHelp uses, so the very first interaction is self-documenting.
+func startHandler(logger *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
+		if u.Message == nil {
+			return
+		}
+		logger.Debug("start", "chat_id", u.Message.Chat.ID)
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: u.Message.Chat.ID,
+			Text:   telegramadapter.MsgStart,
+		})
+	}
+}
+
+// helpHandler responds to /help with the full command reference.
+func helpHandler(logger *slog.Logger) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
+		if u.Message == nil {
+			return
+		}
+		logger.Debug("help", "chat_id", u.Message.Chat.ID)
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: u.Message.Chat.ID,
+			Text:   telegramadapter.MsgHelp,
 		})
 	}
 }

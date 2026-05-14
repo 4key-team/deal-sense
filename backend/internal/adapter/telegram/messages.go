@@ -35,7 +35,31 @@ const (
 	// touches one file.
 	MsgDenied         = "🚫 Доступ запрещён."
 	MsgDownloadFailed = "❌ Не удалось скачать файл:"
-	MsgFallbackHint   = "Используйте /analyze или /generate ответом на файл."
+	MsgFallbackHint   = "Не понимаю эту команду. Наберите /help чтобы увидеть все команды."
+
+	// MsgStart greets the user. The shape mirrors MsgHelp's command list
+	// so the very first interaction with the bot shows what's possible.
+	MsgStart = "👋 Deal Sense — AI-помощник по тендерам.\n\n" +
+		"📋 /analyze — анализ тендерного документа (PDF/DOCX)\n" +
+		"📝 /generate — генерация КП по шаблону (DOCX/MD)\n" +
+		"👤 /profile — профиль вашей компании (контекст для LLM)\n" +
+		"❓ /help — все команды\n\n" +
+		"Чтобы начать: пришлите команду, затем файл — или файл с подписью команды."
+
+	// MsgHelp is the full command reference. Should match the actual
+	// registered handlers; update both when wiring changes.
+	MsgHelp = "📚 Команды бота:\n\n" +
+		"📋 /analyze — анализ тендера.\n" +
+		"   Пришлите команду, затем файл PDF/DOCX отдельным сообщением.\n" +
+		"   Или: файл с подписью /analyze в одном сообщении.\n\n" +
+		"📝 /generate — генерация КП по шаблону.\n" +
+		"   Пришлите команду, затем шаблон DOCX/MD отдельным сообщением.\n" +
+		"   Или: шаблон с подписью /generate в одном сообщении.\n\n" +
+		"👤 /profile — текущий профиль компании.\n" +
+		"   /profile edit — заполнить / обновить.\n" +
+		"   /profile clear — удалить.\n\n" +
+		"❌ /cancel — прервать заполнение профиля.\n" +
+		"❓ /help — это сообщение."
 
 	// DefaultCompanyFallback is the placeholder profile fed to the LLM when
 	// a chat has no per-chat company profile saved. It lives next to the
