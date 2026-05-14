@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook for deal-sense. Runs gofmt + golangci-lint on staged Go
+# files, plus gitleaks against the staged diff. Optional tools are soft-
+# skipped with an install hint so first-day contributors aren't blocked.
+#
+# Activation: `git config core.hooksPath .githooks` (see CONTRIBUTING.md).
+
+set -euo pipefail
+
+# Resolve repo root regardless of where git invokes the hook from.
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# ---------------------------------------------------------------- gofmt
+mapfile -t go_files < <(git diff --cached --name-only --diff-filter=ACMR | grep '\.go$' || true)
+
+if [ ${#go_files[@]} -gt 0 ]; then
+  unformatted="$(gofmt -l "${go_files[@]}" 2>/dev/null || true)"
+  if [ -n "$unformatted" ]; then
+    echo "✘ gofmt: следующие файлы не отформатированы:"
+    echo "$unformatted" | sed 's/^/    /'
+    echo ""
+    echo "  Запустите: gofmt -w $(echo "$unformatted" | tr '\n' ' ')"
+    exit 1
+  fi
+fi
+
+# -------------------------------------------------------- golangci-lint
+if [ ${#go_files[@]} -gt 0 ]; then
+  if command -v golangci-lint >/dev/null 2>&1; then
+    echo "→ golangci-lint..."
+    if ! (cd backend && golangci-lint run ./... 2>&1); then
+      echo ""
+      echo "✘ golangci-lint failed — fix issues above before committing"
+      exit 1
+    fi
+  else
+    echo "⚠ golangci-lint not installed — skipping (install: brew install golangci-lint)"
+  fi
+fi
+
+# ------------------------------------------------------------- gitleaks
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "→ gitleaks scan staged..."
+  if ! gitleaks protect --staged --no-banner --redact 2>&1; then
+    echo ""
+    echo "✘ gitleaks detected secrets in staged diff — review and unstage"
+    exit 1
+  fi
+else
+  echo "⚠ gitleaks not installed — skipping (install: brew install gitleaks)"
+fi
+
+echo "✓ pre-commit checks passed"

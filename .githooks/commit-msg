@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# Commit-msg hook for deal-sense. Validates the first line of the commit
+# message against Conventional Commits.
+#
+# Activation: `git config core.hooksPath .githooks` (see CONTRIBUTING.md).
+
+set -euo pipefail
+
+msg_file="$1"
+first_line="$(head -n 1 "$msg_file")"
+
+# Auto-generated commit messages (merge, revert, fixup, squash) skip validation.
+if [[ $first_line =~ ^Merge ]] || \
+   [[ $first_line =~ ^Revert ]] || \
+   [[ $first_line =~ ^fixup! ]] || \
+   [[ $first_line =~ ^squash! ]]; then
+  exit 0
+fi
+
+# Conventional Commits: <type>(<scope>?)!?: <description>
+# Allowed types are the standard CC set.
+pattern='^(feat|fix|refactor|test|docs|chore|style|perf|build|ci|revert)(\([a-z0-9_,/.-]+\))?!?: .+'
+
+if [[ ! $first_line =~ $pattern ]]; then
+  echo "✘ Commit message не соответствует Conventional Commits."
+  echo ""
+  echo "  Получено: $first_line"
+  echo ""
+  echo "  Ожидается: <type>(<scope>?)!?: <description>"
+  echo ""
+  echo "  Допустимые type: feat, fix, refactor, test, docs, chore, style, perf, build, ci, revert"
+  echo ""
+  echo "  Примеры:"
+  echo "    feat(auth): add OAuth2 flow"
+  echo "    fix: handle nil pointer in /healthz"
+  echo "    refactor(cmd)!: drop deprecated --legacy flag"
+  echo "    test(security): backfill marker uniqueness"
+  echo ""
+  echo "  ! после scope означает breaking change."
+  exit 1
+fi
