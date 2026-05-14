@@ -23,8 +23,8 @@ func WithLLMSessionClock(now func() time.Time) LLMSessionsOption {
 
 // InMemoryLLMWizardSessions is the production LLMWizardSessions
 // implementation: a sync.Map keyed by chatID with a periodic sweeper
-// that evicts drafts older than ttl. RED stub — Get/Set/Clear/Sweep/Run
-// all no-op so the package compiles but the tests fail.
+// that evicts drafts older than ttl. State is lost on process restart —
+// acceptable because the wizard takes seconds and /llm edit restarts it.
 type InMemoryLLMWizardSessions struct {
 	m   sync.Map // chatID (int64) -> *LLMWizardState
 	ttl time.Duration
@@ -42,31 +42,60 @@ func NewInMemoryLLMWizardSessions(opts ...LLMSessionsOption) *InMemoryLLMWizardS
 }
 
 func (s *InMemoryLLMWizardSessions) Get(chatID int64) (*LLMWizardState, bool) {
-	// RED stub
-	_ = chatID
-	return nil, false
+	v, ok := s.m.Load(chatID)
+	if !ok {
+		return nil, false
+	}
+	state, ok := v.(*LLMWizardState)
+	return state, ok
 }
 
 func (s *InMemoryLLMWizardSessions) Set(chatID int64, state *LLMWizardState) {
-	// RED stub
-	_ = chatID
-	_ = state
+	s.m.Store(chatID, state)
 }
 
 func (s *InMemoryLLMWizardSessions) Clear(chatID int64) {
-	// RED stub
-	_ = chatID
+	s.m.Delete(chatID)
 }
 
-// Sweep removes sessions whose StartedAt is older than ttl. RED stub
-// returns 0 evictions.
+// Sweep removes sessions whose StartedAt is older than ttl. Sessions with
+// a zero StartedAt are kept (defensive — they look "very old" to a naive
+// check but are likely caller misuse, not abandoned flows). Returns the
+// number of entries evicted.
 func (s *InMemoryLLMWizardSessions) Sweep() int {
-	return 0
+	cutoff := s.now().Add(-s.ttl)
+	removed := 0
+	s.m.Range(func(key, value any) bool {
+		state, ok := value.(*LLMWizardState)
+		if !ok {
+			return true
+		}
+		if state.StartedAt.IsZero() {
+			return true
+		}
+		if state.StartedAt.Before(cutoff) {
+			s.m.Delete(key)
+			removed++
+		}
+		return true
+	})
+	return removed
 }
 
-// Run sweeps the store every tick until ctx is canceled. RED stub
-// returns immediately.
+// Run sweeps the store every tick until ctx is canceled. Caller invokes
+// it in a goroutine — the function blocks for the lifetime of the bot.
 func (s *InMemoryLLMWizardSessions) Run(ctx context.Context, tick time.Duration) {
-	_ = ctx
-	_ = tick
+	if err := ctx.Err(); err != nil {
+		return
+	}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.Sweep()
+		}
+	}
 }
