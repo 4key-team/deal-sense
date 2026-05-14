@@ -56,6 +56,7 @@ func (c *HTTPClient) AnalyzeTender(ctx context.Context, req telegram.AnalyzeTend
 	if c.apiKey != "" {
 		httpReq.Header.Set("X-API-Key", c.apiKey)
 	}
+	applyLLMHeaders(httpReq, req.LLM)
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -119,6 +120,7 @@ func (c *HTTPClient) GenerateProposal(ctx context.Context, req telegram.Generate
 	if c.apiKey != "" {
 		httpReq.Header.Set("X-API-Key", c.apiKey)
 	}
+	applyLLMHeaders(httpReq, req.LLM)
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -219,6 +221,23 @@ func writeGenerateMultipart(out io.Writer, req telegram.GenerateProposalRequest)
 		return "", err
 	}
 	return w.FormDataContentType(), nil
+}
+
+// applyLLMHeaders writes the per-chat LLM provider override to the request
+// headers. Empty Provider means "no override — use server default" and no
+// headers are sent. BaseURL is independently optional; when empty we still
+// forward Provider/Key/Model so the backend selects the provider's
+// default base URL.
+func applyLLMHeaders(req *http.Request, llm telegram.LLMOverride) {
+	if llm.Provider == "" {
+		return
+	}
+	req.Header.Set("X-LLM-Provider", llm.Provider)
+	if llm.BaseURL != "" {
+		req.Header.Set("X-LLM-URL", llm.BaseURL)
+	}
+	req.Header.Set("X-LLM-Key", llm.APIKey)
+	req.Header.Set("X-LLM-Model", llm.Model)
 }
 
 func writeAnalyzeMultipart(out io.Writer, req telegram.AnalyzeTenderRequest) (string, error) {
