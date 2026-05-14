@@ -7,6 +7,7 @@ import { TenderReport } from "./screens/Tender";
 import { ProposalResult } from "./screens/Proposal";
 import { CompanyProfile } from "./screens/Profile";
 import { MetricsDashboard } from "./screens/Admin";
+import { BotSettings } from "./screens/Admin/BotSettings";
 import styles from "./App.module.css";
 
 export function App() {
@@ -33,6 +34,7 @@ export function App() {
           <Route path="/proposal" element={<ProposalResult />} />
           <Route path="/profile" element={<CompanyProfile />} />
           <Route path="/admin/metrics" element={<MetricsDashboard />} />
+          <Route path="/admin/settings" element={<BotSettings />} />
           <Route path="*" element={<Navigate to="/tender" replace />} />
         </Routes>
       </main>
