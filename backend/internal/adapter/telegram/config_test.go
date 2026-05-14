@@ -82,6 +82,48 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_MetricsPort(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want int
+	}{
+		{"unset → disabled (0)", "", 0},
+		{"explicit zero → disabled", "0", 0},
+		{"valid port", "9091", 9091},
+		{"high port", "65535", 65535},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+			t.Setenv("ALLOWLIST_USER_IDS", "1")
+			t.Setenv("METRICS_PORT", tt.env)
+
+			cfg, err := telegram.LoadConfig()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.MetricsPort != tt.want {
+				t.Errorf("MetricsPort = %d, want %d", cfg.MetricsPort, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_MetricsPort_InvalidRejected(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+	t.Setenv("ALLOWLIST_USER_IDS", "1")
+	t.Setenv("METRICS_PORT", "abc")
+
+	_, err := telegram.LoadConfig()
+	if err == nil {
+		t.Fatal("expected error for non-numeric METRICS_PORT, got nil")
+	}
+	if !errors.Is(err, telegram.ErrInvalidMetricsPort) {
+		t.Errorf("err = %v, want wrapping ErrInvalidMetricsPort", err)
+	}
+}
+
 func TestLoadConfig_FromEnv(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "bot:secret")
 	t.Setenv("ALLOWLIST_USER_IDS", "42")
