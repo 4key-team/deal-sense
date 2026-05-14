@@ -489,3 +489,170 @@ func TestNewHTTPClient_NilUsesDefault(t *testing.T) {
 		t.Errorf("Verdict = %q", resp.Verdict)
 	}
 }
+
+// --- LLM override forwarding -------------------------------------------
+
+func TestHTTPClient_AnalyzeTender_SendsLLMHeaders_WhenProviderSet(t *testing.T) {
+	var got struct {
+		provider, url, key, model string
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.provider = r.Header.Get("X-LLM-Provider")
+		got.url = r.Header.Get("X-LLM-URL")
+		got.key = r.Header.Get("X-LLM-Key")
+		got.model = r.Header.Get("X-LLM-Model")
+		_ = json.NewEncoder(w).Encode(map[string]any{"verdict": "x"})
+	}))
+	defer srv.Close()
+
+	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+	_, err := client.AnalyzeTender(context.Background(), telegram.AnalyzeTenderRequest{
+		File: []byte("x"), Filename: "t.pdf", CompanyProfile: "p",
+		LLM: telegram.LLMOverride{
+			Provider: "openai",
+			BaseURL:  "https://openrouter.ai/api/v1",
+			APIKey:   "sk-secret1234",
+			Model:    "anthropic/claude-sonnet-4",
+		},
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeTender: %v", err)
+	}
+	if got.provider != "openai" {
+		t.Errorf("X-LLM-Provider = %q, want openai", got.provider)
+	}
+	if got.url != "https://openrouter.ai/api/v1" {
+		t.Errorf("X-LLM-URL = %q, want https://openrouter.ai/api/v1", got.url)
+	}
+	if got.key != "sk-secret1234" {
+		t.Errorf("X-LLM-Key = %q, want sk-secret1234", got.key)
+	}
+	if got.model != "anthropic/claude-sonnet-4" {
+		t.Errorf("X-LLM-Model = %q, want anthropic/claude-sonnet-4", got.model)
+	}
+}
+
+func TestHTTPClient_AnalyzeTender_OmitsLLMHeaders_WhenProviderEmpty(t *testing.T) {
+	// LLM.Provider empty → no X-LLM-* headers; backend falls back to its
+	// default. This is the bot's behaviour when a chat has not configured
+	// per-chat LLM settings via /llm edit.
+	headerKeys := []string{"X-Llm-Provider", "X-Llm-Url", "X-Llm-Key", "X-Llm-Model"}
+	headerPresent := map[string]bool{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, k := range headerKeys {
+			if _, ok := r.Header[k]; ok {
+				headerPresent[k] = true
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"verdict": "x"})
+	}))
+	defer srv.Close()
+
+	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+	_, err := client.AnalyzeTender(context.Background(), telegram.AnalyzeTenderRequest{
+		File: []byte("x"), Filename: "t.pdf", CompanyProfile: "p",
+		// LLM zero value — no override.
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeTender: %v", err)
+	}
+	for _, k := range headerKeys {
+		if headerPresent[k] {
+			t.Errorf("%s header must NOT be sent when LLM.Provider is empty", k)
+		}
+	}
+}
+
+func TestHTTPClient_AnalyzeTender_OmitsBaseURLHeader_WhenLLMBaseURLEmpty(t *testing.T) {
+	// Provider set but BaseURL empty → still forward Provider/Key/Model so
+	// the backend uses this provider's *default* base URL.
+	var sentURL string
+	var urlPresent bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, urlPresent = r.Header["X-Llm-Url"]
+		sentURL = r.Header.Get("X-LLM-URL")
+		_ = json.NewEncoder(w).Encode(map[string]any{"verdict": "x"})
+	}))
+	defer srv.Close()
+
+	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+	_, err := client.AnalyzeTender(context.Background(), telegram.AnalyzeTenderRequest{
+		File: []byte("x"), Filename: "t.pdf", CompanyProfile: "p",
+		LLM: telegram.LLMOverride{
+			Provider: "openai", BaseURL: "", APIKey: "sk-x", Model: "gpt-4o",
+		},
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeTender: %v", err)
+	}
+	if urlPresent || sentURL != "" {
+		t.Errorf("X-LLM-URL must be absent when LLM.BaseURL is empty (present=%v, value=%q)", urlPresent, sentURL)
+	}
+}
+
+func TestHTTPClient_GenerateProposal_SendsLLMHeaders_WhenProviderSet(t *testing.T) {
+	var got struct {
+		provider, url, key, model string
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.provider = r.Header.Get("X-LLM-Provider")
+		got.url = r.Header.Get("X-LLM-URL")
+		got.key = r.Header.Get("X-LLM-Key")
+		got.model = r.Header.Get("X-LLM-Model")
+		_ = json.NewEncoder(w).Encode(map[string]any{"template": "t", "summary": "s", "mode": "placeholder"})
+	}))
+	defer srv.Close()
+
+	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+	_, err := client.GenerateProposal(context.Background(), telegram.GenerateProposalRequest{
+		Template: []byte("DOCX"), TemplateFilename: "t.docx",
+		LLM: telegram.LLMOverride{
+			Provider: "anthropic",
+			BaseURL:  "https://api.anthropic.com/v1",
+			APIKey:   "sk-ant-test",
+			Model:    "claude-3-5-sonnet",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateProposal: %v", err)
+	}
+	if got.provider != "anthropic" {
+		t.Errorf("X-LLM-Provider = %q, want anthropic", got.provider)
+	}
+	if got.url != "https://api.anthropic.com/v1" {
+		t.Errorf("X-LLM-URL = %q", got.url)
+	}
+	if got.key != "sk-ant-test" {
+		t.Errorf("X-LLM-Key = %q", got.key)
+	}
+	if got.model != "claude-3-5-sonnet" {
+		t.Errorf("X-LLM-Model = %q", got.model)
+	}
+}
+
+func TestHTTPClient_GenerateProposal_OmitsLLMHeaders_WhenProviderEmpty(t *testing.T) {
+	headerKeys := []string{"X-Llm-Provider", "X-Llm-Url", "X-Llm-Key", "X-Llm-Model"}
+	headerPresent := map[string]bool{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, k := range headerKeys {
+			if _, ok := r.Header[k]; ok {
+				headerPresent[k] = true
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"template": "t", "summary": "s", "mode": "placeholder"})
+	}))
+	defer srv.Close()
+
+	client := dealsenseapi.NewHTTPClient(srv.URL, "", srv.Client())
+	_, err := client.GenerateProposal(context.Background(), telegram.GenerateProposalRequest{
+		Template: []byte("DOCX"), TemplateFilename: "t.docx",
+	})
+	if err != nil {
+		t.Fatalf("GenerateProposal: %v", err)
+	}
+	for _, k := range headerKeys {
+		if headerPresent[k] {
+			t.Errorf("%s header must NOT be sent when LLM.Provider is empty", k)
+		}
+	}
+}
