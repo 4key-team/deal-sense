@@ -117,6 +117,16 @@ export function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Any change to the credentials invalidates the previous test result
+  // and the saved confirmation. UX intent: a stale ✓ next to changed
+  // fields would lie about the current state, and the «Сохранено»
+  // confirmation must not survive an edit that hasn't been re-saved.
+  useEffect(() => {
+    setTestState("idle");
+    setTestError("");
+    setSavedAt(null);
+  }, [providerId, apiKey, url, model]);
+
   async function fetchModels(provId: string, provUrl: string) {
     if (!apiKey) return;
     setLoadingModels(true);
@@ -320,8 +330,16 @@ export function SettingsPage() {
             {testState === "ok" && t.settings.test_ok}
             {testState === "fail" && t.settings.test_fail}
           </Button>
-          <Button variant="primary" onClick={handleSave}>
-            {t.settings.save}
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            icon={savedAt !== null ? <CheckIcon /> : undefined}
+          >
+            {savedAt !== null
+              ? lang === "ru"
+                ? "Сохранено"
+                : "Saved"
+              : t.settings.save}
           </Button>
         </div>
         {testError && <p className={styles.testError}>{testError}</p>}
