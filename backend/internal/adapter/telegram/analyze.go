@@ -112,11 +112,16 @@ func (h *AnalyzeHandler) Handle(ctx context.Context, u *Update) error {
 	if u.Document == nil {
 		return h.replier.Reply(ctx, u.ChatID, msgAttachFile)
 	}
+	llmOverride := h.llmOverrideFor(ctx, u.ChatID)
+	if h.requireLLM && llmOverride.Provider == "" {
+		h.logger.InfoContext(ctx, "blocked: BYOK enforce, no per-chat llm", "chat_id", u.ChatID)
+		return h.replier.Reply(ctx, u.ChatID, msgLLMRequired)
+	}
 	resp, err := h.api.AnalyzeTender(ctx, usecase.AnalyzeTenderRequest{
 		File:           u.Document.Data,
 		Filename:       u.Document.Filename,
 		CompanyProfile: h.profileFor(ctx, u.ChatID),
-		LLM:            h.llmOverrideFor(ctx, u.ChatID),
+		LLM:            llmOverride,
 	})
 	if err != nil {
 		return h.replier.Reply(ctx, u.ChatID, fmt.Sprintf("%s %s", msgAnalysisErrorPrefix, err.Error()))

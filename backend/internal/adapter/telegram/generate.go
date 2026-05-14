@@ -76,10 +76,16 @@ func (h *GenerateHandler) Handle(ctx context.Context, u *Update) error {
 		return h.replier.Reply(ctx, u.ChatID, msgAttachTemplate)
 	}
 
+	llmOverride := h.llmOverrideFor(ctx, u.ChatID)
+	if h.requireLLM && llmOverride.Provider == "" {
+		h.logger.InfoContext(ctx, "blocked: BYOK enforce, no per-chat llm", "chat_id", u.ChatID)
+		return h.replier.Reply(ctx, u.ChatID, msgLLMRequired)
+	}
+
 	resp, err := h.api.GenerateProposal(ctx, usecase.GenerateProposalRequest{
 		Template:         u.Document.Data,
 		TemplateFilename: u.Document.Filename,
-		LLM:              h.llmOverrideFor(ctx, u.ChatID),
+		LLM:              llmOverride,
 	})
 	if err != nil {
 		return h.replier.Reply(ctx, u.ChatID, fmt.Sprintf("%s %s", msgGenerationErrPrefix, err.Error()))
