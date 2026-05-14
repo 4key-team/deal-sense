@@ -280,8 +280,13 @@ export async function checkConnection(overrides?: {
   url?: string;
   model?: string;
 }): Promise<CheckResult> {
+  // Start from apiHeaders() so the backend X-API-Key (dealSenseApiKey
+  // from localStorage) is always attached. Without it the bot's
+  // APIKeyAuth middleware returns 401 and the browser surfaces a
+  // generic "Load failed" — not what the user expected to see.
   const headers: Record<string, string> = overrides
     ? {
+        ...apiHeaders(),
         ...(overrides.provider && { "X-LLM-Provider": overrides.provider }),
         ...(overrides.apiKey && { "X-LLM-Key": overrides.apiKey }),
         ...(overrides.url && { "X-LLM-URL": overrides.url }),
