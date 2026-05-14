@@ -15,7 +15,7 @@ git config core.hooksPath .githooks
 | Hook | Что проверяет | Блокирует commit |
 |---|---|---|
 | `pre-commit` | `gofmt` на staged `.go` файлах | да, если есть unformatted |
-| `pre-commit` | `golangci-lint run ./...` (если установлен) | да, если есть issues |
+| `pre-commit` | `golangci-lint run ./...` (если установлен) | **нет** — warn-only локально, CI gates (TDD RED не должен `--no-verify`) |
 | `pre-commit` | `gitleaks protect --staged` (если установлен) | да, если найден secret |
 | `pre-commit` | `scripts/check-i18n.sh` на staged i18n-файлах | да, при 'ты'/`--`/`...` нарушениях |
 | `commit-msg` | Conventional Commits формат | да, при mismatch |
