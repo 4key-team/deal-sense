@@ -68,6 +68,11 @@ interface LLMSettings {
   apiKey: string;
   url: string;
   model: string;
+  // dealSenseApiKey is the backend's X-API-Key. Admin-level: backend
+  // sets DEAL_SENSE_API_KEY env on deploy, operator pastes the same
+  // value here. Required for any /api/* call (analyze, generate,
+  // check, list providers/models) when the backend has auth on.
+  dealSenseApiKey?: string;
 }
 
 const STORAGE_KEY = "llm-settings";
@@ -99,6 +104,8 @@ export function SettingsPage() {
   const [showKey, setShowKey] = useState<boolean>(false);
   const [url, setUrl] = useState<string>(saved.url);
   const [model, setModel] = useState<string>(saved.model);
+  const [dealSenseApiKey, setDealSenseApiKey] = useState<string>(saved.dealSenseApiKey ?? "");
+  const [showBackendKey, setShowBackendKey] = useState<boolean>(false);
   const [testState, setTestState] = useState<TestState>("idle");
   const [providerOpen, setProviderOpen] = useState<boolean>(false);
   const [modelOpen, setModelOpen] = useState<boolean>(false);
@@ -125,7 +132,7 @@ export function SettingsPage() {
     setTestState("idle");
     setTestError("");
     setSavedAt(null);
-  }, [providerId, apiKey, url, model]);
+  }, [providerId, apiKey, url, model, dealSenseApiKey]);
 
   async function fetchModels(provId: string, provUrl: string) {
     if (!apiKey) return;
@@ -180,7 +187,13 @@ export function SettingsPage() {
   }
 
   function handleSave() {
-    setItem<LLMSettings>(STORAGE_KEY, { providerId, apiKey, url, model });
+    setItem<LLMSettings>(STORAGE_KEY, {
+      providerId,
+      apiKey,
+      url,
+      model,
+      dealSenseApiKey: dealSenseApiKey.trim() || undefined,
+    });
     setSavedAt(Date.now());
   }
 
@@ -343,6 +356,53 @@ export function SettingsPage() {
           </Button>
         </div>
         {testError && <p className={styles.testError}>{testError}</p>}
+      </section>
+
+      <section className={styles.card} aria-label="Backend access">
+        <h2 className={styles.cardTitle}>
+          {lang === "ru" ? "Доступ к серверу Deal Sense" : "Deal Sense backend access"}
+        </h2>
+        <p className={styles.cardHint}>
+          {lang === "ru" ? (
+            <>
+              Backend защищён <code>X-API-Key</code>. Этот ключ задаёт администратор
+              при деплое (<code>DEAL_SENSE_API_KEY</code> в env). Спросите у того, кто
+              развернул бэкенд, и вставьте сюда — без него тест подключения и
+              запросы к бэкенду возвращают 401 unauthorized.
+            </>
+          ) : (
+            <>
+              The backend is protected by <code>X-API-Key</code>. Set on deploy via
+              <code> DEAL_SENSE_API_KEY</code>. Ask the operator who deployed the
+              backend; without it tests and API calls return 401 unauthorized.
+            </>
+          )}
+        </p>
+
+        <Field
+          label={lang === "ru" ? "Backend API ключ" : "Backend API key"}
+          hint={lang === "ru" ? "Хранится только в этом браузере." : "Stored in this browser only."}
+        >
+          <div className={styles.keyWrap}>
+            <input
+              className={styles.keyInput}
+              type={showBackendKey ? "text" : "password"}
+              value={dealSenseApiKey}
+              onChange={(e) => setDealSenseApiKey(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={lang === "ru" ? "dev-smoke-test-key-…" : "dev-smoke-test-key-…"}
+            />
+            <button
+              className={styles.keyToggle}
+              type="button"
+              onClick={() => setShowBackendKey((v) => !v)}
+              aria-label={showBackendKey ? t.settings.hide : t.settings.show}
+            >
+              <EyeIcon off={showBackendKey} />
+            </button>
+          </div>
+        </Field>
       </section>
 
       <section className={styles.card} aria-label="Telegram bot">
