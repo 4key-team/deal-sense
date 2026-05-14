@@ -82,23 +82,46 @@ func TestNewDefaultPolicy_OK(t *testing.T) {
 	}
 }
 
-// Default policy must contain all six directives — protects юр firewall.
+// requiredMarkers lists every directive the юр firewall depends on. Shared
+// between presence and uniqueness tests so adding a marker only touches
+// one place.
+var requiredMarkers = []string{
+	"STRICT DOMAIN FOCUS",
+	"ENCODED PAYLOAD ISOLATION",
+	"NO CYBERATTACKS",
+	"FACTUAL INTEGRITY",
+	"RESOURCE ABUSE",
+	"Обратитесь к юристу компании",
+}
+
+// TestNewDefaultPolicy_AllMarkers — presence check: every required marker
+// must appear at least once in the embedded directives. A regression here
+// means a marker was deleted (юр firewall hole); the test alone diagnoses
+// the issue without conflating it with accidental duplication.
 func TestNewDefaultPolicy_AllMarkers(t *testing.T) {
 	p, _ := security.NewDefaultPolicy()
 	prefix := p.Prefix()
-
-	markers := []string{
-		"STRICT DOMAIN FOCUS",
-		"ENCODED PAYLOAD ISOLATION",
-		"NO CYBERATTACKS",
-		"FACTUAL INTEGRITY",
-		"RESOURCE ABUSE",
-		"Обратитесь к юристу компании",
+	for _, m := range requiredMarkers {
+		t.Run(m, func(t *testing.T) {
+			if !strings.Contains(prefix, m) {
+				t.Errorf("marker %q is missing from embedded directives", m)
+			}
+		})
 	}
-	for _, m := range markers {
+}
+
+// TestEmbeddedDirectives_NoAccidentalDuplicates — uniqueness check: every
+// required marker must appear exactly once. A regression here means a
+// marker was duplicated (e.g. paragraph copy-paste), which inflates the
+// system prompt and may shift LLM attention; the test alone names that
+// class of issue distinct from missing-marker presence failures.
+func TestEmbeddedDirectives_NoAccidentalDuplicates(t *testing.T) {
+	p, _ := security.NewDefaultPolicy()
+	prefix := p.Prefix()
+	for _, m := range requiredMarkers {
 		t.Run(m, func(t *testing.T) {
 			if c := strings.Count(prefix, m); c != 1 {
-				t.Errorf("marker %q should appear exactly once, got %d", m, c)
+				t.Errorf("marker %q appears %d times, want exactly 1", m, c)
 			}
 		})
 	}
@@ -151,5 +174,40 @@ func TestPolicy_Wrap_SinglePrefixPerCall(t *testing.T) {
 
 	if c := strings.Count(got, "STRICT DOMAIN FOCUS"); c != 1 {
 		t.Errorf("Wrap should add prefix exactly once, got %d occurrences", c)
+	}
+}
+
+// TestPolicy_Wrap_DoubleWrap_NonIdempotent pins the decision (issue #13):
+// Wrap is intentionally NOT idempotent — composing Wrap(Wrap(inner)) yields
+// two prefix copies, not one. This is a footgun-test: it fails loudly if
+// anyone adds a "skip if already prefixed" shortcut to Wrap, forcing the
+// designer to re-read this comment and the linked decision before changing
+// behaviour.
+//
+// Rationale: Wrap is a simple decorator with no hidden state. A "did I
+// already wrap?" branch couples wrap-time to wrap-input parsing and adds a
+// silent failure mode (caller may rely on the second wrap meaning "re-anchor
+// after untrusted concatenation"; a quiet no-op would defeat that). The
+// firewall stays intact under accidental double-wrap — the prompt just
+// gets longer — so the cost of non-idempotency is bounded.
+//
+// If you have a real need for idempotency, change Wrap to a typed VO that
+// can't be applied twice (issue #3 WrappedPrompt) rather than papering over
+// the string-level composition.
+func TestPolicy_Wrap_DoubleWrap_NonIdempotent(t *testing.T) {
+	p, _ := security.NewPolicy(validDirectives)
+
+	// Compose Wrap twice. Wrap returns func(string) string, so the second
+	// Wrap takes the first wrapped function and prepends the prefix again.
+	once := p.Wrap(func(lang string) string { return "body:" + lang })
+	twice := p.Wrap(once)
+
+	got := twice("Russian")
+	if c := strings.Count(got, "STRICT DOMAIN FOCUS"); c != 2 {
+		t.Errorf("double-wrap should produce 2 prefix copies (non-idempotent), got %d\n"+
+			"if you intentionally made Wrap idempotent, update this test AND issue #13", c)
+	}
+	if !strings.HasSuffix(got, "body:Russian") {
+		t.Errorf("inner result must survive double-wrap, got tail: %q", got[len(got)-30:])
 	}
 }
