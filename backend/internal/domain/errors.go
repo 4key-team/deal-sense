@@ -19,4 +19,8 @@ var (
 	ErrInvalidTemplateMode  = errors.New("invalid template mode")
 	ErrInvalidBotToken      = errors.New("bot token format invalid (expected <digits>:<secret>)")
 	ErrInvalidLogLevel      = errors.New("invalid log level (expected: debug, info, warn, error)")
+	ErrEmptyLLMProvider     = errors.New("LLM provider is empty")
+	ErrEmptyLLMAPIKey       = errors.New("LLM API key is empty")
+	ErrEmptyLLMModel        = errors.New("LLM model is empty")
+	ErrInvalidLLMBaseURL    = errors.New("LLM base URL is not a valid absolute URL")
 )
