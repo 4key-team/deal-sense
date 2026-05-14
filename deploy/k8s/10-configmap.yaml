@@ -1,0 +1,19 @@
+# Non-secret runtime configuration. Secrets live in deal-sense-llm Secret
+# (see 20-secret-llm.example.yaml). Edit values to match the target cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deal-sense-config
+  namespace: deal-sense
+  labels:
+    app.kubernetes.io/name: deal-sense
+    app.kubernetes.io/component: backend
+data:
+  PORT: "8080"
+  LLM_PROVIDER: "anthropic"
+  LLM_BASE_URL: "https://api.anthropic.com"
+  LLM_MODEL: "claude-sonnet-4-5"
+  LOG_LEVEL: "info"
+  CORS_ORIGIN: "*"
+  RATE_LIMIT_RPS: "100"
+  RATE_LIMIT_BURST: "200"
