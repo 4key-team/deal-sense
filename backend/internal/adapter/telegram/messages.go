@@ -30,6 +30,25 @@ const (
 	msgWizardCancelled    = "Заполнение профиля отменено."
 	msgWizardEmptyProfile = "Профиль получился пустым — заполните хотя бы название компании. Начните заново: /profile edit."
 
+	// /llm and its wizard. Per-chat LLM provider configuration: which API
+	// to call (provider + base_url), what credential, which model.
+	// Wizard speaks to the user as "Вы". API key is masked when shown via
+	// /llm so secrets do not leak into chat history.
+	msgLLMEmpty            = "Настройки LLM для этого чата ещё не заданы — используются серверные. Чтобы переопределить: /llm edit."
+	msgLLMShowFmt          = "Текущие настройки LLM для этого чата:\n\nProvider: %s\nBase URL: %s\nAPI key: %s\nModel: %s\n\n/llm edit — изменить, /llm clear — сбросить (вернуться к серверным)."
+	msgLLMShowDefaultURL   = "(по умолчанию провайдера)"
+	msgLLMCleared          = "Настройки LLM сброшены — этот чат снова использует серверные."
+	msgLLMUnknownCmd       = "Неизвестная подкоманда. Доступно: /llm, /llm edit, /llm clear."
+	msgLLMLoadError        = "❌ Настройки LLM временно недоступны. Попробуйте позже."
+	msgLLMSaveError        = "❌ Не удалось сохранить настройки LLM. Попробуйте позже."
+	msgLLMWizardStart      = "Настроим LLM для этого чата (4 шага). Прервать — /cancel.\n\nProvider (например: openai, anthropic, openrouter):"
+	msgLLMWizardBaseURL    = "Base URL endpoint'а (например: https://openrouter.ai/api/v1). Если не нужно — отправьте «-»."
+	msgLLMWizardAPIKey     = "API key (например: sk-…). Будет сохранён и использоваться при вызовах LLM. В сообщении /llm отображается замаскированным."
+	msgLLMWizardModel      = "Модель (например: anthropic/claude-sonnet-4, gpt-4o):"
+	msgLLMWizardConfirmFmt = "Готово, настройки LLM сохранены:\n\nProvider: %s\nBase URL: %s\nAPI key: %s\nModel: %s\n\n/llm edit — изменить, /llm clear — сбросить."
+	msgLLMWizardCancelled  = "Настройка LLM отменена."
+	msgLLMWizardInvalidFmt = "❌ Не получилось: %s\n\nНачните заново: /llm edit."
+
 	// Exported strings are used by the cmd-level wiring (auth middleware,
 	// runtime adapter). Keeping them all here means translation work
 	// touches one file.
