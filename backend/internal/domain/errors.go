@@ -17,4 +17,6 @@ var (
 	ErrEmptyCompany         = errors.New("company profile is empty")
 	ErrInvalidScore         = errors.New("invalid match score")
 	ErrInvalidTemplateMode  = errors.New("invalid template mode")
+	ErrInvalidBotToken      = errors.New("bot token format invalid (expected <digits>:<secret>)")
+	ErrInvalidLogLevel      = errors.New("invalid log level (expected: debug, info, warn, error)")
 )
