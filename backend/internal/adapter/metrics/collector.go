@@ -11,12 +11,13 @@ import (
 	"sync"
 )
 
-// Collector aggregates the four metrics emitted by /metrics:
+// Collector aggregates the metrics emitted by /metrics:
 //
 //   - dealsense_requests_total{path,status}      — counter, HTTP requests
 //   - dealsense_llm_calls_total{provider,status} — counter, LLM provider calls
 //   - dealsense_endpoint_risk{path,level}        — gauge, =1 per (path,level)
 //   - dealsense_security_decline_total{kind}     — counter, security declines
+//   - dealsense_bot_events_total{event}          — counter, Telegram bot lifecycle events
 //
 // Zero value is unusable — construct via NewCollector.
 type Collector struct {
@@ -24,6 +25,7 @@ type Collector struct {
 	llmCalls        *vec
 	endpointRisk    *vec
 	securityDecline *vec
+	botEvents       *vec
 }
 
 // NewCollector returns an empty collector. All counters start at zero.
@@ -33,6 +35,7 @@ func NewCollector() *Collector {
 		llmCalls:        newVec([]string{"provider", "status"}),
 		endpointRisk:    newVec([]string{"path", "level"}),
 		securityDecline: newVec([]string{"kind"}),
+		botEvents:       newVec([]string{"event"}),
 	}
 }
 
@@ -57,6 +60,23 @@ func (c *Collector) SetEndpointRisk(path, level string) {
 	c.endpointRisk.set([]string{path, level}, 1)
 }
 
+// IncBotEvent increments dealsense_bot_events_total{event} by 1. Use for
+// single-shot Telegram bot lifecycle events (wizard started, completed,
+// cancelled, profile saved/cleared, etc).
+func (c *Collector) IncBotEvent(event string) {
+	c.botEvents.inc([]string{event})
+}
+
+// AddBotEvent increments dealsense_bot_events_total{event} by delta. Non-
+// positive deltas (zero or negative) are silently dropped — counters are
+// monotonic and emitting empty series creates noise in scrapes.
+func (c *Collector) AddBotEvent(event string, delta float64) {
+	if delta <= 0 {
+		return
+	}
+	c.botEvents.add([]string{event}, delta)
+}
+
 // Render writes the snapshot of all metrics in Prometheus exposition format
 // (text version 0.0.4) to w. Per-metric ordering is insertion order, which
 // is stable across calls for the same label set.
@@ -66,6 +86,7 @@ func (c *Collector) Render(w io.Writer) (int, error) {
 	writeMetric(&sb, "dealsense_llm_calls_total", "Total LLM provider calls, labelled by provider and status.", "counter", c.llmCalls)
 	writeMetric(&sb, "dealsense_endpoint_risk", "Risk classification of registered HTTP endpoints (one series per path+level).", "gauge", c.endpointRisk)
 	writeMetric(&sb, "dealsense_security_decline_total", "Security declines by kind (allowlist|api_key|rate_limit|llm_parse_error).", "counter", c.securityDecline)
+	writeMetric(&sb, "dealsense_bot_events_total", "Telegram bot lifecycle events (wizard_started|wizard_completed|wizard_cancelled|wizard_rejected_empty|wizard_evicted|profile_cleared|profile_saved).", "counter", c.botEvents)
 	return io.WriteString(w, sb.String())
 }
 
@@ -109,6 +130,19 @@ func (v *vec) inc(vals []string) {
 		v.labels[k] = cp
 	}
 	v.values[k]++
+}
+
+func (v *vec) add(vals []string, delta float64) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	k := v.key(vals)
+	if _, ok := v.values[k]; !ok {
+		v.order = append(v.order, k)
+		cp := make([]string, len(vals))
+		copy(cp, vals)
+		v.labels[k] = cp
+	}
+	v.values[k] += delta
 }
 
 func (v *vec) set(vals []string, val float64) {
