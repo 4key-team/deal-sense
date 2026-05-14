@@ -16,10 +16,12 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/dealsenseapi"
+	"github.com/daniil/deal-sense/backend/internal/adapter/llmsettingsstore"
 	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
 	"github.com/daniil/deal-sense/backend/internal/adapter/profilestore"
 	telegramadapter "github.com/daniil/deal-sense/backend/internal/adapter/telegram"
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
+	"github.com/daniil/deal-sense/backend/internal/usecase/llmsettings"
 )
 
 // wizardSweepInterval is how often the in-memory wizard session store is
@@ -82,7 +84,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	if err != nil {
 		return fmt.Errorf("profile store: %w", err)
 	}
+	llmStore, err := llmsettingsstore.NewFileStore(cfg.LLMStorePath)
+	if err != nil {
+		return fmt.Errorf("llm settings store: %w", err)
+	}
+	llmService := llmsettings.NewService(llmStore)
 	wizardSessions := telegramadapter.NewInMemoryWizardSessions()
+	llmWizardSessions := telegramadapter.NewInMemoryLLMWizardSessions()
 	pendingSessions := telegramadapter.NewInMemoryPendingCommandSessions()
 	collector := metrics.NewCollector()
 
@@ -117,8 +125,20 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		telegramadapter.WithProfileLogger(logger),
 		telegramadapter.WithProfileEventCounter(collector),
 	)
-	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback, telegramadapter.WithAnalyzeLogger(logger))
-	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
+	analyzeHandler := telegramadapter.NewAnalyzeHandler(
+		api, profiles, replier, telegramadapter.DefaultCompanyFallback,
+		telegramadapter.WithAnalyzeLogger(logger),
+		telegramadapter.WithAnalyzeLLMService(llmService),
+	)
+	generateHandler := telegramadapter.NewGenerateHandler(
+		api, replier,
+		telegramadapter.WithGenerateLogger(logger),
+		telegramadapter.WithGenerateLLMService(llmService),
+	)
+	llmHandler := telegramadapter.NewLLMHandler(
+		llmService, llmWizardSessions, replier,
+		telegramadapter.WithLLMLogger(logger),
+	)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypePrefix,
 		startHandler(logger))
@@ -139,6 +159,10 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		makeProfileRouteHandler(profileHandler, wizardSessions, logger),
 	)
 	b.RegisterHandlerMatchFunc(
+		llmMatcher(llmWizardSessions),
+		makeLLMRouteHandler(llmHandler, llmWizardSessions, logger),
+	)
+	b.RegisterHandlerMatchFunc(
 		pendingDocumentMatcher(pendingSessions),
 		makePendingDispatcher(analyzeHandler, generateHandler, pendingSessions, b, defaultDocDownloader, logger),
 	)
@@ -151,6 +175,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	)
 
 	go runWizardSweeper(ctx, wizardSessions, wizardSweepInterval, logger, collector)
+	go runLLMWizardSweeper(ctx, llmWizardSessions, wizardSweepInterval, logger, collector)
 
 	if cfg.MetricsPort > 0 {
 		addr := fmt.Sprintf(":%d", cfg.MetricsPort)
@@ -298,6 +323,68 @@ func profileMatcher(sessions telegramadapter.WizardSessions) bot.MatchFunc {
 			return false
 		}
 		return telegramadapter.ShouldRouteToProfile(u.Message.Text, u.Message.Chat.ID, sessions)
+	}
+}
+
+// llmMatcher mirrors profileMatcher for the /llm command + its wizard.
+// Registered AFTER profileMatcher so /cancel inside a profile wizard
+// session goes to the profile router, not the llm one.
+func llmMatcher(sessions telegramadapter.LLMWizardSessions) bot.MatchFunc {
+	return func(u *models.Update) bool {
+		if u.Message == nil {
+			return false
+		}
+		return telegramadapter.ShouldRouteToLLM(u.Message.Text, u.Message.Chat.ID, sessions)
+	}
+}
+
+// makeLLMRouteHandler adapts the library's HandlerFunc to our Update DTO
+// and delegates routing to RouteWizardOrLLM. Mirrors makeProfileRouteHandler.
+func makeLLMRouteHandler(
+	lh *telegramadapter.LLMHandler,
+	sessions telegramadapter.LLMWizardSessions,
+	logger *slog.Logger,
+) bot.HandlerFunc {
+	return func(ctx context.Context, _ *bot.Bot, u *models.Update) {
+		if u.Message == nil {
+			return
+		}
+		dto := &telegramadapter.Update{
+			ChatID: u.Message.Chat.ID,
+			Text:   u.Message.Text,
+		}
+		if u.Message.From != nil {
+			dto.UserID = u.Message.From.ID
+		}
+		if _, err := telegramadapter.RouteWizardOrLLM(ctx, dto, lh, sessions); err != nil {
+			logger.Error("llm/wizard route", "chat_id", dto.ChatID, "err", err)
+		}
+	}
+}
+
+// runLLMWizardSweeper drives the /llm-wizard-session TTL sweep on a ticker.
+// Mirrors runWizardSweeper; lives at the cmd layer so observability stays
+// out of the adapter. The "wizard_evicted" counter is shared with the
+// profile sweeper — operators count the union by design (both speak the
+// same eviction language to the same user).
+func runLLMWizardSweeper(ctx context.Context, sessions *telegramadapter.InMemoryLLMWizardSessions, tick time.Duration, logger *slog.Logger, events *metrics.Collector) {
+	if err := ctx.Err(); err != nil {
+		return
+	}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n := sessions.Sweep(); n > 0 {
+				logger.Info("llm wizard sessions swept", "removed", n)
+				if events != nil {
+					events.AddBotEvent("wizard_evicted", float64(n))
+				}
+			}
+		}
 	}
 }
 

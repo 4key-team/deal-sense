@@ -63,6 +63,7 @@ func TestRun_StartsAndStops(t *testing.T) {
 		APIBaseURL:       "http://example.invalid",
 		LogLevel:         "info",
 		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
+		LLMStorePath:     filepath.Join(t.TempDir(), "llm.json"),
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -102,6 +103,7 @@ func TestRun_EmptyAllowlistOpensInOpenMode(t *testing.T) {
 	cfg := telegramadapter.Config{
 		BotToken:         "test-token",
 		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
+		LLMStorePath:     filepath.Join(t.TempDir(), "llm.json"),
 		// no AllowlistUserIDs — must NOT fail; ParseAllowlist → open mode
 	}
 	err := run(t.Context(), discardLogger(), cfg, []bot.Option{
@@ -121,6 +123,7 @@ func TestRun_BotInitFails(t *testing.T) {
 		BotToken:         "test-token",
 		AllowlistUserIDs: []int64{1},
 		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
+		LLMStorePath:     filepath.Join(t.TempDir(), "llm.json"),
 	}
 	err := run(t.Context(), discardLogger(), cfg, []bot.Option{
 		// Unreachable Telegram API → bot.New fails on getMe call.
@@ -172,6 +175,7 @@ func TestRun_DenyMiddlewareSendsNotice(t *testing.T) {
 		BotToken:         "t",
 		AllowlistUserIDs: []int64{42},
 		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
+		LLMStorePath:     filepath.Join(t.TempDir(), "llm.json"),
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
