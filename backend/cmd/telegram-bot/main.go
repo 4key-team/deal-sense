@@ -108,7 +108,11 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	replier := &botReplier{b: b, logger: logger}
-	profileHandler := telegramadapter.NewProfileHandler(profiles, wizardSessions, replier, telegramadapter.WithProfileLogger(logger))
+	profileHandler := telegramadapter.NewProfileHandler(
+		profiles, wizardSessions, replier,
+		telegramadapter.WithProfileLogger(logger),
+		telegramadapter.WithProfileEventCounter(collector),
+	)
 	analyzeHandler := telegramadapter.NewAnalyzeHandler(api, profiles, replier, telegramadapter.DefaultCompanyFallback, telegramadapter.WithAnalyzeLogger(logger))
 	generateHandler := telegramadapter.NewGenerateHandler(api, replier)
 
@@ -128,7 +132,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		"metrics_port", cfg.MetricsPort,
 	)
 
-	go runWizardSweeper(ctx, wizardSessions, wizardSweepInterval, logger)
+	go runWizardSweeper(ctx, wizardSessions, wizardSweepInterval, logger, collector)
 
 	if cfg.MetricsPort > 0 {
 		addr := fmt.Sprintf(":%d", cfg.MetricsPort)
@@ -192,10 +196,12 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
-// runWizardSweeper drives the wizard-session TTL sweep on a ticker and logs
-// non-zero evictions. Lives at the cmd layer so observability stays out of
-// the adapter (sessions.Run remains a pure utility for unit tests).
-func runWizardSweeper(ctx context.Context, sessions *telegramadapter.InMemoryWizardSessions, tick time.Duration, logger *slog.Logger) {
+// runWizardSweeper drives the wizard-session TTL sweep on a ticker, logs
+// non-zero evictions and increments dealsense_bot_events_total{event="wizard_evicted"}
+// when a counter is supplied. Lives at the cmd layer so observability stays
+// out of the adapter (sessions.Run remains a pure utility for unit tests).
+// events may be nil — sweep still runs and logs.
+func runWizardSweeper(ctx context.Context, sessions *telegramadapter.InMemoryWizardSessions, tick time.Duration, logger *slog.Logger, events *metrics.Collector) {
 	if err := ctx.Err(); err != nil {
 		return
 	}
@@ -208,6 +214,9 @@ func runWizardSweeper(ctx context.Context, sessions *telegramadapter.InMemoryWiz
 		case <-t.C:
 			if n := sessions.Sweep(); n > 0 {
 				logger.Info("wizard sessions swept", "removed", n)
+				if events != nil {
+					events.AddBotEvent("wizard_evicted", float64(n))
+				}
 			}
 		}
 	}
