@@ -1117,3 +1117,39 @@ func TestMain_BinaryFastExit(t *testing.T) {
 	// product now relaxes for bootstrap UX).
 	_ = syscall.SIGINT // keep import live in case build tags change
 }
+
+func TestBotCommandsList_CoversEveryRegisteredSlashCommand(t *testing.T) {
+	// MsgHelp claims /analyze, /generate, /profile, /llm, /cancel, /help.
+	// /start is also registered as a prefix handler. If any of those is
+	// missing from botCommandsList(), the Telegram "/" autocomplete popup
+	// will diverge from MsgHelp and users get a confusing experience.
+	cmds := botCommandsList()
+	want := []string{"start", "help", "analyze", "generate", "profile", "llm", "cancel"}
+	have := map[string]string{} // command → description
+	for _, c := range cmds {
+		have[c.Command] = c.Description
+	}
+	for _, w := range want {
+		desc, ok := have[w]
+		if !ok {
+			t.Errorf("botCommandsList() missing %q — Telegram /-popup will not show it", w)
+			continue
+		}
+		if strings.TrimSpace(desc) == "" {
+			t.Errorf("botCommandsList()[%q] has empty description — popup would be blank", w)
+		}
+	}
+}
+
+func TestBotCommandsList_LLMCommandPresent(t *testing.T) {
+	// Focussed regression for the L7 / Telegram popup gap: /llm must show
+	// up in the slash-autocomplete so users discover the new wizard.
+	cmds := botCommandsList()
+	for _, c := range cmds {
+		if c.Command == "llm" {
+			return
+		}
+	}
+	t.Error("botCommandsList() does not include /llm — popup will hide the new wizard")
+	_ = models.BotCommand{} // keep models import live
+}

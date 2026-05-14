@@ -239,6 +239,13 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
+// botCommandsList is the catalogue surfaced by Telegram's "/" autocomplete
+// popup via SetMyCommands. RED stub returns nil so the popup stays empty
+// (the visible bug); GREEN fills it with the same set MsgHelp documents.
+func botCommandsList() []models.BotCommand {
+	return nil
+}
+
 // mainReplyKeyboard is the persistent reply keyboard surfaced by /start
 // and /help: four top-level commands laid out as two rows of two buttons.
 // Telegram delivers a tapped button as a regular text message containing
