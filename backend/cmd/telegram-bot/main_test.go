@@ -351,7 +351,7 @@ func failingBot(t *testing.T) *bot.Bot {
 
 func TestStartHandler_RepliesWithWelcome(t *testing.T) {
 	b, sends := stubBotForSend(t)
-	h := startHandler(discardLogger())
+	h := startHandler(discardLogger(), nil, false)
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/start"},
 	})
@@ -384,7 +384,7 @@ func TestStartHandler_AttachesReplyKeyboard(t *testing.T) {
 		t.Fatalf("bot.New: %v", err)
 	}
 
-	h := startHandler(discardLogger())
+	h := startHandler(discardLogger(), nil, false)
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/start"},
 	})
@@ -402,7 +402,7 @@ func TestStartHandler_AttachesReplyKeyboard(t *testing.T) {
 
 func TestStartHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
 	b, sends := stubBotForSend(t)
-	h := startHandler(discardLogger())
+	h := startHandler(discardLogger(), nil, false)
 	h(context.Background(), b, &models.Update{})
 	if sends.Load() != 0 {
 		t.Errorf("sendMessage calls = %d, want 0", sends.Load())

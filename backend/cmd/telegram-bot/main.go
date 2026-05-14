@@ -138,11 +138,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		api, profiles, replier, telegramadapter.DefaultCompanyFallback,
 		telegramadapter.WithAnalyzeLogger(logger),
 		telegramadapter.WithAnalyzeLLMService(llmService),
+		telegramadapter.WithAnalyzeRequirePerChatLLM(cfg.RequirePerChatLLM),
 	)
 	generateHandler := telegramadapter.NewGenerateHandler(
 		api, replier,
 		telegramadapter.WithGenerateLogger(logger),
 		telegramadapter.WithGenerateLLMService(llmService),
+		telegramadapter.WithGenerateRequirePerChatLLM(cfg.RequirePerChatLLM),
 	)
 	llmHandler := telegramadapter.NewLLMHandler(
 		llmService, llmWizardSessions, replier,
@@ -150,7 +152,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	)
 
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypePrefix,
-		startHandler(logger))
+		startHandler(logger, llmService, cfg.RequirePerChatLLM))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/help", bot.MatchTypePrefix,
 		helpHandler(logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, telegramadapter.ButtonHelp, bot.MatchTypeExact,
@@ -283,17 +285,19 @@ func mainReplyKeyboard() *models.ReplyKeyboardMarkup {
 }
 
 // startHandler greets the user on /start with the same command list
-// MsgHelp uses plus the persistent reply keyboard, so the very first
-// interaction shows what's possible AND gives one-tap access.
-func startHandler(logger *slog.Logger) bot.HandlerFunc {
+// MsgHelp uses plus the persistent reply keyboard. The greeting body is
+// computed by telegramadapter.WelcomeMessage so BYOK-mode chats without
+// a per-chat /llm see an explicit onboarding CTA appended.
+func startHandler(logger *slog.Logger, llm telegramadapter.LLMSettingsService, requireLLM bool) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
 		if u.Message == nil {
 			return
 		}
 		logger.Debug("start", "chat_id", u.Message.Chat.ID)
+		text := telegramadapter.WelcomeMessage(ctx, u.Message.Chat.ID, llm, requireLLM)
 		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:      u.Message.Chat.ID,
-			Text:        telegramadapter.MsgStart,
+			Text:        text,
 			ReplyMarkup: mainReplyKeyboard(),
 		})
 	}
