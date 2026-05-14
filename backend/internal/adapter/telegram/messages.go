@@ -10,6 +10,14 @@ const (
 	msgGenerationErrPrefix = "❌ Ошибка генерации:"
 	msgGenerateCaptionFmt  = "✅ Готово. Mode: %s. Sections: %d."
 
+	// msgLLMRequired is sent when a chat tries to /analyze or /generate
+	// without having configured /llm AND the bot runs in BYOK mode
+	// (RequirePerChatLLM=true). It tells the user exactly what to do and
+	// nothing else — they will not hit the backend until they oblige.
+	msgLLMRequired = "🤖 Перед использованием бота настройте свой LLM ключ:\n\n" +
+		"➡️ Отправьте /llm edit — 4 коротких шага (provider, base URL, API key, model).\n\n" +
+		"Это нужно один раз. Подробности — /help."
+
 	// /profile and its wizard. The wizard speaks the user as "Вы" and is
 	// kept compact — one line per step plus a short instruction header.
 	msgProfileEmpty       = "Профиль компании ещё не заполнен. Отправьте /profile edit чтобы заполнить."

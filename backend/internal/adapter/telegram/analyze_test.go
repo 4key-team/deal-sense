@@ -386,6 +386,103 @@ func TestAnalyzeHandler_LLMService_NoSettingsForChat_NoOverride(t *testing.T) {
 	}
 }
 
+// --- BYOK enforce mode -----------------------------------------------------
+
+func TestAnalyzeHandler_RequireLLM_NoOverride_BlocksAndPromptsLLMEdit(t *testing.T) {
+	// In BYOK mode a chat without /llm settings must NOT hit the backend.
+	// The reply should call out /llm edit so the user knows what to do.
+	rep := &fakeReplier{}
+	api := &fakeAPI{}
+	llm := newFakeLLMService() // empty
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm),
+		telegram.WithAnalyzeRequirePerChatLLM(true),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 0 {
+		t.Errorf("backend AnalyzeTender called %d times, want 0 (must short-circuit)", api.calls)
+	}
+	if len(rep.texts) != 1 {
+		t.Fatalf("Reply called %d times, want 1", len(rep.texts))
+	}
+	if !strings.Contains(rep.texts[0], "/llm edit") {
+		t.Errorf("reply must mention /llm edit, got %q", rep.texts[0])
+	}
+}
+
+func TestAnalyzeHandler_RequireLLM_HasOverride_ProceedsToBackend(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService()
+	cfg, err := domain.NewLLMSettings("openai", "", "sk-test1234", "gpt-4o")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	llm.data[42] = cfg
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm),
+		telegram.WithAnalyzeRequirePerChatLLM(true),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 1 {
+		t.Errorf("backend AnalyzeTender called %d times, want 1 (chat configured)", api.calls)
+	}
+}
+
+func TestAnalyzeHandler_RequireLLM_NoOverride_NoService_AlsoBlocks(t *testing.T) {
+	// Defensive: even if the bot is mis-wired (no llm service injected)
+	// BYOK mode must still block. Fail-closed: better to block than to
+	// silently use the env fallback the operator turned off.
+	rep := &fakeReplier{}
+	api := &fakeAPI{}
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeRequirePerChatLLM(true),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 0 {
+		t.Errorf("backend AnalyzeTender called %d times, want 0 (require=true with nil service must still block)", api.calls)
+	}
+	if !strings.Contains(rep.texts[0], "/llm edit") {
+		t.Errorf("reply must mention /llm edit, got %q", rep.texts[0])
+	}
+}
+
+func TestAnalyzeHandler_RequireLLM_Disabled_LegacyFallbackWorks(t *testing.T) {
+	// Backward compat: with RequirePerChatLLM=false (the legacy single-tenant
+	// mode) a chat without /llm settings reaches the backend with a zero
+	// override and the backend's env default applies.
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService()
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm),
+		telegram.WithAnalyzeRequirePerChatLLM(false),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 1 {
+		t.Errorf("backend AnalyzeTender called %d times, want 1 (legacy mode falls through)", api.calls)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero override in legacy mode", api.gotReq.LLM)
+	}
+}
+
 func TestAnalyzeHandler_LLMService_ChatHasSettings_PopulatesOverride(t *testing.T) {
 	rep := &fakeReplier{}
 	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}

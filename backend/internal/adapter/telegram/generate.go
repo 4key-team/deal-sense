@@ -35,14 +35,23 @@ func WithGenerateLLMService(svc LLMSettingsService) GenerateOption {
 	}
 }
 
+// WithGenerateRequirePerChatLLM toggles BYOK enforcement on /generate;
+// see WithAnalyzeRequirePerChatLLM.
+func WithGenerateRequirePerChatLLM(v bool) GenerateOption {
+	return func(h *GenerateHandler) {
+		h.requireLLM = v
+	}
+}
+
 // GenerateHandler implements the /generate command flow. llm is optional;
 // when wired, the per-chat LLM settings override the backend default for
 // this request.
 type GenerateHandler struct {
-	api     usecase.APIClient
-	replier Replier
-	logger  *slog.Logger
-	llm     LLMSettingsService
+	api        usecase.APIClient
+	replier    Replier
+	logger     *slog.Logger
+	llm        LLMSettingsService
+	requireLLM bool
 }
 
 // NewGenerateHandler wires the dependencies for /generate. Options are

@@ -63,18 +63,30 @@ func WithAnalyzeLLMService(svc LLMSettingsService) AnalyzeOption {
 	}
 }
 
+// WithAnalyzeRequirePerChatLLM toggles BYOK enforcement. When true, /analyze
+// short-circuits with msgLLMRequired for any chat that has not configured
+// /llm — the backend is never called. Default (false here) preserves the
+// legacy single-tenant behaviour; production wires this from
+// cfg.RequirePerChatLLM which itself defaults to true.
+func WithAnalyzeRequirePerChatLLM(v bool) AnalyzeOption {
+	return func(h *AnalyzeHandler) {
+		h.requireLLM = v
+	}
+}
+
 // AnalyzeHandler implements the /analyze command flow. The per-chat company
 // profile is fetched from ProfileStore; if it is missing or the store errors
 // the fallback string is used so analyze never blocks on profile lookup.
 // llm is optional — when set, per-chat LLM settings override the backend
 // default for this request.
 type AnalyzeHandler struct {
-	api      usecase.APIClient
-	profiles usecase.ProfileStore
-	replier  Replier
-	fallback string
-	logger   *slog.Logger
-	llm      LLMSettingsService
+	api        usecase.APIClient
+	profiles   usecase.ProfileStore
+	replier    Replier
+	fallback   string
+	logger     *slog.Logger
+	llm        LLMSettingsService
+	requireLLM bool
 }
 
 // NewAnalyzeHandler wires the dependencies for /analyze. profiles may be nil
