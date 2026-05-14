@@ -20,6 +20,10 @@ type Config struct {
 	RateLimitRPS float64
 	// RateLimitBurst is the bucket size for the per-IP limiter.
 	RateLimitBurst int
+	// BotConfigPath is where the admin /api/admin/bot-config endpoint
+	// persists the Telegram bot configuration. The same path must be
+	// mounted into the telegram-bot container for the bot to read it.
+	BotConfigPath string
 }
 
 // Load reads configuration from environment variables. Secrets (LLM_API_KEY,
@@ -45,6 +49,7 @@ func Load() (Config, error) {
 		APIKey:         apiKey,
 		RateLimitRPS:   parseFloat(os.Getenv("RATE_LIMIT_RPS"), 0),
 		RateLimitBurst: parseInt(os.Getenv("RATE_LIMIT_BURST"), 30),
+		BotConfigPath:  cmp.Or(os.Getenv("BOT_CONFIG_PATH"), "./data/bot-config.json"),
 	}, nil
 }
 

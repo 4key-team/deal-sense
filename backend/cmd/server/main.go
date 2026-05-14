@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/botconfigstore"
 	apphttp "github.com/daniil/deal-sense/backend/internal/adapter/http"
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
@@ -18,6 +19,7 @@ import (
 	apppdf "github.com/daniil/deal-sense/backend/internal/adapter/pdf"
 	"github.com/daniil/deal-sense/backend/internal/config"
 	"github.com/daniil/deal-sense/backend/internal/domain/security"
+	"github.com/daniil/deal-sense/backend/internal/usecase/botconfig"
 )
 
 func parseLogLevel(s string) slog.Level {
@@ -100,6 +102,13 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 		collector.SetEndpointRisk(path, level.String())
 	}
 	mux := apphttp.NewRouter(h, collector)
+
+	botCfgStore, err := botconfigstore.NewFileStore(cfg.BotConfigPath)
+	if err != nil {
+		return fmt.Errorf("bot config store: %w", err)
+	}
+	apphttp.RegisterAdminRoutes(mux, apphttp.AdminBotConfigHandler(botconfig.NewService(botCfgStore), logger))
+	logger.Info("bot config store wired", "path", cfg.BotConfigPath)
 
 	handler := buildHandler(mux, cfg.APIKey, cfg.RateLimitRPS, cfg.RateLimitBurst, collector, logger)
 	if cfg.APIKey != "" {

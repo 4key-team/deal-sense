@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,11 +20,12 @@ func TestRun_StartsAndStops(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	cfg := config.Config{
-		Port:        "18923",
-		LLMProvider: "anthropic",
-		LLMBaseURL:  "http://localhost:1",
-		LLMAPIKey:   "test",
-		LLMModel:    "test-model",
+		Port:          "18923",
+		LLMProvider:   "anthropic",
+		LLMBaseURL:    "http://localhost:1",
+		LLMAPIKey:     "test",
+		LLMModel:      "test-model",
+		BotConfigPath: filepath.Join(t.TempDir(), "bot-config.json"),
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -76,11 +78,12 @@ func TestRun_PortInUse(t *testing.T) {
 	defer ln.Close()
 
 	cfg := config.Config{
-		Port:        "18925",
-		LLMProvider: "anthropic",
-		LLMBaseURL:  "http://localhost:1",
-		LLMAPIKey:   "test",
-		LLMModel:    "test",
+		Port:          "18925",
+		LLMProvider:   "anthropic",
+		LLMBaseURL:    "http://localhost:1",
+		LLMAPIKey:     "test",
+		LLMModel:      "test",
+		BotConfigPath: filepath.Join(t.TempDir(), "bot-config.json"),
 	}
 
 	err = run(t.Context(), logger, cfg)
@@ -93,8 +96,9 @@ func TestRun_InvalidProvider(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	cfg := config.Config{
-		Port:        "18926",
-		LLMProvider: "nonexistent",
+		Port:          "18926",
+		LLMProvider:   "nonexistent",
+		BotConfigPath: filepath.Join(t.TempDir(), "bot-config.json"),
 	}
 
 	err := run(t.Context(), logger, cfg)
@@ -117,6 +121,7 @@ func TestMain_Integration(t *testing.T) {
 		"LLM_BASE_URL=http://localhost:1",
 		"LLM_API_KEY=test",
 		"LLM_MODEL=test",
+		"BOT_CONFIG_PATH="+filepath.Join(t.TempDir(), "bot-config.json"),
 	)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
