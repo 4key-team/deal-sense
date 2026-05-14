@@ -189,10 +189,14 @@ func TestPolicy_Wrap_SinglePrefixPerCall(t *testing.T) {
 // so the runtime check is unnecessary.
 func TestPolicy_Wrap_ReturnsWrappedPromptVO(t *testing.T) {
 	p, _ := security.NewPolicy(validDirectives)
+	inner := func(lang string) string { return "body:" + lang }
 
-	// Compile-time guard: assign to the explicit type.
-	var wrapped security.WrappedPrompt = p.Wrap(func(lang string) string { return "body:" + lang })
+	// Compile-time guard: Wrap must return security.WrappedPrompt — anything
+	// else (e.g. raw func(string) string) fails this assignment at build.
+	// The explicit type is load-bearing — that's the assertion. nolint:staticcheck
+	var _ security.WrappedPrompt = p.Wrap(inner) //nolint:staticcheck // QF1011: explicit type is the test contract
 
+	wrapped := p.Wrap(inner)
 	got := wrapped.Call("Russian")
 	if !strings.HasPrefix(got, p.Prefix()) {
 		t.Errorf("Call must place the prefix at the head, got prefix=%q", got[:min(80, len(got))])
