@@ -18,6 +18,12 @@ const (
 		"➡️ Отправьте /llm edit — 4 коротких шага (provider, base URL, API key, model).\n\n" +
 		"Это нужно один раз. Подробности — /help."
 
+	// msgStartOnboardingCTA is appended to MsgStart when a chat has not
+	// configured /llm yet AND the bot enforces BYOK. Keeps the welcome
+	// readable: separator + a short call-to-action that mirrors what
+	// /analyze and /generate would say if invoked too early.
+	msgStartOnboardingCTA = "\n\n🚀 Первый шаг — настройте свой LLM ключ: /llm edit"
+
 	// /profile and its wizard. The wizard speaks the user as "Вы" and is
 	// kept compact — one line per step plus a short instruction header.
 	msgProfileEmpty       = "Профиль компании ещё не заполнен. Отправьте /profile edit чтобы заполнить."
