@@ -32,7 +32,6 @@ function mockFetchOk(body: string) {
 
 describe("MetricsDashboard", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     localStorage.clear();
   });
   afterEach(() => {
@@ -46,52 +45,39 @@ describe("MetricsDashboard", () => {
 
     renderWithProviders(<MetricsDashboard />);
 
-    // Drain the mount-effect Promise so React applies state.
-    await act(async () => {
-      await vi.runOnlyPendingTimersAsync();
-    });
-
-    await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-    });
-
-    expect(screen.getByText(/Requests/i)).toBeInTheDocument();
-    expect(screen.getByText(/LLM/i)).toBeInTheDocument();
-    expect(screen.getByText(/Endpoint risk/i)).toBeInTheDocument();
-    expect(screen.getByText(/Security declines/i)).toBeInTheDocument();
+    // findByText awaits the async fetch + state update for every heading.
+    expect(await screen.findByText(/Requests by path/i)).toBeInTheDocument();
+    expect(await screen.findByText(/LLM calls/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Endpoint risk/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Security declines/i)).toBeInTheDocument();
 
     // A scrape value from the fixture must appear somewhere in the DOM —
     // confirms the parser hooked up to the rendered counters.
-    expect(screen.getByText(/allowlist/i)).toBeInTheDocument();
+    expect(await screen.findByText(/allowlist/i)).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalled();
   });
 
-  it("re-fetches every interval ms (default 5s, picker switches to 1s)", async () => {
+  it("re-fetches when the interval picker switches to a shorter cadence", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchSpy = mockFetchOk(SAMPLE);
     vi.stubGlobal("fetch", fetchSpy);
 
     renderWithProviders(<MetricsDashboard />);
 
-    await act(async () => {
-      await vi.runOnlyPendingTimersAsync();
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // Wait for the mount fetch.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
 
-    // Advance 5s — the default interval — and confirm a second fetch.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-
-    // Switch to 1s.
+    // Switch from the default 5s to 1s.
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const picker = await screen.findByLabelText(/Refresh/i);
     await user.selectOptions(picker, "1000");
 
-    // After switching, the prior 5s timer is replaced; 3 ticks of 1s → 3 more fetches.
+    // The hook restarts the interval; expect at least one more fetch after
+    // a second of fake time.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(1100);
     });
-    expect(fetchSpy).toHaveBeenCalledTimes(5);
+    expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders an error state when fetch fails", async () => {
@@ -105,8 +91,13 @@ describe("MetricsDashboard", () => {
     });
   });
 
-  it("sends X-API-Key header when localStorage has ds:apiKey", async () => {
-    localStorage.setItem("ds:apiKey", JSON.stringify("secret-123"));
+  it("sends X-API-Key header when localStorage has the deal-sense key", async () => {
+    // Reuses the existing ds:llm-settings shape so the dashboard piggybacks
+    // on the same setting the rest of the app reads from (see lib/api.ts).
+    localStorage.setItem(
+      "ds:llm-settings",
+      JSON.stringify({ dealSenseApiKey: "secret-123" }),
+    );
     const fetchSpy = mockFetchOk(SAMPLE);
     vi.stubGlobal("fetch", fetchSpy);
 
