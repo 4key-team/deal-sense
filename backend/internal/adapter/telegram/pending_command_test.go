@@ -122,6 +122,83 @@ func TestPendingCommandSessions_Sweep_ZeroStartedAtKept(t *testing.T) {
 	}
 }
 
+// --- multi-file collection ------------------------------------------------
+
+func TestPendingCommandSessions_AppendFile_StartsEmpty(t *testing.T) {
+	// A fresh pending state starts with no collected files; that's what
+	// drives the wizard prompt "Пришлите шаблон".
+	s := telegram.NewInMemoryPendingCommandSessions()
+	s.Set(42, telegram.PendingGenerate)
+	files := s.Files(42)
+	if len(files) != 0 {
+		t.Errorf("Files = %d, want 0 for fresh state", len(files))
+	}
+}
+
+func TestPendingCommandSessions_AppendFile_Accumulates(t *testing.T) {
+	s := telegram.NewInMemoryPendingCommandSessions()
+	s.Set(42, telegram.PendingGenerate)
+
+	s.AppendFile(42, telegram.CollectedFile{Filename: "template.docx", Data: []byte("T")})
+	s.AppendFile(42, telegram.CollectedFile{Filename: "brief.zip", Data: []byte("B")})
+
+	files := s.Files(42)
+	if len(files) != 2 {
+		t.Fatalf("Files = %d, want 2", len(files))
+	}
+	if files[0].Filename != "template.docx" {
+		t.Errorf("Files[0].Filename = %q, want template.docx", files[0].Filename)
+	}
+	if files[1].Filename != "brief.zip" {
+		t.Errorf("Files[1].Filename = %q, want brief.zip", files[1].Filename)
+	}
+}
+
+func TestPendingCommandSessions_AppendFile_NoActiveSession_NoOp(t *testing.T) {
+	// AppendFile on a chat without a pending command must not silently
+	// create one — that would be a footgun where a stray upload starts
+	// a phantom flow.
+	s := telegram.NewInMemoryPendingCommandSessions()
+	s.AppendFile(42, telegram.CollectedFile{Filename: "x.docx"})
+	if files := s.Files(42); len(files) != 0 {
+		t.Errorf("Files = %d, want 0 (no session)", len(files))
+	}
+	if _, ok := s.Get(42); ok {
+		t.Error("AppendFile must not create a session implicitly")
+	}
+}
+
+func TestPendingCommandSessions_Files_AbsentChat_ReturnsEmpty(t *testing.T) {
+	s := telegram.NewInMemoryPendingCommandSessions()
+	if files := s.Files(999); len(files) != 0 {
+		t.Errorf("Files on absent chat = %d, want 0", len(files))
+	}
+}
+
+func TestPendingCommandSessions_Clear_AlsoClearsFiles(t *testing.T) {
+	s := telegram.NewInMemoryPendingCommandSessions()
+	s.Set(42, telegram.PendingGenerate)
+	s.AppendFile(42, telegram.CollectedFile{Filename: "t.docx", Data: []byte("T")})
+	s.Clear(42)
+	if files := s.Files(42); len(files) != 0 {
+		t.Errorf("Files after Clear = %d, want 0", len(files))
+	}
+}
+
+func TestPendingCommandSessions_Set_ResetsFiles(t *testing.T) {
+	// Set replaces the kind; per "latest Set wins" semantics it must also
+	// reset the file collection — accumulated /generate files should not
+	// leak into a fresh /analyze that the user kicks off afterwards.
+	s := telegram.NewInMemoryPendingCommandSessions()
+	s.Set(42, telegram.PendingGenerate)
+	s.AppendFile(42, telegram.CollectedFile{Filename: "t.docx", Data: []byte("T")})
+
+	s.Set(42, telegram.PendingAnalyze)
+	if files := s.Files(42); len(files) != 0 {
+		t.Errorf("Files after Set to a new kind = %d, want 0 (reset)", len(files))
+	}
+}
+
 func TestPendingCommandSessions_ConcurrentSetGet_NoRace(t *testing.T) {
 	s := telegram.NewInMemoryPendingCommandSessions()
 	done := make(chan struct{}, 2)

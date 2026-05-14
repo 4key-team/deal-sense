@@ -16,13 +16,26 @@ const (
 	PendingGenerate PendingCommandKind = "generate"
 )
 
+// CollectedFile is a document accumulated during a pending command. The
+// first file in PendingCommandState.Files is the primary input (template
+// for /generate, tender for /analyze); subsequent entries are context
+// (briefs, ZIPs, price lists) the user attaches before /go.
+type CollectedFile struct {
+	FileID   string
+	Filename string
+	Data     []byte
+}
+
 // PendingCommandState records a chat-scoped pending command and when it
 // was issued. StartedAt drives TTL eviction so abandoned states (user
-// typed /analyze then walked away) do not pile up in memory.
+// typed /analyze then walked away) do not pile up in memory. Files
+// accumulates documents the user uploaded while in this pending command;
+// /go finalises them, /cancel discards them.
 type PendingCommandState struct {
 	ChatID    int64
 	Kind      PendingCommandKind
 	StartedAt time.Time
+	Files     []CollectedFile
 }
 
 // defaultPendingTTL bounds how long a pending command sits in memory
@@ -98,6 +111,22 @@ func (s *InMemoryPendingCommandSessions) SetState(chatID int64, state PendingCom
 // Clear removes the pending state for chatID. Missing entries are a no-op.
 func (s *InMemoryPendingCommandSessions) Clear(chatID int64) {
 	s.m.Delete(chatID)
+}
+
+// AppendFile adds f to the collected files for chatID. If no pending
+// command exists for chatID, the call is a no-op — a stray upload must
+// not implicitly start a flow. RED stub: returns without doing anything.
+func (s *InMemoryPendingCommandSessions) AppendFile(chatID int64, f CollectedFile) {
+	_ = f
+	_ = chatID
+}
+
+// Files returns a snapshot of the documents collected so far for chatID.
+// Returns nil/empty when no pending command exists or no files yet. RED
+// stub: always returns nil.
+func (s *InMemoryPendingCommandSessions) Files(chatID int64) []CollectedFile {
+	_ = chatID
+	return nil
 }
 
 // Sweep removes states whose StartedAt is older than ttl. Zero StartedAt
