@@ -104,7 +104,7 @@ func (h *AnalyzeHandler) Handle(ctx context.Context, u *Update) error {
 		File:           u.Document.Data,
 		Filename:       u.Document.Filename,
 		CompanyProfile: h.profileFor(ctx, u.ChatID),
-		// LLM override wiring lands in GREEN — RED tests must fail here.
+		LLM:            h.llmOverrideFor(ctx, u.ChatID),
 	})
 	if err != nil {
 		return h.replier.Reply(ctx, u.ChatID, fmt.Sprintf("%s %s", msgAnalysisErrorPrefix, err.Error()))

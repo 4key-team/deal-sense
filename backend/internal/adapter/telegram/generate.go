@@ -70,7 +70,7 @@ func (h *GenerateHandler) Handle(ctx context.Context, u *Update) error {
 	resp, err := h.api.GenerateProposal(ctx, usecase.GenerateProposalRequest{
 		Template:         u.Document.Data,
 		TemplateFilename: u.Document.Filename,
-		// LLM override wiring lands in GREEN — RED tests must fail here.
+		LLM:              h.llmOverrideFor(ctx, u.ChatID),
 	})
 	if err != nil {
 		return h.replier.Reply(ctx, u.ChatID, fmt.Sprintf("%s %s", msgGenerationErrPrefix, err.Error()))
