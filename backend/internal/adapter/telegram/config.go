@@ -18,6 +18,9 @@ var ErrMissingBotToken = errors.New("telegram: TELEGRAM_BOT_TOKEN is required")
 // entry. Wrap the underlying parse error for diagnostics.
 var ErrInvalidAllowlistID = errors.New("telegram: invalid ALLOWLIST_USER_IDS entry")
 
+// ErrInvalidMetricsPort indicates METRICS_PORT was not a valid integer.
+var ErrInvalidMetricsPort = errors.New("telegram: invalid METRICS_PORT")
+
 // Config carries deployment knobs for the Telegram bot. It is a DTO; load
 // it via LoadConfig which reads from environment variables and validates.
 type Config struct {
@@ -27,6 +30,7 @@ type Config struct {
 	APIKey           string
 	LogLevel         string
 	ProfileStorePath string
+	MetricsPort      int // 0 disables the /metrics + /healthz listener.
 }
 
 // LoadConfig reads bot configuration from environment variables and returns
@@ -53,6 +57,11 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 
+	metricsPort, err := parseMetricsPort(os.Getenv("METRICS_PORT"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		BotToken:         token,
 		AllowlistUserIDs: ids,
@@ -60,7 +69,22 @@ func LoadConfig() (Config, error) {
 		APIKey:           apiKey,
 		LogLevel:         strings.ToLower(cmp.Or(strings.TrimSpace(os.Getenv("LOG_LEVEL")), "info")),
 		ProfileStorePath: cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_PROFILE_STORE_PATH")), "/data/telegram-profiles.json"),
+		MetricsPort:      metricsPort,
 	}, nil
+}
+
+// parseMetricsPort returns 0 (disabled) for empty input, the parsed port
+// for a valid integer, and ErrInvalidMetricsPort otherwise.
+func parseMetricsPort(raw string) (int, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0, nil
+	}
+	p, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %q", ErrInvalidMetricsPort, raw)
+	}
+	return p, nil
 }
 
 // readSecret resolves a secret from `<NAME>_FILE` (preferred) or plain env

@@ -16,6 +16,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/dealsenseapi"
+	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
 	"github.com/daniil/deal-sense/backend/internal/adapter/profilestore"
 	telegramadapter "github.com/daniil/deal-sense/backend/internal/adapter/telegram"
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
@@ -79,6 +80,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		return fmt.Errorf("profile store: %w", err)
 	}
 	wizardSessions := telegramadapter.NewInMemoryWizardSessions()
+	collector := metrics.NewCollector()
 
 	// botRef captures the constructed bot so the deny-notice middleware can
 	// send messages. The middleware is built before bot.New (it has to be —
@@ -95,7 +97,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 	}
 
 	opts := []bot.Option{
-		bot.WithMiddlewares(allowlistMiddleware(allowlist, denySender, nil)),
+		bot.WithMiddlewares(allowlistMiddleware(allowlist, denySender, collector)),
 		bot.WithDefaultHandler(defaultHandler(logger)),
 	}
 	opts = append(opts, extraOpts...)
@@ -123,9 +125,19 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		"api_base", cfg.APIBaseURL,
 		"allowlist_size", len(cfg.AllowlistUserIDs),
 		"api_key_set", cfg.APIKey != "",
+		"metrics_port", cfg.MetricsPort,
 	)
 
 	go runWizardSweeper(ctx, wizardSessions, wizardSweepInterval, logger)
+
+	if cfg.MetricsPort > 0 {
+		addr := fmt.Sprintf(":%d", cfg.MetricsPort)
+		go func() {
+			if err := runMetricsServer(ctx, addr, collector, logger); err != nil {
+				logger.Error("metrics listener", "addr", addr, "err", err)
+			}
+		}()
+	}
 
 	b.Start(ctx)
 	logger.Info("telegram bot stopped")
