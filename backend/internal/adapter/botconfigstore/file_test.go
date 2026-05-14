@@ -217,7 +217,7 @@ func TestFileStore_ConcurrentSaveAndLoad_NoRace(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < iters; i++ {
+		for range iters {
 			if err := store.Save(context.Background(), cfg); err != nil {
 				t.Errorf("save: %v", err)
 				return
@@ -226,7 +226,7 @@ func TestFileStore_ConcurrentSaveAndLoad_NoRace(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < iters; i++ {
+		for range iters {
 			if _, _, err := store.Load(context.Background()); err != nil {
 				t.Errorf("load: %v", err)
 				return
