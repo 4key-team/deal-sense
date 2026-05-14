@@ -2,7 +2,7 @@
 
 Инструмент для команд, которые регулярно участвуют в тендерах и готовят коммерческие предложения.
 
-**Версия:** 0.16.0
+**Версия:** 0.24.1
 
 ## Проблема
 
@@ -95,6 +95,16 @@ just docker-up        # Docker Compose
 ## Статус
 
 **Версия 0.5.0** — полный цикл анализа тендера: загрузка документов → LLM-анализ → результат с pros/cons/requirements. Профиль компании, динамический выбор провайдера и модели, тултипы. Backend 164 теста, frontend 153 теста.
+
+## Contributing
+
+Локальные git hooks (gofmt + golangci-lint + gitleaks + Conventional Commits) — однократная активация после клонирования:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Подробности — в [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Лицензия
 

@@ -20,9 +20,16 @@ type stubLLM struct {
 	response string
 	err      error
 	name     string
+	// captured prompts — populated by GenerateCompletion so tests can
+	// assert what flowed into the LLM call (e.g. company_profile making
+	// it from the multipart form all the way through to the user prompt).
+	systemPromptSeen string
+	userPromptSeen   string
 }
 
-func (s *stubLLM) GenerateCompletion(_ context.Context, _, _ string) (string, domain.TokenUsage, error) {
+func (s *stubLLM) GenerateCompletion(_ context.Context, system, user string) (string, domain.TokenUsage, error) {
+	s.systemPromptSeen = system
+	s.userPromptSeen = user
 	return s.response, domain.ZeroTokenUsage(), s.err
 }
 func (s *stubLLM) CheckConnection(_ context.Context) error        { return s.err }

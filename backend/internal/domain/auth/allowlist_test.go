@@ -7,7 +7,45 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 )
 
-func TestNewAllowlist_RejectsEmpty(t *testing.T) {
+// --- Open mode -------------------------------------------------------------
+
+func TestNewOpenAllowlist_IsOpen(t *testing.T) {
+	a := auth.NewOpenAllowlist()
+	if !a.IsOpen() {
+		t.Error("NewOpenAllowlist().IsOpen() = false, want true")
+	}
+}
+
+func TestNewOpenAllowlist_AllowsAnyone(t *testing.T) {
+	a := auth.NewOpenAllowlist()
+	tests := []struct {
+		name string
+		id   int64
+	}{
+		{"positive small", 1},
+		{"positive large", 9999999999},
+		{"zero", 0},
+		{"negative", -42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !a.IsAllowed(tt.id) {
+				t.Errorf("open allowlist must allow id=%d", tt.id)
+			}
+		})
+	}
+}
+
+func TestNewOpenAllowlist_HasNoMembers(t *testing.T) {
+	a := auth.NewOpenAllowlist()
+	if got := a.Members(); len(got) != 0 {
+		t.Errorf("Members() = %v, want empty for open allowlist", got)
+	}
+}
+
+// --- Restricted mode -------------------------------------------------------
+
+func TestNewRestrictedAllowlist_RejectsEmpty(t *testing.T) {
 	tests := []struct {
 		name string
 		ids  []int64
@@ -17,7 +55,7 @@ func TestNewAllowlist_RejectsEmpty(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := auth.NewAllowlist(tt.ids)
+			_, err := auth.NewRestrictedAllowlist(tt.ids)
 			if !errors.Is(err, auth.ErrEmptyAllowlist) {
 				t.Errorf("err = %v, want %v", err, auth.ErrEmptyAllowlist)
 			}
@@ -25,7 +63,7 @@ func TestNewAllowlist_RejectsEmpty(t *testing.T) {
 	}
 }
 
-func TestNewAllowlist_RejectsInvalidIDs(t *testing.T) {
+func TestNewRestrictedAllowlist_RejectsInvalidIDs(t *testing.T) {
 	tests := []struct {
 		name string
 		ids  []int64
@@ -36,7 +74,7 @@ func TestNewAllowlist_RejectsInvalidIDs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := auth.NewAllowlist(tt.ids)
+			_, err := auth.NewRestrictedAllowlist(tt.ids)
 			if !errors.Is(err, auth.ErrInvalidUserID) {
 				t.Errorf("err = %v, want %v", err, auth.ErrInvalidUserID)
 			}
@@ -44,8 +82,8 @@ func TestNewAllowlist_RejectsInvalidIDs(t *testing.T) {
 	}
 }
 
-func TestAllowlist_IsAllowed(t *testing.T) {
-	a, err := auth.NewAllowlist([]int64{1, 2, 3})
+func TestNewRestrictedAllowlist_IsAllowed(t *testing.T) {
+	a, err := auth.NewRestrictedAllowlist([]int64{1, 2, 3})
 	if err != nil {
 		t.Fatalf("constructor failed: %v", err)
 	}
@@ -70,14 +108,22 @@ func TestAllowlist_IsAllowed(t *testing.T) {
 	}
 }
 
-func TestAllowlist_Immutable(t *testing.T) {
-	ids := []int64{1, 2, 3}
-	a, err := auth.NewAllowlist(ids)
+func TestNewRestrictedAllowlist_IsOpenFalse(t *testing.T) {
+	a, err := auth.NewRestrictedAllowlist([]int64{1, 2})
 	if err != nil {
 		t.Fatalf("constructor failed: %v", err)
 	}
-	// Mutate the caller's slice. The Allowlist must already have a copy
-	// so its decisions don't shift under us.
+	if a.IsOpen() {
+		t.Error("restricted allowlist must report IsOpen() == false")
+	}
+}
+
+func TestRestrictedAllowlist_Immutable(t *testing.T) {
+	ids := []int64{1, 2, 3}
+	a, err := auth.NewRestrictedAllowlist(ids)
+	if err != nil {
+		t.Fatalf("constructor failed: %v", err)
+	}
 	ids[0] = 999
 
 	if !a.IsAllowed(1) {
@@ -88,12 +134,78 @@ func TestAllowlist_Immutable(t *testing.T) {
 	}
 }
 
-func TestAllowlist_DuplicatesIgnored(t *testing.T) {
-	a, err := auth.NewAllowlist([]int64{1, 1, 2})
+func TestRestrictedAllowlist_DuplicatesIgnored(t *testing.T) {
+	a, err := auth.NewRestrictedAllowlist([]int64{1, 1, 2})
 	if err != nil {
 		t.Fatalf("duplicates should not error: %v", err)
 	}
 	if !a.IsAllowed(1) || !a.IsAllowed(2) {
 		t.Error("IsAllowed should still cover both distinct IDs")
+	}
+}
+
+func TestRestrictedAllowlist_Members_ReturnsAllIDs(t *testing.T) {
+	a, err := auth.NewRestrictedAllowlist([]int64{3, 1, 2, 1})
+	if err != nil {
+		t.Fatalf("constructor failed: %v", err)
+	}
+	got := a.Members()
+	if len(got) != 3 {
+		t.Fatalf("Members() len = %d, want 3 (dedup'd): %v", len(got), got)
+	}
+	seen := map[int64]bool{1: false, 2: false, 3: false}
+	for _, id := range got {
+		seen[id] = true
+	}
+	for id, found := range seen {
+		if !found {
+			t.Errorf("Members() missing %d: %v", id, got)
+		}
+	}
+}
+
+// --- Parse smart factory ---------------------------------------------------
+
+func TestParseAllowlist_EmptyReturnsOpen(t *testing.T) {
+	tests := []struct {
+		name string
+		ids  []int64
+	}{
+		{"nil slice", nil},
+		{"empty slice", []int64{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, err := auth.ParseAllowlist(tt.ids)
+			if err != nil {
+				t.Fatalf("ParseAllowlist(%v) unexpected error: %v", tt.ids, err)
+			}
+			if !a.IsOpen() {
+				t.Errorf("ParseAllowlist(%v) should produce open allowlist", tt.ids)
+			}
+		})
+	}
+}
+
+func TestParseAllowlist_NonEmptyReturnsRestricted(t *testing.T) {
+	a, err := auth.ParseAllowlist([]int64{42, 100})
+	if err != nil {
+		t.Fatalf("ParseAllowlist unexpected error: %v", err)
+	}
+	if a.IsOpen() {
+		t.Error("ParseAllowlist with IDs should produce restricted allowlist")
+	}
+	if !a.IsAllowed(42) {
+		t.Error("ParseAllowlist should preserve member 42")
+	}
+	if a.IsAllowed(999) {
+		t.Error("ParseAllowlist should not include 999")
+	}
+}
+
+func TestParseAllowlist_PropagatesInvalidIDError(t *testing.T) {
+	_, err := auth.ParseAllowlist([]int64{1, -5, 2})
+	if !errors.Is(err, auth.ErrInvalidUserID) {
+		t.Errorf("err = %v, want wrapping ErrInvalidUserID", err)
 	}
 }

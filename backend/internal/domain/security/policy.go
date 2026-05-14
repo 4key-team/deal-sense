@@ -72,11 +72,33 @@ func (p *Policy) Prefix() string {
 	return p.prefix
 }
 
-// Wrap returns a new prompt function that prepends the policy prefix to the
-// inner prompt's output. The wrapped function is the single enforcement point
-// for the security guard — adapters call this instead of manually concatenating.
-func (p *Policy) Wrap(prompt func(string) string) func(string) string {
-	return func(lang string) string {
-		return p.prefix + prompt(lang)
+// WrappedPrompt is a security-wrapped LLM system prompt. The only way to
+// construct one is via Policy.Wrap, which guarantees the юр firewall prefix
+// is prepended to every invocation. Callers retrieve the rendered prompt
+// via Call(lang).
+//
+// The type is intentionally NOT a public alias for func(string) string —
+// the compiler must refuse any code path that returns a raw inner prompt
+// where a WrappedPrompt is expected. This forecloses an entire class of
+// bugs (forgot to wrap; double-wrap by accident) at the type system level,
+// not at runtime.
+type WrappedPrompt struct {
+	fn func(lang string) string
+}
+
+// Call renders the wrapped prompt for the given language.
+func (w WrappedPrompt) Call(lang string) string {
+	return w.fn(lang)
+}
+
+// Wrap composes raw with the policy prefix and returns a typed WrappedPrompt.
+// The returned value cannot be confused with a raw prompt at compile time —
+// passing the result back into Wrap will not type-check because Wrap accepts
+// func(string) string, not WrappedPrompt.
+func (p *Policy) Wrap(raw func(lang string) string) WrappedPrompt {
+	return WrappedPrompt{
+		fn: func(lang string) string {
+			return p.prefix + raw(lang)
+		},
 	}
 }

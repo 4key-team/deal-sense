@@ -227,3 +227,74 @@ describe("downloadBlob", () => {
     createElement.mockRestore();
   });
 });
+
+describe("generateProposalStream (SSE)", () => {
+  function streamResponse(events: string[]) {
+    const encoder = new TextEncoder();
+    let i = 0;
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "Content-Type": "text/event-stream" }),
+      body: {
+        getReader() {
+          return {
+            read: () => {
+              if (i >= events.length) {
+                return Promise.resolve({ done: true, value: undefined });
+              }
+              const chunk = encoder.encode(events[i++]);
+              return Promise.resolve({ done: false, value: chunk });
+            },
+            releaseLock: () => {},
+          };
+        },
+      },
+    });
+  }
+
+  it("invokes onProgress callbacks and resolves on result event", async () => {
+    const events = [
+      'event: progress\ndata: {"ts":1}\n\n',
+      'event: progress\ndata: {"ts":2}\n\n',
+      'event: result\ndata: {"summary":"Done","sections":[],"docx":"","mode":"clean"}\n\n',
+    ];
+    mockFetch.mockReturnValueOnce(streamResponse(events));
+
+    const progressTicks: number[] = [];
+    const { generateProposalStream } = await import("./api");
+    const result = await generateProposalStream(null, [], "ru", undefined, () => {
+      progressTicks.push(Date.now());
+    });
+
+    expect(progressTicks.length).toBe(2);
+    expect(result.summary).toBe("Done");
+    expect(result.mode).toBe("clean");
+  });
+
+  it("rejects with the error payload on error event", async () => {
+    const events = [
+      'event: progress\ndata: {"ts":1}\n\n',
+      'event: error\ndata: {"error":"provider quota exceeded"}\n\n',
+    ];
+    mockFetch.mockReturnValueOnce(streamResponse(events));
+
+    const { generateProposalStream } = await import("./api");
+    await expect(
+      generateProposalStream(null, [], "ru"),
+    ).rejects.toThrow(/provider quota exceeded/);
+  });
+
+  it("handles events split across reader chunks", async () => {
+    const events = [
+      'event: progr',
+      'ess\ndata: {"ts":1}\n\nevent: result\ndata: {"summary"',
+      ':"Split","sections":[],"docx":"","mode":"clean"}\n\n',
+    ];
+    mockFetch.mockReturnValueOnce(streamResponse(events));
+
+    const { generateProposalStream } = await import("./api");
+    const result = await generateProposalStream(null, [], "ru");
+    expect(result.summary).toBe("Split");
+  });
+});

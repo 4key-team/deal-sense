@@ -30,7 +30,7 @@ func (r *recordingSender) send(ctx context.Context, chatID int64, text string) {
 
 func mkAllowlist(t *testing.T, ids ...int64) *auth.Allowlist {
 	t.Helper()
-	a, err := auth.NewAllowlist(ids)
+	a, err := auth.NewRestrictedAllowlist(ids)
 	if err != nil {
 		t.Fatalf("allowlist: %v", err)
 	}

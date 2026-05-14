@@ -3,11 +3,13 @@ package telegram_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/telegram"
+	"github.com/daniil/deal-sense/backend/internal/domain"
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
 )
 
@@ -57,7 +59,7 @@ func (f *fakeAPI) GenerateProposal(context.Context, usecase.GenerateProposalRequ
 func TestAnalyzeHandler_NoDocument_AsksForFile(t *testing.T) {
 	rep := &fakeReplier{}
 	api := &fakeAPI{}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, UserID: 7, Text: "/analyze"})
 	if err != nil {
@@ -89,7 +91,7 @@ func TestAnalyzeHandler_Success_CallsAPIAndReplies(t *testing.T) {
 			Cons:    []usecase.ProConItem{{Title: "c1", Desc: "d1"}},
 		},
 	}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	doc := &telegram.Document{FileID: "f1", Filename: "tender.pdf", Data: []byte("PDF")}
 	err := h.Handle(context.Background(), &telegram.Update{
@@ -124,7 +126,7 @@ func TestAnalyzeHandler_Success_CallsAPIAndReplies(t *testing.T) {
 func TestAnalyzeHandler_APIError_ReportsToUser(t *testing.T) {
 	rep := &fakeReplier{}
 	api := &fakeAPI{err: errors.New("backend exploded")}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	doc := &telegram.Document{Filename: "t.pdf", Data: []byte("x")}
 	err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc, Text: "/analyze"})
@@ -143,13 +145,186 @@ func TestAnalyzeHandler_ReplierError_Propagates(t *testing.T) {
 	repErr := errors.New("network blip")
 	rep := &fakeReplier{err: repErr}
 	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
-	h := telegram.NewAnalyzeHandler(api, rep, "Software dev")
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Software dev")
 
 	err := h.Handle(context.Background(), &telegram.Update{
 		ChatID: 1, Document: &telegram.Document{Filename: "x.pdf", Data: []byte("x")},
 	})
 	if !errors.Is(err, repErr) {
 		t.Errorf("Handle err = %v, want to wrap %v", err, repErr)
+	}
+}
+
+// --- per-chat profile tests ---------------------------------------------
+
+func TestAnalyzeHandler_NoProfileForChat_UsesFallback(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	store := newFakeProfileStore()
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback when no profile saved", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_ProfileExists_UsesRenderedProfile(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "HIGH"}}
+	prof, err := domain.NewCompanyProfile("Acme", "15", "", []string{"Go", "React"}, nil, nil, "", "")
+	if err != nil {
+		t.Fatalf("NewCompanyProfile: %v", err)
+	}
+	store := newFakeProfileStore()
+	store.data[42] = prof
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if !strings.Contains(api.gotReq.CompanyProfile, "Company: Acme") {
+		t.Errorf("CompanyProfile = %q, want rendered per-chat profile", api.gotReq.CompanyProfile)
+	}
+	if !strings.Contains(api.gotReq.CompanyProfile, "Tech stack: Go, React") {
+		t.Errorf("CompanyProfile missing tech stack, got %q", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_ProfileForDifferentChat_FallbackUsed(t *testing.T) {
+	// Confirms per-chat isolation: profile saved for chat 7 must NOT leak
+	// into chat 42's analyze call.
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	prof, _ := domain.NewCompanyProfile("Leak", "", "", nil, nil, nil, "", "")
+	store := newFakeProfileStore()
+	store.data[7] = prof
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if strings.Contains(api.gotReq.CompanyProfile, "Leak") {
+		t.Errorf("chat 7 profile leaked into chat 42 analyze: %q", api.gotReq.CompanyProfile)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_StoreReadError_FallsBackInsteadOfFailing(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	store := newFakeProfileStore()
+	store.getErr = errors.New("disk gone")
+	h := telegram.NewAnalyzeHandler(api, store, rep, "Fallback Co")
+
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 1 {
+		t.Fatalf("api.calls = %d, want 1 (analyze should proceed despite profile read error)", api.calls)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback after store read error", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_NilProfileStore_UsesFallback(t *testing.T) {
+	// Defensive: until wiring is complete a nil ProfileStore is acceptable.
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	h := telegram.NewAnalyzeHandler(api, nil, rep, "Fallback Co")
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.CompanyProfile != "Fallback Co" {
+		t.Errorf("CompanyProfile = %q, want fallback when ProfileStore nil", api.gotReq.CompanyProfile)
+	}
+}
+
+func TestAnalyzeHandler_ProfileFor_LogsLookupOutcome(t *testing.T) {
+	// Confirms profileFor emits one log record per lookup branch so operators
+	// can tell "per-chat profile applied" from "fallback".
+	prof, _ := domain.NewCompanyProfile("Acme", "", "", nil, nil, nil, "", "")
+
+	tests := []struct {
+		name        string
+		store       usecase.ProfileStore
+		wantMsg     string
+		wantLevel   slog.Level
+		wantProfile string
+	}{
+		{
+			name:        "profile present → debug + per-chat profile applied",
+			store:       func() *fakeProfileStore { s := newFakeProfileStore(); s.data[42] = prof; return s }(),
+			wantMsg:     "per-chat profile applied",
+			wantLevel:   slog.LevelDebug,
+			wantProfile: prof.Render(),
+		},
+		{
+			name:        "no profile → info + fallback",
+			store:       newFakeProfileStore(),
+			wantMsg:     "no per-chat profile; using fallback",
+			wantLevel:   slog.LevelInfo,
+			wantProfile: "Fallback Co",
+		},
+		{
+			name:        "store error → error + fallback",
+			store:       func() *fakeProfileStore { s := newFakeProfileStore(); s.getErr = errors.New("disk gone"); return s }(),
+			wantMsg:     "profile lookup failed; using fallback",
+			wantLevel:   slog.LevelError,
+			wantProfile: "Fallback Co",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rh := &recordingHandler{}
+			logger := slog.New(rh)
+			rep := &fakeReplier{}
+			api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+			h := telegram.NewAnalyzeHandler(api, tt.store, rep, "Fallback Co", telegram.WithAnalyzeLogger(logger))
+
+			doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+			if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+				t.Fatalf("Handle: %v", err)
+			}
+			if api.gotReq.CompanyProfile != tt.wantProfile {
+				t.Errorf("CompanyProfile = %q, want %q", api.gotReq.CompanyProfile, tt.wantProfile)
+			}
+			rec := recordOfMessage(rh, tt.wantMsg)
+			if rec == nil {
+				seen := make([]string, 0, len(rh.records))
+				for _, r := range rh.records {
+					seen = append(seen, r.Message)
+				}
+				t.Fatalf("no %q log record; saw %v", tt.wantMsg, seen)
+			}
+			if rec.Level != tt.wantLevel {
+				t.Errorf("level = %s, want %s", rec.Level, tt.wantLevel)
+			}
+			chatID, ok := attrValue(rec, "chat_id")
+			if !ok || chatID.Int64() != 42 {
+				t.Errorf("chat_id attr missing or wrong: ok=%v val=%v", ok, chatID)
+			}
+		})
+	}
+}
+
+func TestAnalyzeHandler_NilLogger_DoesNotPanic(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co")
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
 	}
 }
 
@@ -175,5 +350,162 @@ func TestFormatAnalyzeReply(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("FormatAnalyzeReply missing %q\nout: %s", want, out)
 		}
+	}
+}
+
+// --- per-chat LLM override forwarding -----------------------------------
+
+func TestAnalyzeHandler_LLMService_NotConfigured_NoOverride(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	// No WithAnalyzeLLMService — handler must not invent an override.
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co")
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero (no override) when service not wired", api.gotReq.LLM)
+	}
+}
+
+func TestAnalyzeHandler_LLMService_NoSettingsForChat_NoOverride(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService() // empty store
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm))
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero when chat has no settings", api.gotReq.LLM)
+	}
+}
+
+// --- BYOK enforce mode -----------------------------------------------------
+
+func TestAnalyzeHandler_RequireLLM_NoOverride_BlocksAndPromptsLLMEdit(t *testing.T) {
+	// In BYOK mode a chat without /llm settings must NOT hit the backend.
+	// The reply should call out /llm edit so the user knows what to do.
+	rep := &fakeReplier{}
+	api := &fakeAPI{}
+	llm := newFakeLLMService() // empty
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm),
+		telegram.WithAnalyzeRequirePerChatLLM(true),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 0 {
+		t.Errorf("backend AnalyzeTender called %d times, want 0 (must short-circuit)", api.calls)
+	}
+	if len(rep.texts) != 1 {
+		t.Fatalf("Reply called %d times, want 1", len(rep.texts))
+	}
+	if !strings.Contains(rep.texts[0], "/llm edit") {
+		t.Errorf("reply must mention /llm edit, got %q", rep.texts[0])
+	}
+}
+
+func TestAnalyzeHandler_RequireLLM_HasOverride_ProceedsToBackend(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService()
+	cfg, err := domain.NewLLMSettings("openai", "", "sk-test1234", "gpt-4o")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	llm.data[42] = cfg
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm),
+		telegram.WithAnalyzeRequirePerChatLLM(true),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 1 {
+		t.Errorf("backend AnalyzeTender called %d times, want 1 (chat configured)", api.calls)
+	}
+}
+
+func TestAnalyzeHandler_RequireLLM_NoOverride_NoService_AlsoBlocks(t *testing.T) {
+	// Defensive: even if the bot is mis-wired (no llm service injected)
+	// BYOK mode must still block. Fail-closed: better to block than to
+	// silently use the env fallback the operator turned off.
+	rep := &fakeReplier{}
+	api := &fakeAPI{}
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeRequirePerChatLLM(true),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 0 {
+		t.Errorf("backend AnalyzeTender called %d times, want 0 (require=true with nil service must still block)", api.calls)
+	}
+	if !strings.Contains(rep.texts[0], "/llm edit") {
+		t.Errorf("reply must mention /llm edit, got %q", rep.texts[0])
+	}
+}
+
+func TestAnalyzeHandler_RequireLLM_Disabled_LegacyFallbackWorks(t *testing.T) {
+	// Backward compat: with RequirePerChatLLM=false (the legacy single-tenant
+	// mode) a chat without /llm settings reaches the backend with a zero
+	// override and the backend's env default applies.
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService()
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm),
+		telegram.WithAnalyzeRequirePerChatLLM(false),
+	)
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.calls != 1 {
+		t.Errorf("backend AnalyzeTender called %d times, want 1 (legacy mode falls through)", api.calls)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero override in legacy mode", api.gotReq.LLM)
+	}
+}
+
+func TestAnalyzeHandler_LLMService_ChatHasSettings_PopulatesOverride(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService()
+	cfg, err := domain.NewLLMSettings("openai", "https://openrouter.ai/api/v1", "sk-test1234", "anthropic/claude-sonnet-4")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	llm.data[42] = cfg
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm))
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	want := usecase.LLMOverride{
+		Provider: "openai",
+		BaseURL:  "https://openrouter.ai/api/v1",
+		APIKey:   "sk-test1234",
+		Model:    "anthropic/claude-sonnet-4",
+	}
+	if api.gotReq.LLM != want {
+		t.Errorf("LLM = %+v, want %+v", api.gotReq.LLM, want)
 	}
 }

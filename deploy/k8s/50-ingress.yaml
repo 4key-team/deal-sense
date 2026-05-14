@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: deal-sense-backend
+  namespace: deal-sense
+  labels:
+    app.kubernetes.io/name: deal-sense
+    app.kubernetes.io/component: backend
+  annotations:
+    # Tender uploads can be large (PDFs + ZIPs); raise nginx body cap.
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # SSE generations (/api/proposal/generate-stream) hold the connection
+    # open for the whole LLM call. Opus runs can take 5+ minutes — give
+    # nginx a 10-minute read/send window so it doesn't reset the socket.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+
+    # Stream SSE chunks straight through (no buffering).
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+    # cert-manager auto-issues TLS when this annotation matches a
+    # ClusterIssuer in the target cluster. Drop the annotation if you
+    # provide certificates by other means.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.deal-sense.example.com
+      secretName: deal-sense-tls
+  rules:
+    - host: api.deal-sense.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: deal-sense-backend
+                port:
+                  name: http

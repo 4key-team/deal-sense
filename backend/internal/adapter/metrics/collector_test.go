@@ -25,10 +25,64 @@ func TestCollector_Empty_RendersHelpAndType(t *testing.T) {
 		"# TYPE dealsense_endpoint_risk gauge",
 		"# HELP dealsense_security_decline_total",
 		"# TYPE dealsense_security_decline_total counter",
+		"# HELP dealsense_bot_events_total",
+		"# TYPE dealsense_bot_events_total counter",
 	} {
 		if !strings.Contains(out, marker) {
 			t.Errorf("Render missing %q\n--- got ---\n%s", marker, out)
 		}
+	}
+}
+
+func TestCollector_IncBotEvent_RendersCounter(t *testing.T) {
+	c := metrics.NewCollector()
+	c.IncBotEvent("wizard_started")
+	c.IncBotEvent("wizard_started")
+	c.IncBotEvent("wizard_completed")
+
+	var buf bytes.Buffer
+	if _, err := c.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `dealsense_bot_events_total{event="wizard_started"} 2`) {
+		t.Errorf("Render missing wizard_started=2\n%s", out)
+	}
+	if !strings.Contains(out, `dealsense_bot_events_total{event="wizard_completed"} 1`) {
+		t.Errorf("Render missing wizard_completed=1\n%s", out)
+	}
+}
+
+func TestCollector_AddBotEvent_AccumulatesDelta(t *testing.T) {
+	// AddBotEvent supports multi-event ticks (e.g. sweep evicted 3 sessions
+	// in one pass) without forcing the caller to loop Inc.
+	c := metrics.NewCollector()
+	c.AddBotEvent("wizard_evicted", 3)
+	c.AddBotEvent("wizard_evicted", 2)
+	c.IncBotEvent("wizard_evicted") // mixes single-shot Inc with Add
+
+	var buf bytes.Buffer
+	if _, err := c.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), `dealsense_bot_events_total{event="wizard_evicted"} 6`) {
+		t.Errorf("Render missing wizard_evicted=6\n%s", buf.String())
+	}
+}
+
+func TestCollector_AddBotEvent_NonPositiveIsNoOp(t *testing.T) {
+	// Counters are monotonic — negative deltas would corrupt the contract.
+	// Zero is also a no-op so callers don't accidentally emit empty series.
+	c := metrics.NewCollector()
+	c.AddBotEvent("wizard_evicted", 0)
+	c.AddBotEvent("wizard_evicted", -5)
+
+	var buf bytes.Buffer
+	if _, err := c.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(buf.String(), `dealsense_bot_events_total{event="wizard_evicted"}`) {
+		t.Errorf("Render should not include wizard_evicted after only zero/negative deltas\n%s", buf.String())
 	}
 }
 

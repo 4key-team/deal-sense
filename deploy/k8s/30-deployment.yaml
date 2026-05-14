@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deal-sense-backend
+  namespace: deal-sense
+  labels:
+    app.kubernetes.io/name: deal-sense
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: deal-sense
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: deal-sense
+        app.kubernetes.io/component: backend
+      annotations:
+        # Prometheus scrape annotations — adjust if running in-cluster
+        # Prometheus with PodMonitor/ServiceMonitor CRDs instead.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend
+          # Pin to an immutable digest in production:
+          # ghcr.io/vdv001/deal-sense-backend@sha256:<digest>
+          image: ghcr.io/vdv001/deal-sense-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: deal-sense-config
+          env:
+            # *_FILE pattern: backend reads secrets from mounted files so the
+            # values never appear in 'kubectl describe' or process env dumps.
+            - name: LLM_API_KEY_FILE
+              value: /var/run/secrets/llm/LLM_API_KEY
+            - name: DEAL_SENSE_API_KEY_FILE
+              value: /var/run/secrets/llm/DEAL_SENSE_API_KEY
+          volumeMounts:
+            - name: llm-secrets
+              mountPath: /var/run/secrets/llm
+              readOnly: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: llm-secrets
+          secret:
+            secretName: deal-sense-llm
+            defaultMode: 0400

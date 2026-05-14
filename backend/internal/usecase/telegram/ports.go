@@ -5,13 +5,27 @@ package telegram
 
 import "context"
 
+// LLMOverride is an optional per-call LLM provider configuration. When
+// Provider is non-empty the APIClient adapter MUST forward it to the
+// backend via X-LLM-* headers; empty Provider means "use the backend
+// default" and no headers are sent. It is a DTO (public fields, no
+// invariants here) — invariants live on domain.LLMSettings.
+type LLMOverride struct {
+	Provider string
+	BaseURL  string
+	APIKey   string
+	Model    string
+}
+
 // AnalyzeTenderRequest is the input to a tender-analysis call. Filename is
 // preserved so the backend can sniff the extension; CompanyProfile feeds
-// the LLM with team context.
+// the LLM with team context; LLM is the optional per-chat provider
+// override (zero value → server default).
 type AnalyzeTenderRequest struct {
 	File           []byte
 	Filename       string
 	CompanyProfile string
+	LLM            LLMOverride
 }
 
 // ProConItem mirrors one pro/con bullet from the backend JSON.
@@ -43,12 +57,13 @@ type AnalyzeTenderResponse struct {
 // Template is the .docx/.pdf/.md template file (Filename preserves the
 // extension so the backend picks the right engine). Context is a list of
 // supplementary materials parsed for the LLM. Params is forwarded as the
-// `params` JSON field.
+// `params` JSON field. LLM is the optional per-chat provider override.
 type GenerateProposalRequest struct {
 	Template         []byte
 	TemplateFilename string
 	ContextFiles     []ContextFile
 	Params           map[string]string
+	LLM              LLMOverride
 }
 
 // ContextFile is a single supplementary document for proposal generation.

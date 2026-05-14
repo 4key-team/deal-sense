@@ -82,23 +82,46 @@ func TestNewDefaultPolicy_OK(t *testing.T) {
 	}
 }
 
-// Default policy must contain all six directives — protects юр firewall.
+// requiredMarkers lists every directive the юр firewall depends on. Shared
+// between presence and uniqueness tests so adding a marker only touches
+// one place.
+var requiredMarkers = []string{
+	"STRICT DOMAIN FOCUS",
+	"ENCODED PAYLOAD ISOLATION",
+	"NO CYBERATTACKS",
+	"FACTUAL INTEGRITY",
+	"RESOURCE ABUSE",
+	"Обратитесь к юристу компании",
+}
+
+// TestNewDefaultPolicy_AllMarkers — presence check: every required marker
+// must appear at least once in the embedded directives. A regression here
+// means a marker was deleted (юр firewall hole); the test alone diagnoses
+// the issue without conflating it with accidental duplication.
 func TestNewDefaultPolicy_AllMarkers(t *testing.T) {
 	p, _ := security.NewDefaultPolicy()
 	prefix := p.Prefix()
-
-	markers := []string{
-		"STRICT DOMAIN FOCUS",
-		"ENCODED PAYLOAD ISOLATION",
-		"NO CYBERATTACKS",
-		"FACTUAL INTEGRITY",
-		"RESOURCE ABUSE",
-		"Обратитесь к юристу компании",
+	for _, m := range requiredMarkers {
+		t.Run(m, func(t *testing.T) {
+			if !strings.Contains(prefix, m) {
+				t.Errorf("marker %q is missing from embedded directives", m)
+			}
+		})
 	}
-	for _, m := range markers {
+}
+
+// TestEmbeddedDirectives_NoAccidentalDuplicates — uniqueness check: every
+// required marker must appear exactly once. A regression here means a
+// marker was duplicated (e.g. paragraph copy-paste), which inflates the
+// system prompt and may shift LLM attention; the test alone names that
+// class of issue distinct from missing-marker presence failures.
+func TestEmbeddedDirectives_NoAccidentalDuplicates(t *testing.T) {
+	p, _ := security.NewDefaultPolicy()
+	prefix := p.Prefix()
+	for _, m := range requiredMarkers {
 		t.Run(m, func(t *testing.T) {
 			if c := strings.Count(prefix, m); c != 1 {
-				t.Errorf("marker %q should appear exactly once, got %d", m, c)
+				t.Errorf("marker %q appears %d times, want exactly 1", m, c)
 			}
 		})
 	}
@@ -117,7 +140,7 @@ func TestPolicy_Wrap_Prepends(t *testing.T) {
 	inner := func(lang string) string { return "INNER:" + lang }
 	wrapped := p.Wrap(inner)
 
-	got := wrapped("Russian")
+	got := wrapped.Call("Russian")
 
 	if !strings.HasPrefix(got, p.Prefix()) {
 		t.Error("wrapped output must START with the security prefix (order matters)")
@@ -135,7 +158,7 @@ func TestPolicy_Wrap_PassesArg(t *testing.T) {
 		captured = lang
 		return "x"
 	}
-	p.Wrap(inner)("English")
+	p.Wrap(inner).Call("English")
 	if captured != "English" {
 		t.Errorf("Wrap must pass arg unchanged, got %q", captured)
 	}
@@ -147,9 +170,38 @@ func TestPolicy_Wrap_PassesArg(t *testing.T) {
 func TestPolicy_Wrap_SinglePrefixPerCall(t *testing.T) {
 	p, _ := security.NewPolicy(validDirectives)
 	inner := func(lang string) string { return "body" }
-	got := p.Wrap(inner)("Russian")
+	got := p.Wrap(inner).Call("Russian")
 
 	if c := strings.Count(got, "STRICT DOMAIN FOCUS"); c != 1 {
 		t.Errorf("Wrap should add prefix exactly once, got %d occurrences", c)
+	}
+}
+
+// TestPolicy_Wrap_ReturnsWrappedPromptVO pins the issue-#3 contract: Wrap
+// returns a typed value (security.WrappedPrompt) rather than a raw function.
+// The compiler must refuse any place that returns a raw func(string) string
+// where a WrappedPrompt is expected — that's how double-wrap and "forgot to
+// apply the firewall" classes of bug become impossible to compile.
+//
+// The double-wrap footgun-test that pinned issue #13 is intentionally
+// removed: with WrappedPrompt, Policy.Wrap accepts func(string) string and
+// returns WrappedPrompt; composing Wrap(Wrap(inner)) no longer type-checks,
+// so the runtime check is unnecessary.
+func TestPolicy_Wrap_ReturnsWrappedPromptVO(t *testing.T) {
+	p, _ := security.NewPolicy(validDirectives)
+	inner := func(lang string) string { return "body:" + lang }
+
+	// Compile-time guard: Wrap must return security.WrappedPrompt — anything
+	// else (e.g. raw func(string) string) fails this assignment at build.
+	// The explicit type is load-bearing — that's the assertion. nolint:staticcheck
+	var _ security.WrappedPrompt = p.Wrap(inner) //nolint:staticcheck // QF1011: explicit type is the test contract
+
+	wrapped := p.Wrap(inner)
+	got := wrapped.Call("Russian")
+	if !strings.HasPrefix(got, p.Prefix()) {
+		t.Errorf("Call must place the prefix at the head, got prefix=%q", got[:min(80, len(got))])
+	}
+	if !strings.HasSuffix(got, "body:Russian") {
+		t.Errorf("Call must pass the language through to the inner prompt, got tail=%q", got[max(0, len(got)-30):])
 	}
 }

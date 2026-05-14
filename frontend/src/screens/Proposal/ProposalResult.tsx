@@ -8,7 +8,7 @@ import { Spinner } from "../../ui/Spinner";
 import { Dropzone } from "../../ui/Dropzone";
 import { CheckIcon, DocIcon, DownloadIcon, SparkIcon } from "../../icons/Icons";
 import { MiniDonut } from "../../components/charts";
-import { generateProposal, downloadBlob } from "../../lib/api";
+import { generateProposalStream, downloadBlob } from "../../lib/api";
 import { getItem, setItem } from "../../lib/storage";
 import type { ProposalResult as ProposalResultType, ProposalSection } from "../../lib/api";
 import styles from "./ProposalResult.module.css";
@@ -76,7 +76,7 @@ export function ProposalResult() {
     setPhase("generating");
     setErrorMsg("");
     try {
-      const res = await generateProposal(template[0] ?? null, contextFiles, lang);
+      const res = await generateProposalStream(template[0] ?? null, contextFiles, lang);
       setResult(res);
       const infos = [...template, ...contextFiles].map((f) => ({ name: f.name, size: f.size }));
       setFileInfos(infos);
@@ -109,7 +109,7 @@ export function ProposalResult() {
     setPhase("generating");
     setErrorMsg("");
     try {
-      const res = await generateProposal(files[0], files.slice(1), lang);
+      const res = await generateProposalStream(files[0], files.slice(1), lang);
       setResult(res);
       setItem("last-proposal-result", res);
       setPhase("result");

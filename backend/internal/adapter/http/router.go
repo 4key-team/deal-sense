@@ -27,6 +27,17 @@ func NewRouter(h *Handler, m MetricsRenderer) *http.ServeMux {
 	mux.HandleFunc("GET /api/llm/models", h.HandleListModels)
 	mux.HandleFunc("POST /api/tender/analyze", h.HandleAnalyzeTender)
 	mux.HandleFunc("POST /api/proposal/generate", h.HandleGenerateProposal)
+	mux.HandleFunc("POST /api/proposal/generate-stream", h.HandleGenerateProposalStream)
 
 	return mux
+}
+
+// RegisterAdminRoutes mounts admin endpoints on an existing mux. Kept
+// separate from NewRouter so callers can opt out of admin features (e.g.
+// minimal test fixtures) and so the dependency on usecase/botconfig stays
+// out of NewRouter's signature.
+func RegisterAdminRoutes(mux *http.ServeMux, botCfg http.Handler) {
+	if botCfg != nil {
+		mux.Handle("/api/admin/bot-config", botCfg)
+	}
 }

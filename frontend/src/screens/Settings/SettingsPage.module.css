@@ -1,0 +1,168 @@
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+  color: var(--color-text);
+}
+
+.head {
+  margin-bottom: 2rem;
+}
+
+.title {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.savedBanner {
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  background: rgba(40, 160, 60, 0.12);
+  color: #1f7a35;
+  font-size: 0.9rem;
+}
+
+.card {
+  border: 1px solid var(--color-border, #d8d4cf);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg, #fff);
+}
+
+.cardTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.cardHint {
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.cardHint code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.keyWrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border, #d8d4cf);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.keyInput {
+  flex: 1;
+  border: none;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+
+.keyToggle {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--color-border, #d8d4cf);
+  padding: 0 0.75rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.urlInput {
+  width: 100%;
+  border: 1px solid var(--color-border, #d8d4cf);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  background: transparent;
+  color: inherit;
+}
+
+.modelWrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border, #d8d4cf);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.modelInput {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
+.modelPickBtn {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--color-border, #d8d4cf);
+  padding: 0 0.75rem;
+  cursor: pointer;
+}
+
+.modelDropdown {
+  border: 1px solid var(--color-border, #d8d4cf);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  margin-top: -1px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.modelOption {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.modelOption:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.modelOptionActive {
+  background: rgba(255, 167, 38, 0.18);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  justify-content: flex-end;
+}
+
+.iconGo {
+  color: #1f7a35;
+}
+
+.iconNo {
+  color: #c0352f;
+}
+
+.testError {
+  color: #c0352f;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}

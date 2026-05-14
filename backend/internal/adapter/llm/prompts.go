@@ -10,13 +10,15 @@ import (
 	"github.com/daniil/deal-sense/backend/internal/domain/security"
 )
 
-// wrappedPrompts holds all three security-wrapped prompt functions. It is
-// stored behind an atomic.Pointer so that concurrent readers (each HTTP
-// request) and the (test-only) reloader cannot race.
+// wrappedPrompts holds all three security-wrapped prompt VOs. It is stored
+// behind an atomic.Pointer so that concurrent readers (each HTTP request)
+// and the (test-only) reloader cannot race. Fields are security.WrappedPrompt
+// rather than func(string) string — the type system forecloses "forgot to
+// wrap" and "double wrap" bugs (see security.WrappedPrompt docs).
 type wrappedPrompts struct {
-	tender     func(string) string
-	proposal   func(string) string
-	generative func(string) string
+	tender     security.WrappedPrompt
+	proposal   security.WrappedPrompt
+	generative security.WrappedPrompt
 }
 
 // prompts is the live bundle. Reads from production code (TenderAnalysisPrompt
@@ -64,19 +66,19 @@ func initWrappedPrompts() {
 // TenderAnalysisPrompt returns the security-wrapped system prompt for
 // tender analysis.
 func TenderAnalysisPrompt(langName string) string {
-	return prompts.Load().tender(langName)
+	return prompts.Load().tender.Call(langName)
 }
 
 // ProposalGenerationPrompt returns the security-wrapped system prompt for
 // placeholder-mode proposal generation.
 func ProposalGenerationPrompt(langName string) string {
-	return prompts.Load().proposal(langName)
+	return prompts.Load().proposal.Call(langName)
 }
 
 // GenerativeProposalPrompt returns the security-wrapped system prompt for
 // generative (no-placeholder) proposal mode.
 func GenerativeProposalPrompt(langName string) string {
-	return prompts.Load().generative(langName)
+	return prompts.Load().generative.Call(langName)
 }
 
 // rawTenderAnalysisPrompt is the inner prompt without the security prefix.

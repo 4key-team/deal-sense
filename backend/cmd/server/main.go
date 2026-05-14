@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/botconfigstore"
 	apphttp "github.com/daniil/deal-sense/backend/internal/adapter/http"
 	"github.com/daniil/deal-sense/backend/internal/adapter/llm"
 	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
@@ -18,6 +19,7 @@ import (
 	apppdf "github.com/daniil/deal-sense/backend/internal/adapter/pdf"
 	"github.com/daniil/deal-sense/backend/internal/config"
 	"github.com/daniil/deal-sense/backend/internal/domain/security"
+	"github.com/daniil/deal-sense/backend/internal/usecase/botconfig"
 )
 
 func parseLogLevel(s string) slog.Level {
@@ -102,27 +104,14 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	}
 	mux := apphttp.NewRouter(h, collector)
 
-	// Health probes bypass auth + rate limit so orchestrators can hit them
-	// without holding an API key and without contributing to the per-IP
-	// bucket.
-	gated := http.Handler(mux)
-	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, collector, gated)
-	gated = apphttp.APIKeyAuth(cfg.APIKey, collector, gated)
+	botCfgStore, err := botconfigstore.NewFileStore(cfg.BotConfigPath)
+	if err != nil {
+		return fmt.Errorf("bot config store: %w", err)
+	}
+	apphttp.RegisterAdminRoutes(mux, apphttp.AdminBotConfigHandler(botconfig.NewService(botCfgStore), logger))
+	logger.Info("bot config store wired", "path", cfg.BotConfigPath)
 
-	bypass := apphttp.BypassedPaths()
-	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := bypass[r.URL.Path]; ok {
-			mux.ServeHTTP(w, r)
-			return
-		}
-		gated.ServeHTTP(w, r)
-	})
-
-	var handler http.Handler = combined
-	handler = apphttp.MetricsRequests(collector, handler)
-	handler = apphttp.CORS("*", handler)
-	handler = apphttp.Logger(logger, handler)
-	handler = apphttp.Recover(logger, handler)
+	handler := buildHandler(mux, cfg.APIKey, cfg.RateLimitRPS, cfg.RateLimitBurst, collector, logger)
 	if cfg.APIKey != "" {
 		logger.Info("api key auth enabled")
 	}

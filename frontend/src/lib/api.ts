@@ -54,6 +54,14 @@ interface StoredSettings {
   dealSenseApiKey?: string;
 }
 
+// buildTimeBackendKey is baked into the SPA bundle at docker build time
+// via `--build-arg VITE_DEAL_SENSE_API_KEY=...` (sourced from the
+// operator's .env). End-users never see or paste this — they only fill
+// LLM credentials. Empty string means the backend runs without auth
+// (passthrough) and no header is sent.
+const buildTimeBackendKey =
+  (import.meta.env.VITE_DEAL_SENSE_API_KEY as string | undefined) ?? "";
+
 function apiHeaders(): Record<string, string> {
   const s = getItem<StoredSettings>("llm-settings", {});
   const headers: Record<string, string> = {};
@@ -61,7 +69,9 @@ function apiHeaders(): Record<string, string> {
   if (s.providerId) headers["X-LLM-Provider"] = s.providerId;
   if (s.url) headers["X-LLM-URL"] = s.url;
   if (s.model) headers["X-LLM-Model"] = s.model;
-  if (s.dealSenseApiKey) headers["X-API-Key"] = s.dealSenseApiKey;
+  // X-API-Key precedence: explicit localStorage override (legacy) → build-time bake.
+  const backendKey = s.dealSenseApiKey ?? buildTimeBackendKey;
+  if (backendKey) headers["X-API-Key"] = backendKey;
   return headers;
 }
 
@@ -159,14 +169,132 @@ export async function generateProposal(
   }
 }
 
+/**
+ * Streaming variant of generateProposal — uses the SSE endpoint that
+ * keeps the TCP connection warm with periodic `progress` events while
+ * the LLM is still running. Required for Opus-class generations on
+ * Safari/Chrome where the browser fetch loop drops idle long
+ * connections around the 60-120s mark.
+ *
+ * The promise resolves when the server emits `event: result` and
+ * rejects on `event: error` or any transport-level failure.
+ */
+export async function generateProposalStream(
+  template: File | null,
+  contextFiles: File[],
+  lang = "ru",
+  params?: Record<string, string>,
+  onProgress?: (event: { ts: number }) => void,
+): Promise<ProposalResult> {
+  const form = new FormData();
+  if (template) {
+    form.append("template", template);
+  }
+  form.append("lang", lang);
+  contextFiles.forEach((f) => form.append("context", f));
+  if (params) {
+    form.append("params", JSON.stringify(params));
+  }
+
+  // Six-minute hard ceiling matching backend WriteTimeout. Each SSE
+  // frame keeps the browser-side connection happy; the abort signal
+  // only fires if the whole generation outpaces that ceiling.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6 * 60 * 1000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/proposal/generate-stream`, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: form,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
+  }
+
+  if (!res.ok || !res.body) {
+    clearTimeout(timeout);
+    throw new Error(`Proposal stream failed: ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (value) buffer += decoder.decode(value, { stream: !done });
+
+      // Drain complete events (\n\n delimited) from the buffer.
+      while (true) {
+        const sep = buffer.indexOf("\n\n");
+        if (sep < 0) break;
+        const raw = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+
+        let event = "message";
+        let data = "";
+        for (const line of raw.split("\n")) {
+          if (line.startsWith("event: ")) event = line.slice("event: ".length);
+          else if (line.startsWith("data: ")) data += line.slice("data: ".length);
+        }
+        if (!event) continue;
+
+        if (event === "progress") {
+          let parsed: { ts: number } = { ts: 0 };
+          try {
+            parsed = JSON.parse(data) as { ts: number };
+          } catch {
+            /* malformed progress frame — keep waiting */
+          }
+          onProgress?.(parsed);
+          continue;
+        }
+        if (event === "error") {
+          let msg = "Generation failed";
+          try {
+            const parsed = JSON.parse(data) as { error?: string };
+            if (parsed.error) msg = parsed.error;
+          } catch {
+            msg = data || msg;
+          }
+          throw new Error(msg);
+        }
+        if (event === "result") {
+          return JSON.parse(data) as ProposalResult;
+        }
+      }
+
+      if (done) break;
+    }
+    throw new Error("Proposal stream ended without a result event");
+  } finally {
+    clearTimeout(timeout);
+    try {
+      reader.releaseLock();
+    } catch {
+      /* reader already released */
+    }
+  }
+}
+
 export async function checkConnection(overrides?: {
   provider?: string;
   apiKey?: string;
   url?: string;
   model?: string;
 }): Promise<CheckResult> {
+  // Start from apiHeaders() so the backend X-API-Key (dealSenseApiKey
+  // from localStorage) is always attached. Without it the bot's
+  // APIKeyAuth middleware returns 401 and the browser surfaces a
+  // generic "Load failed" — not what the user expected to see.
   const headers: Record<string, string> = overrides
     ? {
+        ...apiHeaders(),
         ...(overrides.provider && { "X-LLM-Provider": overrides.provider }),
         ...(overrides.apiKey && { "X-LLM-Key": overrides.apiKey }),
         ...(overrides.url && { "X-LLM-URL": overrides.url }),
