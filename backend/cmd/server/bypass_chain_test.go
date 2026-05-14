@@ -30,7 +30,7 @@ func TestBuildHandler_BypassChain(t *testing.T) {
 	h := buildHandler(
 		mux,
 		"secret-key", // APIKeyAuth requires this header
-		0, 0,         // rate limit disabled — out of scope for this test
+		0.0, 0,       // rate limit disabled — out of scope for this test
 		metrics.NewCollector(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
@@ -75,7 +75,7 @@ func TestBuildHandler_BypassedPathsCount(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 	}
-	h := buildHandler(mux, "secret", 0, 0, metrics.NewCollector(),
+	h := buildHandler(mux, "secret", 0.0, 0, metrics.NewCollector(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	bypassed := 0

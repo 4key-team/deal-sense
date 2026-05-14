@@ -101,27 +101,7 @@ func run(ctx context.Context, logger *slog.Logger, cfg config.Config) error {
 	}
 	mux := apphttp.NewRouter(h, collector)
 
-	// Health probes bypass auth + rate limit so orchestrators can hit them
-	// without holding an API key and without contributing to the per-IP
-	// bucket.
-	gated := http.Handler(mux)
-	gated = apphttp.RateLimit(cfg.RateLimitRPS, cfg.RateLimitBurst, collector, gated)
-	gated = apphttp.APIKeyAuth(cfg.APIKey, collector, gated)
-
-	bypass := apphttp.BypassedPaths()
-	combined := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := bypass[r.URL.Path]; ok {
-			mux.ServeHTTP(w, r)
-			return
-		}
-		gated.ServeHTTP(w, r)
-	})
-
-	var handler http.Handler = combined
-	handler = apphttp.MetricsRequests(collector, handler)
-	handler = apphttp.CORS("*", handler)
-	handler = apphttp.Logger(logger, handler)
-	handler = apphttp.Recover(logger, handler)
+	handler := buildHandler(mux, cfg.APIKey, cfg.RateLimitRPS, cfg.RateLimitBurst, collector, logger)
 	if cfg.APIKey != "" {
 		logger.Info("api key auth enabled")
 	}
