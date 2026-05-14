@@ -356,6 +356,46 @@ func TestStartHandler_RepliesWithWelcome(t *testing.T) {
 	}
 }
 
+func TestStartHandler_AttachesReplyKeyboard(t *testing.T) {
+	// Capture the outgoing SendMessage body to assert ReplyMarkup carries
+	// the main keyboard. The stub records the raw JSON payload Telegram
+	// receives so we can decode and inspect it.
+	var lastBody []byte
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/getMe"):
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"id":1,"is_bot":true,"first_name":"x"}}`))
+		case strings.HasSuffix(r.URL.Path, "/sendMessage"):
+			b, _ := io.ReadAll(r.Body)
+			lastBody = b
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1,"date":0,"chat":{"id":1,"type":"private"}}}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}
+	}))
+	defer stub.Close()
+
+	b, err := bot.New("t", bot.WithServerURL(stub.URL))
+	if err != nil {
+		t.Fatalf("bot.New: %v", err)
+	}
+
+	h := startHandler(discardLogger())
+	h(context.Background(), b, &models.Update{
+		Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/start"},
+	})
+
+	if !strings.Contains(string(lastBody), "reply_markup") {
+		t.Errorf("/start sendMessage missing reply_markup; body=%s", lastBody)
+	}
+	// Each button label must appear so the keyboard is wired end-to-end.
+	for _, label := range []string{telegramadapter.ButtonAnalyze, telegramadapter.ButtonGenerate, telegramadapter.ButtonProfile, telegramadapter.ButtonHelp} {
+		if !strings.Contains(string(lastBody), label) {
+			t.Errorf("/start keyboard missing label %q; body=%s", label, lastBody)
+		}
+	}
+}
+
 func TestStartHandler_IgnoresUpdateWithoutMessage(t *testing.T) {
 	b, sends := stubBotForSend(t)
 	h := startHandler(discardLogger())
