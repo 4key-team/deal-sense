@@ -4,11 +4,43 @@ package telegram
 // without grepping handler logic. Russian only for now; multilingual support
 // is backlog.
 const (
-	msgAttachFile          = "Пришлите файл тендера ответом на эту команду."
+	msgAttachFile = "📋 Пришлите файл тендера (PDF, DOCX, DOC, MD или ZIP).\n\n" +
+		"Можно прислать несколько файлов подряд — основной первым, дополнительные следом. " +
+		"Когда всё готово — /go. Отменить — /cancel."
 	msgAnalysisErrorPrefix = "❌ Ошибка анализа:"
-	msgAttachTemplate      = "Пришлите шаблон коммерческого предложения ответом на эту команду."
+	msgAttachTemplate      = "📝 Пришлите шаблон коммерческого предложения (DOCX, MD или ZIP).\n\n" +
+		"📎 Опционально: после шаблона можете прислать дополнительные файлы с контекстом " +
+		"(бриф клиента, прошлые КП, прайс-лист) — LLM учтёт их при заполнении.\n\n" +
+		"Запустить — /go. Отменить — /cancel.\n\n" +
+		"⚠️ Без контекста результат будет generic — заголовки шаблона заполнятся из общих знаний LLM."
 	msgGenerationErrPrefix = "❌ Ошибка генерации:"
 	msgGenerateCaptionFmt  = "✅ Готово. Mode: %s. Sections: %d."
+
+	// msgGenerateNoContextWarning is appended to a successful /generate
+	// reply when the user did not attach any context files. It explains
+	// in plain terms what they actually got — LLM filled the template
+	// from its general knowledge, not from real client data.
+	msgGenerateNoContextWarning = "\n\n⚠️ Generic заполнение — контекст не получен. " +
+		"Для реального КП пришлите ZIP с брифом / прошлыми КП / прайсом перед /go."
+
+	// msgPendingFileAddedFmt is the response after each successful upload
+	// during a multi-file collection. The %s is the filename, %d the new
+	// total. Tells the user they CAN keep adding or wrap with /go.
+	msgPendingFileAddedFmt = "✅ Файл «%s» добавлен (всего: %d).\n\n" +
+		"Можно прислать ещё или запустить — /go. Отменить — /cancel."
+
+	// msgPendingTextHint catches the case the user types something while
+	// the bot is waiting for files (e.g. «шаблона может не быть»).
+	msgPendingTextHint = "📎 Жду файл. Пришлите ещё файл (опционально) или запустите — /go.\n" +
+		"Отменить — /cancel."
+
+	// msgPendingGoNoFiles is returned when the user types /go without
+	// having uploaded anything.
+	msgPendingGoNoFiles = "Нет файлов для запуска. Пришлите хотя бы один файл, потом /go."
+
+	// msgPendingCancelled confirms a /cancel during the file-collection
+	// phase. Distinct from the wizard cancellations so logs make sense.
+	msgPendingCancelled = "Отменено."
 
 	// msgLLMRequired is sent when a chat tries to /analyze or /generate
 	// without having configured /llm AND the bot runs in BYOK mode
