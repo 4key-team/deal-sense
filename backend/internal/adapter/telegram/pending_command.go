@@ -93,7 +93,8 @@ func (s *InMemoryPendingCommandSessions) Get(chatID int64) (PendingCommandKind, 
 }
 
 // Set records that chatID issued kind and is now waiting for a file.
-// Overwrites any previous pending kind for that chat (latest wins).
+// Overwrites any previous pending kind for that chat (latest wins) and
+// resets the collected files — restarting a flow always starts empty.
 func (s *InMemoryPendingCommandSessions) Set(chatID int64, kind PendingCommandKind) {
 	s.m.Store(chatID, &PendingCommandState{
 		ChatID:    chatID,
@@ -115,18 +116,36 @@ func (s *InMemoryPendingCommandSessions) Clear(chatID int64) {
 
 // AppendFile adds f to the collected files for chatID. If no pending
 // command exists for chatID, the call is a no-op — a stray upload must
-// not implicitly start a flow. RED stub: returns without doing anything.
+// not implicitly start a flow.
 func (s *InMemoryPendingCommandSessions) AppendFile(chatID int64, f CollectedFile) {
-	_ = f
-	_ = chatID
+	v, ok := s.m.Load(chatID)
+	if !ok {
+		return
+	}
+	state, ok := v.(*PendingCommandState)
+	if !ok {
+		return
+	}
+	state.Files = append(state.Files, f)
 }
 
 // Files returns a snapshot of the documents collected so far for chatID.
-// Returns nil/empty when no pending command exists or no files yet. RED
-// stub: always returns nil.
+// Returns nil/empty when no pending command exists or no files yet.
 func (s *InMemoryPendingCommandSessions) Files(chatID int64) []CollectedFile {
-	_ = chatID
-	return nil
+	v, ok := s.m.Load(chatID)
+	if !ok {
+		return nil
+	}
+	state, ok := v.(*PendingCommandState)
+	if !ok {
+		return nil
+	}
+	if len(state.Files) == 0 {
+		return nil
+	}
+	out := make([]CollectedFile, len(state.Files))
+	copy(out, state.Files)
+	return out
 }
 
 // Sweep removes states whose StartedAt is older than ttl. Zero StartedAt
