@@ -34,7 +34,12 @@ type Config struct {
 	LogLevel         string
 	ProfileStorePath string
 	LLMStorePath     string
-	MetricsPort      int // 0 disables the /metrics + /healthz listener.
+	// RequirePerChatLLM blocks /analyze and /generate for chats that have
+	// not configured /llm. Default is true (multi-tenant BYOK). Set env
+	// ALLOW_SERVER_LLM_FALLBACK=true to revert to single-tenant behaviour
+	// where the env LLM_* keys are used as a fallback.
+	RequirePerChatLLM bool
+	MetricsPort       int // 0 disables the /metrics + /healthz listener.
 }
 
 // LoadConfig reads bot configuration. Precedence rules:

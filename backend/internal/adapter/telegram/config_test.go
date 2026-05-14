@@ -88,6 +88,54 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_RequirePerChatLLM_DefaultTrue(t *testing.T) {
+	// Multi-tenant deployments: every chat MUST configure its own LLM
+	// via /llm edit by default. The owner of a single-tenant deployment
+	// can opt back into env fallback via ALLOW_SERVER_LLM_FALLBACK=true.
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+	t.Setenv("ALLOWLIST_USER_IDS", "1")
+	t.Setenv("ALLOW_SERVER_LLM_FALLBACK", "")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !cfg.RequirePerChatLLM {
+		t.Error("RequirePerChatLLM = false by default, want true (BYOK is the multi-tenant default)")
+	}
+}
+
+func TestLoadConfig_AllowServerLLMFallback_DisablesRequire(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want bool // RequirePerChatLLM
+	}{
+		{"empty → require=true (default)", "", true},
+		{"explicit false → require=true", "false", true},
+		{"true → require=false (legacy mode)", "true", false},
+		{"1 → require=false", "1", false},
+		{"yes → require=false", "yes", false},
+		{"YES (case-insensitive) → require=false", "YES", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+			t.Setenv("ALLOWLIST_USER_IDS", "1")
+			t.Setenv("ALLOW_SERVER_LLM_FALLBACK", tt.env)
+
+			cfg, err := telegram.LoadConfig()
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if cfg.RequirePerChatLLM != tt.want {
+				t.Errorf("RequirePerChatLLM = %v, want %v (ALLOW_SERVER_LLM_FALLBACK=%q)",
+					cfg.RequirePerChatLLM, tt.want, tt.env)
+			}
+		})
+	}
+}
+
 func TestLoadConfig_LLMStorePath_Override(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
 	t.Setenv("ALLOWLIST_USER_IDS", "1")
