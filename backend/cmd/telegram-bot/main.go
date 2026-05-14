@@ -262,9 +262,10 @@ func botCommandsList() []models.BotCommand {
 		{Command: "help", Description: "Список команд"},
 		{Command: "analyze", Description: "Анализ тендера"},
 		{Command: "generate", Description: "Создать КП по шаблону"},
+		{Command: "go", Description: "Запустить накопленные файлы"},
+		{Command: "cancel", Description: "Прервать активный wizard"},
 		{Command: "profile", Description: "Профиль компании"},
 		{Command: "llm", Description: "Настройки LLM для чата"},
-		{Command: "cancel", Description: "Прервать активный wizard"},
 	}
 }
 
