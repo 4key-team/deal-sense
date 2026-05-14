@@ -80,7 +80,10 @@ const (
 		"👤 /profile — текущий профиль компании.\n" +
 		"   /profile edit — заполнить / обновить.\n" +
 		"   /profile clear — удалить.\n\n" +
-		"❌ /cancel — прервать заполнение профиля.\n" +
+		"🤖 /llm — настройки LLM для этого чата (опционально).\n" +
+		"   /llm edit — задать provider, base_url, api_key, model.\n" +
+		"   /llm clear — вернуться к серверным настройкам.\n\n" +
+		"❌ /cancel — прервать активный wizard (/profile edit или /llm edit).\n" +
 		"❓ /help — это сообщение."
 
 	// DefaultCompanyFallback is the placeholder profile fed to the LLM when
