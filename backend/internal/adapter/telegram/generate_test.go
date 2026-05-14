@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/daniil/deal-sense/backend/internal/adapter/telegram"
+	"github.com/daniil/deal-sense/backend/internal/domain"
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
 )
 
@@ -275,5 +276,59 @@ func TestGenerateHandler_FilenameFallbackWhenTemplateHasNoExt(t *testing.T) {
 	// "noextension" has no dot → stripExt returns whole name → base+".docx"
 	if rep.docCalls[0].filename != "noextension.docx" {
 		t.Errorf("filename = %q, want noextension.docx", rep.docCalls[0].filename)
+	}
+}
+
+// --- per-chat LLM override forwarding -----------------------------------
+
+func TestGenerateHandler_LLMService_NotConfigured_NoOverride(t *testing.T) {
+	rep := &recordingReplier{}
+	api := &generateFakeAPI{resp: &usecase.GenerateProposalResponse{Mode: "placeholder"}}
+	h := telegram.NewGenerateHandler(api, rep) // no LLM service
+
+	doc := &telegram.Document{Filename: "t.docx", Data: []byte("DOCX")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero when service not wired", api.gotReq.LLM)
+	}
+}
+
+func TestGenerateHandler_LLMService_NoSettingsForChat_NoOverride(t *testing.T) {
+	rep := &recordingReplier{}
+	api := &generateFakeAPI{resp: &usecase.GenerateProposalResponse{Mode: "placeholder"}}
+	llm := newFakeLLMService()
+	h := telegram.NewGenerateHandler(api, rep, telegram.WithGenerateLLMService(llm))
+
+	doc := &telegram.Document{Filename: "t.docx", Data: []byte("DOCX")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero when chat has no settings", api.gotReq.LLM)
+	}
+}
+
+func TestGenerateHandler_LLMService_ChatHasSettings_PopulatesOverride(t *testing.T) {
+	rep := &recordingReplier{}
+	api := &generateFakeAPI{resp: &usecase.GenerateProposalResponse{Mode: "placeholder"}}
+	llm := newFakeLLMService()
+	cfg, _ := domain.NewLLMSettings("anthropic", "", "sk-ant-test", "claude-3-5-sonnet")
+	llm.data[42] = cfg
+	h := telegram.NewGenerateHandler(api, rep, telegram.WithGenerateLLMService(llm))
+
+	doc := &telegram.Document{Filename: "t.docx", Data: []byte("DOCX")}
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	want := usecase.LLMOverride{
+		Provider: "anthropic",
+		BaseURL:  "",
+		APIKey:   "sk-ant-test",
+		Model:    "claude-3-5-sonnet",
+	}
+	if api.gotReq.LLM != want {
+		t.Errorf("LLM = %+v, want %+v", api.gotReq.LLM, want)
 	}
 }

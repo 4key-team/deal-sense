@@ -51,15 +51,30 @@ func WithAnalyzeLogger(l *slog.Logger) AnalyzeOption {
 	}
 }
 
+// WithAnalyzeLLMService wires the per-chat LLM settings service. When set
+// and a chat has saved settings, /analyze forwards them to the backend
+// as an LLMOverride; missing settings degrade silently to backend default.
+// Nil is ignored.
+func WithAnalyzeLLMService(svc LLMSettingsService) AnalyzeOption {
+	return func(h *AnalyzeHandler) {
+		if svc != nil {
+			h.llm = svc
+		}
+	}
+}
+
 // AnalyzeHandler implements the /analyze command flow. The per-chat company
 // profile is fetched from ProfileStore; if it is missing or the store errors
 // the fallback string is used so analyze never blocks on profile lookup.
+// llm is optional — when set, per-chat LLM settings override the backend
+// default for this request.
 type AnalyzeHandler struct {
 	api      usecase.APIClient
 	profiles usecase.ProfileStore
 	replier  Replier
 	fallback string
 	logger   *slog.Logger
+	llm      LLMSettingsService
 }
 
 // NewAnalyzeHandler wires the dependencies for /analyze. profiles may be nil
@@ -89,11 +104,36 @@ func (h *AnalyzeHandler) Handle(ctx context.Context, u *Update) error {
 		File:           u.Document.Data,
 		Filename:       u.Document.Filename,
 		CompanyProfile: h.profileFor(ctx, u.ChatID),
+		// LLM override wiring lands in GREEN — RED tests must fail here.
 	})
 	if err != nil {
 		return h.replier.Reply(ctx, u.ChatID, fmt.Sprintf("%s %s", msgAnalysisErrorPrefix, err.Error()))
 	}
 	return h.replier.Reply(ctx, u.ChatID, FormatAnalyzeReply(resp))
+}
+
+// llmOverrideFor returns the per-chat LLM provider override or a zero
+// LLMOverride when the chat has no settings or the service is not wired.
+// Lookup errors degrade to the zero value (backend default) and are
+// logged so operators can tell silent fallback from misconfiguration.
+func (h *AnalyzeHandler) llmOverrideFor(ctx context.Context, chatID int64) usecase.LLMOverride {
+	if h.llm == nil {
+		return usecase.LLMOverride{}
+	}
+	cfg, ok, err := h.llm.Get(ctx, chatID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "llm settings lookup failed; using backend default", "chat_id", chatID, "err", err)
+		return usecase.LLMOverride{}
+	}
+	if !ok {
+		return usecase.LLMOverride{}
+	}
+	return usecase.LLMOverride{
+		Provider: cfg.Provider(),
+		BaseURL:  cfg.BaseURL(),
+		APIKey:   cfg.APIKey(),
+		Model:    cfg.Model(),
+	}
 }
 
 // profileFor returns the per-chat profile's rendered text or the fallback.

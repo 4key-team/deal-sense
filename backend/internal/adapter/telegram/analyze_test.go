@@ -352,3 +352,63 @@ func TestFormatAnalyzeReply(t *testing.T) {
 		}
 	}
 }
+
+// --- per-chat LLM override forwarding -----------------------------------
+
+func TestAnalyzeHandler_LLMService_NotConfigured_NoOverride(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	// No WithAnalyzeLLMService — handler must not invent an override.
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co")
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero (no override) when service not wired", api.gotReq.LLM)
+	}
+}
+
+func TestAnalyzeHandler_LLMService_NoSettingsForChat_NoOverride(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService() // empty store
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm))
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if api.gotReq.LLM != (usecase.LLMOverride{}) {
+		t.Errorf("LLM = %+v, want zero when chat has no settings", api.gotReq.LLM)
+	}
+}
+
+func TestAnalyzeHandler_LLMService_ChatHasSettings_PopulatesOverride(t *testing.T) {
+	rep := &fakeReplier{}
+	api := &fakeAPI{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW"}}
+	llm := newFakeLLMService()
+	cfg, err := domain.NewLLMSettings("openai", "https://openrouter.ai/api/v1", "sk-test1234", "anthropic/claude-sonnet-4")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	llm.data[42] = cfg
+	h := telegram.NewAnalyzeHandler(api, newFakeProfileStore(), rep, "Fallback Co",
+		telegram.WithAnalyzeLLMService(llm))
+	doc := &telegram.Document{Filename: "x.pdf", Data: []byte("x")}
+
+	if err := h.Handle(context.Background(), &telegram.Update{ChatID: 42, Document: doc}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	want := usecase.LLMOverride{
+		Provider: "openai",
+		BaseURL:  "https://openrouter.ai/api/v1",
+		APIKey:   "sk-test1234",
+		Model:    "anthropic/claude-sonnet-4",
+	}
+	if api.gotReq.LLM != want {
+		t.Errorf("LLM = %+v, want %+v", api.gotReq.LLM, want)
+	}
+}
