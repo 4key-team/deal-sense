@@ -33,6 +33,7 @@ type Config struct {
 	APIKey           string
 	LogLevel         string
 	ProfileStorePath string
+	LLMStorePath     string
 	MetricsPort      int // 0 disables the /metrics + /healthz listener.
 }
 
@@ -78,6 +79,7 @@ func LoadConfig() (Config, error) {
 		APIKey:           apiKey,
 		LogLevel:         logLevel,
 		ProfileStorePath: cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_PROFILE_STORE_PATH")), "/data/telegram-profiles.json"),
+		LLMStorePath:     cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_LLM_STORE_PATH")), "/data/telegram-llm-settings.json"),
 		MetricsPort:      metricsPort,
 	}, nil
 }

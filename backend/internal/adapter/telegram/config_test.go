@@ -80,6 +80,26 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.APIKey != "" {
 		t.Errorf("APIKey = %q, want empty", cfg.APIKey)
 	}
+	if cfg.ProfileStorePath != "/data/telegram-profiles.json" {
+		t.Errorf("ProfileStorePath = %q, want /data/telegram-profiles.json", cfg.ProfileStorePath)
+	}
+	if cfg.LLMStorePath != "/data/telegram-llm-settings.json" {
+		t.Errorf("LLMStorePath = %q, want /data/telegram-llm-settings.json", cfg.LLMStorePath)
+	}
+}
+
+func TestLoadConfig_LLMStorePath_Override(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "test-token")
+	t.Setenv("ALLOWLIST_USER_IDS", "1")
+	t.Setenv("TELEGRAM_LLM_STORE_PATH", "/srv/state/llm.json")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.LLMStorePath != "/srv/state/llm.json" {
+		t.Errorf("LLMStorePath = %q, want /srv/state/llm.json", cfg.LLMStorePath)
+	}
 }
 
 func TestLoadConfig_MetricsPort(t *testing.T) {
