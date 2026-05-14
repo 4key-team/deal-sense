@@ -119,6 +119,15 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		return fmt.Errorf("bot.New: %w", err)
 	}
 
+	// Sync the Telegram "/" autocomplete popup with what the bot actually
+	// supports. Failure here is non-fatal — popup is UX sugar, the bot
+	// still works without it.
+	if _, err := b.SetMyCommands(ctx, &bot.SetMyCommandsParams{
+		Commands: botCommandsList(),
+	}); err != nil {
+		logger.Warn("set my commands failed; /-popup may be stale", "err", err)
+	}
+
 	replier := &botReplier{b: b, logger: logger}
 	profileHandler := telegramadapter.NewProfileHandler(
 		profiles, wizardSessions, replier,
@@ -240,10 +249,21 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 }
 
 // botCommandsList is the catalogue surfaced by Telegram's "/" autocomplete
-// popup via SetMyCommands. RED stub returns nil so the popup stays empty
-// (the visible bug); GREEN fills it with the same set MsgHelp documents.
+// popup via SetMyCommands. Order matches the rough discovery flow:
+// onboarding (/start, /help), the two product commands (/analyze,
+// /generate), then per-chat configuration (/profile, /llm) and the
+// universal escape hatch (/cancel). Descriptions are kept short —
+// Telegram truncates aggressively in the popup.
 func botCommandsList() []models.BotCommand {
-	return nil
+	return []models.BotCommand{
+		{Command: "start", Description: "Начало работы"},
+		{Command: "help", Description: "Список команд"},
+		{Command: "analyze", Description: "Анализ тендера"},
+		{Command: "generate", Description: "Создать КП по шаблону"},
+		{Command: "profile", Description: "Профиль компании"},
+		{Command: "llm", Description: "Настройки LLM для чата"},
+		{Command: "cancel", Description: "Прервать активный wizard"},
+	}
 }
 
 // mainReplyKeyboard is the persistent reply keyboard surfaced by /start
