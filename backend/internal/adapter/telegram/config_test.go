@@ -236,6 +236,139 @@ func TestLoadConfig_APIKeyFile_ErrorOnUnreadable(t *testing.T) {
 	}
 }
 
+// --- BOT_CONFIG_PATH JSON overlay (UI-managed config) ---
+
+const fixtureOverlayToken = "8829614348:AAH4OyBX8kX06aLl2DMk48Qk_2N9t5Q0bts"
+
+// writeOverlayJSON helps tests stage a known-good config file.
+func writeOverlayJSON(t *testing.T, dir string, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, "bot-config.json")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write overlay: %v", err)
+	}
+	return path
+}
+
+func TestLoadConfig_BotConfigPath_Unset_UsesEnv(t *testing.T) {
+	t.Setenv("BOT_CONFIG_PATH", "")
+	t.Setenv("TELEGRAM_BOT_TOKEN", "env-token:secret")
+	t.Setenv("ALLOWLIST_USER_IDS", "42")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if cfg.BotToken != "env-token:secret" {
+		t.Errorf("BotToken = %q, want env-token:secret", cfg.BotToken)
+	}
+	if !reflect.DeepEqual(cfg.AllowlistUserIDs, []int64{42}) {
+		t.Errorf("AllowlistUserIDs = %v, want [42]", cfg.AllowlistUserIDs)
+	}
+}
+
+func TestLoadConfig_BotConfigPath_FileMissing_FallsBackToEnv(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "does-not-exist.json")
+	t.Setenv("BOT_CONFIG_PATH", missing)
+	t.Setenv("TELEGRAM_BOT_TOKEN", "env-token:secret")
+	t.Setenv("ALLOWLIST_USER_IDS", "42")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if cfg.BotToken != "env-token:secret" {
+		t.Errorf("BotToken = %q, want env-token:secret (file missing → env)", cfg.BotToken)
+	}
+}
+
+func TestLoadConfig_BotConfigPath_FileValid_OverridesEnv(t *testing.T) {
+	dir := t.TempDir()
+	overlay := `{
+		"token": "` + fixtureOverlayToken + `",
+		"allowlist_user_ids": [100, 200],
+		"log_level": "warn"
+	}`
+	path := writeOverlayJSON(t, dir, overlay)
+	t.Setenv("BOT_CONFIG_PATH", path)
+	t.Setenv("TELEGRAM_BOT_TOKEN", "env-token-should-be-ignored")
+	t.Setenv("ALLOWLIST_USER_IDS", "1,2,3")
+	t.Setenv("LOG_LEVEL", "error")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if cfg.BotToken != fixtureOverlayToken {
+		t.Errorf("BotToken = %q, want JSON value %q", cfg.BotToken, fixtureOverlayToken)
+	}
+	if !reflect.DeepEqual(cfg.AllowlistUserIDs, []int64{100, 200}) && !reflect.DeepEqual(cfg.AllowlistUserIDs, []int64{200, 100}) {
+		t.Errorf("AllowlistUserIDs = %v, want [100 200] (order tolerant)", cfg.AllowlistUserIDs)
+	}
+	if cfg.LogLevel != "warn" {
+		t.Errorf("LogLevel = %q, want warn (JSON wins over env error)", cfg.LogLevel)
+	}
+}
+
+func TestLoadConfig_BotConfigPath_OpenAllowlistInJSON_OverridesRestrictedEnv(t *testing.T) {
+	dir := t.TempDir()
+	// JSON omits allowlist_user_ids → open mode
+	overlay := `{"token": "` + fixtureOverlayToken + `", "log_level": "info"}`
+	path := writeOverlayJSON(t, dir, overlay)
+	t.Setenv("BOT_CONFIG_PATH", path)
+	t.Setenv("TELEGRAM_BOT_TOKEN", "env-token")
+	// Env says restricted but JSON open should win.
+	t.Setenv("ALLOWLIST_USER_IDS", "42")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if len(cfg.AllowlistUserIDs) != 0 {
+		t.Errorf("AllowlistUserIDs = %v, want empty (JSON open mode wins)", cfg.AllowlistUserIDs)
+	}
+}
+
+func TestLoadConfig_BotConfigPath_FileCorrupt_Errors(t *testing.T) {
+	dir := t.TempDir()
+	path := writeOverlayJSON(t, dir, "{not json")
+	t.Setenv("BOT_CONFIG_PATH", path)
+	t.Setenv("TELEGRAM_BOT_TOKEN", "env-token") // would normally succeed
+
+	_, err := telegram.LoadConfig()
+	if err == nil {
+		t.Fatal("expected error for corrupt JSON overlay")
+	}
+}
+
+func TestLoadConfig_BotConfigPath_PreservesEnvOnlyFields(t *testing.T) {
+	// JSON overlay covers token/allowlist/log_level — operational fields
+	// (API_BASE_URL, METRICS_PORT, profile store path) must still come
+	// from env even when the overlay is present.
+	dir := t.TempDir()
+	overlay := `{"token": "` + fixtureOverlayToken + `", "log_level": "info"}`
+	path := writeOverlayJSON(t, dir, overlay)
+	t.Setenv("BOT_CONFIG_PATH", path)
+	t.Setenv("API_BASE_URL", "http://custom-backend:9999")
+	t.Setenv("METRICS_PORT", "7777")
+	t.Setenv("TELEGRAM_PROFILE_STORE_PATH", "/custom/profiles.json")
+
+	cfg, err := telegram.LoadConfig()
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if cfg.APIBaseURL != "http://custom-backend:9999" {
+		t.Errorf("APIBaseURL = %q, want from env", cfg.APIBaseURL)
+	}
+	if cfg.MetricsPort != 7777 {
+		t.Errorf("MetricsPort = %d, want 7777 from env", cfg.MetricsPort)
+	}
+	if cfg.ProfileStorePath != "/custom/profiles.json" {
+		t.Errorf("ProfileStorePath = %q, want from env", cfg.ProfileStorePath)
+	}
+}
+
 func TestLoadConfig_BotTokenFile_EmptyAfterTrim(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "tg-token")
