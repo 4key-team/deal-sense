@@ -12,6 +12,9 @@ services:
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-5}
       - DEAL_SENSE_API_KEY=${DEAL_SENSE_API_KEY:-}
+      - BOT_CONFIG_PATH=/data/bot-config/bot-config.json
+    volumes:
+      - bot-config-data:/data/bot-config
     restart: unless-stopped
 
   frontend:
@@ -36,8 +39,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - TELEGRAM_PROFILE_STORE_PATH=/data/telegram-profiles.json
       - METRICS_PORT=${TELEGRAM_METRICS_PORT:-9091}
+      - BOT_CONFIG_PATH=/data/bot-config/bot-config.json
     volumes:
       - telegram-bot-data:/data
+      - bot-config-data:/data/bot-config
     ports:
       - "127.0.0.1:${TELEGRAM_METRICS_PORT:-9091}:${TELEGRAM_METRICS_PORT:-9091}"
     depends_on:
@@ -48,3 +53,4 @@ services:
 
 volumes:
   telegram-bot-data:
+  bot-config-data:
