@@ -162,6 +162,7 @@ func TestShouldRouteToProfile(t *testing.T) {
 		{"profile edit", "/profile edit", 42, true},
 		{"profile clear", "/profile clear", 42, true},
 		{"profile with leading whitespace", "  /profile", 42, true},
+		{"reply-keyboard profile button", telegram.ButtonProfile, 42, true},
 		{"free text + active session", "Acme Corp", 7, true},
 		{"cancel + active session", "/cancel", 7, true},
 		{"free text + no session", "hello bot", 42, false},
@@ -177,6 +178,27 @@ func TestShouldRouteToProfile(t *testing.T) {
 				t.Errorf("ShouldRouteToProfile(%q, %d) = %v, want %v", tt.text, tt.chatID, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRouteWizardOrProfile_ButtonProfile_DispatchesToCommand(t *testing.T) {
+	// Tap on the reply-keyboard "👤 Профиль компании" button arrives as a
+	// plain text message. RouteWizardOrProfile must treat it as /profile.
+	h, sessions, store, _ := newProfileHandlerForRouting(t)
+	// No active session, no pre-saved profile → /profile shows the "empty
+	// profile" message.
+	_ = store // suppress unused
+
+	handled, err := telegram.RouteWizardOrProfile(
+		context.Background(),
+		&telegram.Update{ChatID: 42, Text: telegram.ButtonProfile},
+		h, sessions,
+	)
+	if err != nil {
+		t.Fatalf("RouteWizardOrProfile: %v", err)
+	}
+	if !handled {
+		t.Fatal("button-profile tap must be claimed by the profile router")
 	}
 }
 
