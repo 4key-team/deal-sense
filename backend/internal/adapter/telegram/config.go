@@ -78,15 +78,27 @@ func LoadConfig() (Config, error) {
 	}
 
 	return Config{
-		BotToken:         token,
-		AllowlistUserIDs: ids,
-		APIBaseURL:       cmp.Or(strings.TrimSpace(os.Getenv("API_BASE_URL")), "http://localhost:8080"),
-		APIKey:           apiKey,
-		LogLevel:         logLevel,
-		ProfileStorePath: cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_PROFILE_STORE_PATH")), "/data/telegram-profiles.json"),
-		LLMStorePath:     cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_LLM_STORE_PATH")), "/data/telegram-llm-settings.json"),
-		MetricsPort:      metricsPort,
+		BotToken:          token,
+		AllowlistUserIDs:  ids,
+		APIBaseURL:        cmp.Or(strings.TrimSpace(os.Getenv("API_BASE_URL")), "http://localhost:8080"),
+		APIKey:            apiKey,
+		LogLevel:          logLevel,
+		ProfileStorePath:  cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_PROFILE_STORE_PATH")), "/data/telegram-profiles.json"),
+		LLMStorePath:      cmp.Or(strings.TrimSpace(os.Getenv("TELEGRAM_LLM_STORE_PATH")), "/data/telegram-llm-settings.json"),
+		RequirePerChatLLM: !truthyEnv(os.Getenv("ALLOW_SERVER_LLM_FALLBACK")),
+		MetricsPort:       metricsPort,
 	}, nil
+}
+
+// truthyEnv accepts the common shapes operators reach for in shell + .env
+// files: "true", "1", "yes" (case-insensitive). Everything else, including
+// empty and "false", is false.
+func truthyEnv(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "yes":
+		return true
+	}
+	return false
 }
 
 // botConfigOverlay captures the bot-tunable fields after JSON overlay
