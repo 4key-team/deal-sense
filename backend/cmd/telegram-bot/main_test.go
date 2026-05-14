@@ -20,6 +20,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/daniil/deal-sense/backend/internal/adapter/metrics"
 	telegramadapter "github.com/daniil/deal-sense/backend/internal/adapter/telegram"
 	"github.com/daniil/deal-sense/backend/internal/domain/auth"
 	usecase "github.com/daniil/deal-sense/backend/internal/usecase/telegram"
@@ -697,7 +698,7 @@ func TestRunWizardSweeper_LogsNonZeroEvictions(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() {
-		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger)
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger, nil)
 		close(done)
 	}()
 
@@ -747,7 +748,7 @@ func TestRunWizardSweeper_SilentWhenNothingToEvict(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger)
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger, nil)
 		close(done)
 	}()
 
@@ -761,6 +762,71 @@ func TestRunWizardSweeper_SilentWhenNothingToEvict(t *testing.T) {
 	}
 }
 
+func TestRunWizardSweeper_IncrementsEvictedCounter(t *testing.T) {
+	base := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	sessions := telegramadapter.NewInMemoryWizardSessions(
+		telegramadapter.WithSessionTTL(1*time.Minute),
+		telegramadapter.WithSessionClock(func() time.Time { return base }),
+	)
+	// Three stale sessions — one tick must increment wizard_evicted by 3.
+	for i := int64(1); i <= 3; i++ {
+		sessions.Set(i, &telegramadapter.WizardState{ChatID: i, StartedAt: base.Add(-10 * time.Minute)})
+	}
+
+	coll := metrics.NewCollector()
+	logger := slog.New(&bufferHandler{})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger, coll)
+		close(done)
+	}()
+
+	// Wait for evictions to land in the collector.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		var buf strings.Builder
+		_, _ = coll.Render(&buf)
+		if strings.Contains(buf.String(), `dealsense_bot_events_total{event="wizard_evicted"} 3`) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	var buf strings.Builder
+	if _, err := coll.Render(&buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), `dealsense_bot_events_total{event="wizard_evicted"} 3`) {
+		t.Errorf("collector missing wizard_evicted=3 after sweep; got:\n%s", buf.String())
+	}
+}
+
+func TestRunWizardSweeper_NilCounter_DoesNotPanic(t *testing.T) {
+	// Defensive — wiring may omit the counter before the metrics listener
+	// is enabled.
+	base := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+	sessions := telegramadapter.NewInMemoryWizardSessions(
+		telegramadapter.WithSessionTTL(1*time.Minute),
+		telegramadapter.WithSessionClock(func() time.Time { return base }),
+	)
+	sessions.Set(1, &telegramadapter.WizardState{ChatID: 1, StartedAt: base.Add(-10 * time.Minute)})
+
+	logger := slog.New(&bufferHandler{})
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger, nil)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	<-done
+}
+
 func TestRunWizardSweeper_ReturnsImmediatelyIfCtxAlreadyDone(t *testing.T) {
 	sessions := telegramadapter.NewInMemoryWizardSessions()
 	logger := slog.New(&bufferHandler{})
@@ -770,7 +836,7 @@ func TestRunWizardSweeper_ReturnsImmediatelyIfCtxAlreadyDone(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger)
+		runWizardSweeper(ctx, sessions, 5*time.Millisecond, logger, nil)
 		close(done)
 	}()
 	select {

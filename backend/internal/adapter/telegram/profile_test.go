@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -705,12 +706,7 @@ func (f *fakeBotEventCounter) IncBotEvent(e string) {
 func (f *fakeBotEventCounter) has(e string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for _, ev := range f.events {
-		if ev == e {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.events, e)
 }
 
 func TestProfileHandler_IncrementsBotEventCounters(t *testing.T) {

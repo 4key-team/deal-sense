@@ -28,24 +28,50 @@ func WithProfileLogger(l *slog.Logger) ProfileOption {
 	}
 }
 
+// BotEventCounter increments dealsense_bot_events_total{event} for a
+// Telegram bot lifecycle event. metrics.Collector satisfies this interface;
+// nil-safety is handled at the option boundary.
+type BotEventCounter interface {
+	IncBotEvent(event string)
+}
+
+// noopBotEventCounter satisfies BotEventCounter with a no-op so handlers
+// never need a nil check.
+type noopBotEventCounter struct{}
+
+func (noopBotEventCounter) IncBotEvent(string) {}
+
+// WithProfileEventCounter wires a BotEventCounter; metrics.Collector is the
+// production implementation. Omit the option (or pass nil) for a no-op.
+func WithProfileEventCounter(c BotEventCounter) ProfileOption {
+	return func(h *ProfileHandler) {
+		if c != nil {
+			h.events = c
+		}
+	}
+}
+
 // ProfileHandler implements the /profile command and the wizard that fills
 // it. Persistence lives in ProfileStore; per-chat wizard state in
-// WizardSessions. Logger is optional — by default events are discarded.
+// WizardSessions. Logger and event counter are optional — by default events
+// are discarded for both.
 type ProfileHandler struct {
 	profiles usecase.ProfileStore
 	sessions WizardSessions
 	replier  Replier
 	logger   *slog.Logger
+	events   BotEventCounter
 }
 
 // NewProfileHandler wires the dependencies for /profile. Pass options to
-// configure optional behaviour (e.g. WithProfileLogger).
+// configure optional behaviour (e.g. WithProfileLogger, WithProfileEventCounter).
 func NewProfileHandler(profiles usecase.ProfileStore, sessions WizardSessions, replier Replier, opts ...ProfileOption) *ProfileHandler {
 	h := &ProfileHandler{
 		profiles: profiles,
 		sessions: sessions,
 		replier:  replier,
 		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		events:   noopBotEventCounter{},
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -97,6 +123,7 @@ func (h *ProfileHandler) startWizard(ctx context.Context, chatID int64) error {
 		StartedAt: time.Now(),
 	})
 	h.logger.InfoContext(ctx, "wizard started", "chat_id", chatID)
+	h.events.IncBotEvent("wizard_started")
 	return h.replier.Reply(ctx, chatID, msgWizardStart)
 }
 
@@ -106,6 +133,7 @@ func (h *ProfileHandler) clearProfile(ctx context.Context, chatID int64) error {
 		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
 	h.logger.InfoContext(ctx, "profile cleared", "chat_id", chatID)
+	h.events.IncBotEvent("profile_cleared")
 	return h.replier.Reply(ctx, chatID, msgProfileCleared)
 }
 
@@ -123,6 +151,7 @@ func (h *ProfileHandler) HandleWizardInput(ctx context.Context, u *Update) error
 	if text == "/cancel" {
 		h.sessions.Clear(u.ChatID)
 		h.logger.InfoContext(ctx, "wizard cancelled", "chat_id", u.ChatID, "step", string(state.Step))
+		h.events.IncBotEvent("wizard_cancelled")
 		return h.replier.Reply(ctx, u.ChatID, msgWizardCancelled)
 	}
 	h.logger.DebugContext(ctx, "wizard step advance", "chat_id", u.ChatID, "step", string(state.Step))
@@ -180,6 +209,7 @@ func (h *ProfileHandler) finalize(ctx context.Context, chatID int64, d *ProfileD
 	if err != nil {
 		if errors.Is(err, domain.ErrEmptyCompany) {
 			h.logger.InfoContext(ctx, "wizard rejected empty profile", "chat_id", chatID)
+			h.events.IncBotEvent("wizard_rejected_empty")
 			return h.replier.Reply(ctx, chatID, msgWizardEmptyProfile)
 		}
 		h.logger.ErrorContext(ctx, "profile build failed", "chat_id", chatID, "err", err)
@@ -190,6 +220,7 @@ func (h *ProfileHandler) finalize(ctx context.Context, chatID int64, d *ProfileD
 		return h.replier.Reply(ctx, chatID, msgProfileSaveError)
 	}
 	h.logger.InfoContext(ctx, "wizard completed", "chat_id", chatID)
+	h.events.IncBotEvent("wizard_completed")
 	return h.replier.Reply(ctx, chatID, fmt.Sprintf(msgWizardConfirmFmt, profile.Render()))
 }
 
