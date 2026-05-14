@@ -40,6 +40,20 @@ if [ ${#go_files[@]} -gt 0 ]; then
   fi
 fi
 
+# --------------------------------------------------------------- i18n
+# Run only when a tracked translation file is staged — pure-code commits
+# don't need to pay the grep cost.
+mapfile -t i18n_files < <(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '^(frontend/src/i18n/ru\.ts|backend/internal/adapter/telegram/messages\.go)$' || true)
+
+if [ ${#i18n_files[@]} -gt 0 ]; then
+  if ! bash scripts/check-i18n.sh; then
+    echo ""
+    echo "✘ i18n style check failed — fix violations above before committing"
+    exit 1
+  fi
+fi
+
 # ------------------------------------------------------------- gitleaks
 if command -v gitleaks >/dev/null 2>&1; then
   echo "→ gitleaks scan staged..."

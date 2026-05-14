@@ -17,6 +17,7 @@ git config core.hooksPath .githooks
 | `pre-commit` | `gofmt` на staged `.go` файлах | да, если есть unformatted |
 | `pre-commit` | `golangci-lint run ./...` (если установлен) | да, если есть issues |
 | `pre-commit` | `gitleaks protect --staged` (если установлен) | да, если найден secret |
+| `pre-commit` | `scripts/check-i18n.sh` на staged i18n-файлах | да, при 'ты'/`--`/`...` нарушениях |
 | `commit-msg` | Conventional Commits формат | да, при mismatch |
 
 Optional tools (golangci-lint, gitleaks) — soft-skip с install-hint'ом если не установлены. Это сделано чтобы первый день contributor'а не упёрся в дополнительные deps.
