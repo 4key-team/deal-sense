@@ -73,11 +73,14 @@ func (s *FileStore) load() error {
 	}
 	var dto botConfigDTO
 	if err := json.Unmarshal(raw, &dto); err != nil {
-		return fmt.Errorf("%w: unmarshal: %v", ErrCorruptStore, err)
+		return fmt.Errorf("%w: unmarshal: %w", ErrCorruptStore, err)
 	}
 	cfg, err := domain.NewBotConfig(dto.Token, dto.AllowlistUserIDs, dto.LogLevel)
 	if err != nil {
-		return fmt.Errorf("%w: invalid record: %v", ErrCorruptStore, err)
+		// Double-wrap so callers can errors.Is against both ErrCorruptStore
+		// (storage-layer concern) and the underlying domain error
+		// (e.g. domain.ErrInvalidBotToken) when diagnosing manual edits.
+		return fmt.Errorf("%w: invalid record: %w", ErrCorruptStore, err)
 	}
 	s.cur = cfg
 	return nil

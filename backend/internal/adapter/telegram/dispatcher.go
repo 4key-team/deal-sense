@@ -10,11 +10,15 @@ import (
 // predicate behind RouteWizardOrProfile, exposed so the runtime can use it
 // as a bot.MatchFunc without duplicating the heuristic.
 //
-// Returns true if either the message starts with the /profile command or a
-// wizard session is currently active for chatID.
+// Returns true if any of the following hold: the message starts with the
+// /profile command, the message exactly matches the reply-keyboard
+// ButtonProfile label, or a wizard session is currently active for chatID.
 func ShouldRouteToProfile(text string, chatID int64, sessions WizardSessions) bool {
 	trimmed := strings.TrimSpace(text)
 	if strings.HasPrefix(trimmed, "/profile") {
+		return true
+	}
+	if trimmed == ButtonProfile {
 		return true
 	}
 	if trimmed == "" {
@@ -35,6 +39,14 @@ func RouteWizardOrProfile(ctx context.Context, u *Update, ph *ProfileHandler, se
 	text := strings.TrimSpace(u.Text)
 	if strings.HasPrefix(text, "/profile") {
 		return true, ph.HandleCommand(ctx, u)
+	}
+	if text == ButtonProfile {
+		// Reply-keyboard tap arrives as the literal button label; rewrite
+		// it to the canonical "/profile" so HandleCommand treats it as a
+		// fresh top-level command.
+		synth := *u
+		synth.Text = "/profile"
+		return true, ph.HandleCommand(ctx, &synth)
 	}
 	if _, ok := sessions.Get(u.ChatID); ok {
 		return true, ph.HandleWizardInput(ctx, u)
