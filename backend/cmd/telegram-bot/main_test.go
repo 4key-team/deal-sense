@@ -727,11 +727,11 @@ func TestMakeGenerateHandler_NoDocument_SetsPendingGenerate(t *testing.T) {
 	}
 }
 
-func TestPendingDocumentMatcher_Cases(t *testing.T) {
+func TestPendingMatcher_Cases(t *testing.T) {
 	pending := telegramadapter.NewInMemoryPendingCommandSessions()
 	pending.Set(5, telegramadapter.PendingAnalyze)
 
-	match := pendingDocumentMatcher(pending)
+	match := pendingMatcher(pending)
 	cases := []struct {
 		name   string
 		update *models.Update
@@ -739,9 +739,11 @@ func TestPendingDocumentMatcher_Cases(t *testing.T) {
 	}{
 		{"nil update", nil, false},
 		{"no message", &models.Update{}, false},
-		{"text only, pending exists", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "hi"}}, false},
+		{"text during pending", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "hi"}}, true},
+		{"/go during pending", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/go"}}, true},
 		{"document, no pending for this chat", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 99}, Document: &models.Document{FileID: "f"}}}, false},
 		{"document with pending for chat", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Document: &models.Document{FileID: "f"}}}, true},
+		{"/profile during pending falls through", &models.Update{Message: &models.Message{Chat: models.Chat{ID: 5}, Text: "/profile"}}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -752,18 +754,19 @@ func TestPendingDocumentMatcher_Cases(t *testing.T) {
 	}
 }
 
-func TestMakePendingDispatcher_PendingAnalyze_DispatchesAndClears(t *testing.T) {
+func TestMakePendingRouteHandler_Document_AccumulatesWithoutDispatch(t *testing.T) {
 	b, _ := stubBotForSend(t)
 	api := &stubAPIClient{resp: &usecase.AnalyzeTenderResponse{Verdict: "LOW", Score: 0.1}}
-	ah := telegramadapter.NewAnalyzeHandler(api, nil, &botReplier{b: b, logger: discardLogger()}, "")
-	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+	rep := &botReplier{b: b, logger: discardLogger()}
+	ah := telegramadapter.NewAnalyzeHandler(api, nil, rep, "")
+	gh := telegramadapter.NewGenerateHandler(api, rep)
 	pending := telegramadapter.NewInMemoryPendingCommandSessions()
 	pending.Set(5, telegramadapter.PendingAnalyze)
 
 	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
 		return []byte("PDF"), doc.FileName, nil
 	})
-	h := makePendingDispatcher(ah, gh, pending, b, dl, discardLogger())
+	h := makePendingRouteHandler(pending, ah, gh, rep, b, dl, discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{
 			Chat:     models.Chat{ID: 5},
@@ -771,38 +774,44 @@ func TestMakePendingDispatcher_PendingAnalyze_DispatchesAndClears(t *testing.T) 
 		},
 	})
 
-	if api.calls != 1 {
-		t.Errorf("api.AnalyzeTender called %d times, want 1", api.calls)
+	if api.calls != 0 {
+		t.Errorf("api.AnalyzeTender must NOT be called on first upload (wizard accumulates), got %d", api.calls)
 	}
-	if _, ok := pending.Get(5); ok {
-		t.Error("dispatcher must clear pending after dispatch")
+	if _, ok := pending.Get(5); !ok {
+		t.Error("pending must stay alive while collecting")
+	}
+	if files := pending.Files(5); len(files) != 1 {
+		t.Errorf("expected 1 collected file, got %d", len(files))
 	}
 }
 
-func TestMakePendingDispatcher_PendingGenerate_DispatchesToGenerate(t *testing.T) {
+func TestMakePendingRouteHandler_GoFinalisesGenerate(t *testing.T) {
 	b, _ := stubBotForSend(t)
 	api := &stubGenerateAPI{resp: &usecase.GenerateProposalResponse{Mode: "placeholder", DOCX: []byte("DOCX")}}
-	ah := telegramadapter.NewAnalyzeHandler(nil, nil, &botReplier{b: b, logger: discardLogger()}, "")
-	gh := telegramadapter.NewGenerateHandler(api, &botReplier{b: b, logger: discardLogger()})
+	rep := &botReplier{b: b, logger: discardLogger()}
+	ah := telegramadapter.NewAnalyzeHandler(nil, nil, rep, "")
+	gh := telegramadapter.NewGenerateHandler(api, rep)
 	pending := telegramadapter.NewInMemoryPendingCommandSessions()
 	pending.Set(5, telegramadapter.PendingGenerate)
+	pending.AppendFile(5, telegramadapter.CollectedFile{Filename: "tpl.docx", Data: []byte("TPL")})
 
 	dl := docDownloader(func(_ context.Context, _ *bot.Bot, doc *models.Document) ([]byte, string, error) {
-		return []byte("TPL"), doc.FileName, nil
+		return []byte(doc.FileName), doc.FileName, nil
 	})
-	h := makePendingDispatcher(ah, gh, pending, b, dl, discardLogger())
+	_ = dl
+	h := makePendingRouteHandler(pending, ah, gh, rep, b, dl, discardLogger())
 	h(context.Background(), b, &models.Update{
 		Message: &models.Message{
-			Chat:     models.Chat{ID: 5},
-			Document: &models.Document{FileID: "f", FileName: "tpl.docx"},
+			Chat: models.Chat{ID: 5},
+			Text: "/go",
 		},
 	})
 
 	if api.calls != 1 {
-		t.Errorf("api.GenerateProposal called %d times, want 1", api.calls)
+		t.Errorf("api.GenerateProposal calls = %d, want 1 (on /go)", api.calls)
 	}
 	if _, ok := pending.Get(5); ok {
-		t.Error("dispatcher must clear pending after dispatch")
+		t.Error("pending must be cleared after /go dispatch")
 	}
 }
 

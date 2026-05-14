@@ -174,8 +174,8 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		makeLLMRouteHandler(llmHandler, llmWizardSessions, logger),
 	)
 	b.RegisterHandlerMatchFunc(
-		pendingDocumentMatcher(pendingSessions),
-		makePendingDispatcher(analyzeHandler, generateHandler, pendingSessions, b, defaultDocDownloader, logger),
+		pendingMatcher(pendingSessions),
+		makePendingRouteHandler(pendingSessions, analyzeHandler, generateHandler, replier, b, defaultDocDownloader, logger),
 	)
 
 	logger.Info("telegram bot starting",
@@ -537,32 +537,31 @@ func makeAnalyzeHandler(h *telegramadapter.AnalyzeHandler, b *bot.Bot, dl docDow
 	}
 }
 
-// pendingDocumentMatcher returns a MatchFunc that fires when an incoming
-// message carries a document AND a pending command exists for that chat.
-// Use to register a high-priority handler before the bot's default
-// fallback so bare uploads after /analyze or /generate land in the right
-// pipeline.
-func pendingDocumentMatcher(pending *telegramadapter.InMemoryPendingCommandSessions) bot.MatchFunc {
+// pendingMatcher returns a MatchFunc that fires whenever an incoming
+// message belongs to the multi-file collection wizard — a document or a
+// /go / /cancel / free-text response during an active pending session.
+// Slash commands other than /go and /cancel fall through so /profile,
+// /llm and friends keep working even mid-collection.
+func pendingMatcher(pending *telegramadapter.InMemoryPendingCommandSessions) bot.MatchFunc {
 	return func(u *models.Update) bool {
 		if u == nil || u.Message == nil {
 			return false
 		}
-		if documentFromMessage(u.Message) == nil {
-			return false
-		}
-		_, ok := pending.Get(u.Message.Chat.ID)
-		return ok
+		hasDoc := documentFromMessage(u.Message) != nil
+		return telegramadapter.ShouldRoutePending(u.Message.Text, hasDoc, u.Message.Chat.ID, pending)
 	}
 }
 
-// makePendingDispatcher returns a handler that reads the chat's pending
-// command and routes the incoming document to the matching inner handler
-// (analyze or generate), clearing the pending state on entry so a single
-// upload triggers exactly one pipeline.
-func makePendingDispatcher(
+// makePendingRouteHandler turns each incoming pending-flow message into
+// a typed *telegramadapter.Update (downloading the attached document if
+// any) and delegates routing to RoutePending. /go finalises the
+// dispatch with the collected files; documents append; free text
+// receives msgPendingTextHint; /cancel clears.
+func makePendingRouteHandler(
+	pending *telegramadapter.InMemoryPendingCommandSessions,
 	ah *telegramadapter.AnalyzeHandler,
 	gh *telegramadapter.GenerateHandler,
-	pending *telegramadapter.InMemoryPendingCommandSessions,
+	replier telegramadapter.Replier,
 	b *bot.Bot,
 	dl docDownloader,
 	logger *slog.Logger,
@@ -571,21 +570,34 @@ func makePendingDispatcher(
 		if u == nil || u.Message == nil {
 			return
 		}
-		kind, ok := pending.Get(u.Message.Chat.ID)
-		if !ok {
-			return
+		dto := &telegramadapter.Update{
+			ChatID: u.Message.Chat.ID,
+			Text:   u.Message.Text,
 		}
-		// Clear up front — even if the inner handler errs, we don't want a
-		// stale state pointing at a half-failed previous attempt.
-		pending.Clear(u.Message.Chat.ID)
+		if u.Message.From != nil {
+			dto.UserID = u.Message.From.ID
+		}
 
-		switch kind {
-		case telegramadapter.PendingAnalyze:
-			makeAnalyzeHandler(ah, b, dl, nil, logger)(ctx, b, u)
-		case telegramadapter.PendingGenerate:
-			makeGenerateHandler(gh, b, dl, nil, logger)(ctx, b, u)
-		default:
-			logger.Warn("pending dispatcher: unknown kind", "kind", string(kind))
+		doc := documentFromMessage(u.Message)
+		if doc != nil {
+			data, filename, err := dl(ctx, b, doc)
+			if err != nil {
+				logger.Error("download pending document", "err", err)
+				_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+					ChatID: u.Message.Chat.ID,
+					Text:   telegramadapter.MsgDownloadFailed + " " + err.Error(),
+				})
+				return
+			}
+			dto.Document = &telegramadapter.Document{
+				FileID:   doc.FileID,
+				Filename: filename,
+				Data:     data,
+			}
+		}
+
+		if _, err := telegramadapter.RoutePending(ctx, dto, pending, ah, gh, replier); err != nil {
+			logger.Error("pending route", "chat_id", dto.ChatID, "err", err)
 		}
 	}
 }
