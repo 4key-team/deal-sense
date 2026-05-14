@@ -690,6 +690,120 @@ func TestProfileHandler_LogsEvents(t *testing.T) {
 	}
 }
 
+// fakeBotEventCounter captures IncBotEvent calls for assertion in tests.
+type fakeBotEventCounter struct {
+	mu     sync.Mutex
+	events []string
+}
+
+func (f *fakeBotEventCounter) IncBotEvent(e string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, e)
+}
+
+func (f *fakeBotEventCounter) has(e string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, ev := range f.events {
+		if ev == e {
+			return true
+		}
+	}
+	return false
+}
+
+func TestProfileHandler_IncrementsBotEventCounters(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func() (*fakeProfileStore, *telegram.InMemoryWizardSessions)
+		action    func(t *testing.T, h *telegram.ProfileHandler)
+		wantEvent string
+	}{
+		{
+			name: "wizard started",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				return newFakeProfileStore(), telegram.NewInMemoryWizardSessions()
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile edit"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantEvent: "wizard_started",
+		},
+		{
+			name: "wizard cancelled",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepTeamSize, Draft: &telegram.ProfileDraft{Name: "Acme"}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "/cancel"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantEvent: "wizard_cancelled",
+		},
+		{
+			name: "wizard completed",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepExtra, Draft: &telegram.ProfileDraft{Name: "Acme"}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "-"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantEvent: "wizard_completed",
+		},
+		{
+			name: "wizard rejected empty",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				sessions := telegram.NewInMemoryWizardSessions()
+				sessions.Set(42, &telegram.WizardState{ChatID: 42, Step: telegram.StepExtra, Draft: &telegram.ProfileDraft{}})
+				return newFakeProfileStore(), sessions
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleWizardInput(context.Background(), &telegram.Update{ChatID: 42, Text: "-"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantEvent: "wizard_rejected_empty",
+		},
+		{
+			name: "profile cleared",
+			setup: func() (*fakeProfileStore, *telegram.InMemoryWizardSessions) {
+				return newFakeProfileStore(), telegram.NewInMemoryWizardSessions()
+			},
+			action: func(t *testing.T, h *telegram.ProfileHandler) {
+				if err := h.HandleCommand(context.Background(), &telegram.Update{ChatID: 42, Text: "/profile clear"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantEvent: "profile_cleared",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			counter := &fakeBotEventCounter{}
+			store, sessions := tt.setup()
+			rep := &fakeReplier{}
+			h := telegram.NewProfileHandler(store, sessions, rep, telegram.WithProfileEventCounter(counter))
+
+			tt.action(t, h)
+
+			if !counter.has(tt.wantEvent) {
+				t.Errorf("counter missing %q event; got events=%v", tt.wantEvent, counter.events)
+			}
+		})
+	}
+}
+
 func TestProfileHandler_NilLogger_DoesNotPanic(t *testing.T) {
 	rep := &fakeReplier{}
 	store := newFakeProfileStore()
