@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
 
@@ -15,16 +14,16 @@ import (
 // currently active for chatID. Unlike /profile, there is no reply-keyboard
 // button to alias — /llm is an advanced command users discover via /help.
 func ShouldRouteToLLM(text string, chatID int64, sessions LLMWizardSessions) bool {
-	// RED stub
-	_ = text
-	_ = chatID
-	_ = sessions
-	return false
+	trimmed := strings.TrimSpace(text)
+	if strings.HasPrefix(trimmed, "/llm") {
+		return true
+	}
+	if trimmed == "" {
+		return false
+	}
+	_, ok := sessions.Get(chatID)
+	return ok
 }
-
-// errLLMRouteNotImplemented backs the RED stub so callers can sanity-check
-// before GREEN lands.
-var errLLMRouteNotImplemented = errors.New("llm: route not implemented")
 
 // RouteWizardOrLLM routes a text message to the LLM handler when the
 // message either targets /llm or is part of an in-flight /llm wizard.
@@ -34,11 +33,12 @@ var errLLMRouteNotImplemented = errors.New("llm: route not implemented")
 // /llm commands always win — typing "/llm edit" mid-wizard resets the
 // wizard instead of being treated as the answer to the current question.
 func RouteWizardOrLLM(ctx context.Context, u *Update, lh *LLMHandler, sessions LLMWizardSessions) (bool, error) {
-	// RED stub
-	_ = ctx
-	_ = u
-	_ = lh
-	_ = sessions
-	_ = strings.TrimSpace
-	return false, errLLMRouteNotImplemented
+	text := strings.TrimSpace(u.Text)
+	if strings.HasPrefix(text, "/llm") {
+		return true, lh.HandleCommand(ctx, u)
+	}
+	if _, ok := sessions.Get(u.ChatID); ok {
+		return true, lh.HandleWizardInput(ctx, u)
+	}
+	return false, nil
 }
