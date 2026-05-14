@@ -18,6 +18,9 @@ func ShouldRouteToLLM(text string, chatID int64, sessions LLMWizardSessions) boo
 	if strings.HasPrefix(trimmed, "/llm") {
 		return true
 	}
+	if trimmed == ButtonLLM {
+		return true
+	}
 	if trimmed == "" {
 		return false
 	}
@@ -36,6 +39,13 @@ func RouteWizardOrLLM(ctx context.Context, u *Update, lh *LLMHandler, sessions L
 	text := strings.TrimSpace(u.Text)
 	if strings.HasPrefix(text, "/llm") {
 		return true, lh.HandleCommand(ctx, u)
+	}
+	if text == ButtonLLM {
+		// Reply-keyboard tap arrives as the literal label; rewrite to
+		// "/llm" so HandleCommand treats it as a fresh top-level command.
+		synth := *u
+		synth.Text = "/llm"
+		return true, lh.HandleCommand(ctx, &synth)
 	}
 	if _, ok := sessions.Get(u.ChatID); ok {
 		return true, lh.HandleWizardInput(ctx, u)

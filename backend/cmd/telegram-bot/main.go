@@ -274,7 +274,8 @@ func mainReplyKeyboard() *models.ReplyKeyboardMarkup {
 	return &models.ReplyKeyboardMarkup{
 		Keyboard: [][]models.KeyboardButton{
 			{{Text: telegramadapter.ButtonAnalyze}, {Text: telegramadapter.ButtonGenerate}},
-			{{Text: telegramadapter.ButtonProfile}, {Text: telegramadapter.ButtonHelp}},
+			{{Text: telegramadapter.ButtonProfile}, {Text: telegramadapter.ButtonLLM}},
+			{{Text: telegramadapter.ButtonHelp}},
 		},
 		ResizeKeyboard: true,
 		IsPersistent:   true,
