@@ -140,7 +140,7 @@ func TestPolicy_Wrap_Prepends(t *testing.T) {
 	inner := func(lang string) string { return "INNER:" + lang }
 	wrapped := p.Wrap(inner)
 
-	got := wrapped("Russian")
+	got := wrapped.Call("Russian")
 
 	if !strings.HasPrefix(got, p.Prefix()) {
 		t.Error("wrapped output must START with the security prefix (order matters)")
@@ -158,7 +158,7 @@ func TestPolicy_Wrap_PassesArg(t *testing.T) {
 		captured = lang
 		return "x"
 	}
-	p.Wrap(inner)("English")
+	p.Wrap(inner).Call("English")
 	if captured != "English" {
 		t.Errorf("Wrap must pass arg unchanged, got %q", captured)
 	}
@@ -170,44 +170,34 @@ func TestPolicy_Wrap_PassesArg(t *testing.T) {
 func TestPolicy_Wrap_SinglePrefixPerCall(t *testing.T) {
 	p, _ := security.NewPolicy(validDirectives)
 	inner := func(lang string) string { return "body" }
-	got := p.Wrap(inner)("Russian")
+	got := p.Wrap(inner).Call("Russian")
 
 	if c := strings.Count(got, "STRICT DOMAIN FOCUS"); c != 1 {
 		t.Errorf("Wrap should add prefix exactly once, got %d occurrences", c)
 	}
 }
 
-// TestPolicy_Wrap_DoubleWrap_NonIdempotent pins the decision (issue #13):
-// Wrap is intentionally NOT idempotent — composing Wrap(Wrap(inner)) yields
-// two prefix copies, not one. This is a footgun-test: it fails loudly if
-// anyone adds a "skip if already prefixed" shortcut to Wrap, forcing the
-// designer to re-read this comment and the linked decision before changing
-// behaviour.
+// TestPolicy_Wrap_ReturnsWrappedPromptVO pins the issue-#3 contract: Wrap
+// returns a typed value (security.WrappedPrompt) rather than a raw function.
+// The compiler must refuse any place that returns a raw func(string) string
+// where a WrappedPrompt is expected — that's how double-wrap and "forgot to
+// apply the firewall" classes of bug become impossible to compile.
 //
-// Rationale: Wrap is a simple decorator with no hidden state. A "did I
-// already wrap?" branch couples wrap-time to wrap-input parsing and adds a
-// silent failure mode (caller may rely on the second wrap meaning "re-anchor
-// after untrusted concatenation"; a quiet no-op would defeat that). The
-// firewall stays intact under accidental double-wrap — the prompt just
-// gets longer — so the cost of non-idempotency is bounded.
-//
-// If you have a real need for idempotency, change Wrap to a typed VO that
-// can't be applied twice (issue #3 WrappedPrompt) rather than papering over
-// the string-level composition.
-func TestPolicy_Wrap_DoubleWrap_NonIdempotent(t *testing.T) {
+// The double-wrap footgun-test that pinned issue #13 is intentionally
+// removed: with WrappedPrompt, Policy.Wrap accepts func(string) string and
+// returns WrappedPrompt; composing Wrap(Wrap(inner)) no longer type-checks,
+// so the runtime check is unnecessary.
+func TestPolicy_Wrap_ReturnsWrappedPromptVO(t *testing.T) {
 	p, _ := security.NewPolicy(validDirectives)
 
-	// Compose Wrap twice. Wrap returns func(string) string, so the second
-	// Wrap takes the first wrapped function and prepends the prefix again.
-	once := p.Wrap(func(lang string) string { return "body:" + lang })
-	twice := p.Wrap(once)
+	// Compile-time guard: assign to the explicit type.
+	var wrapped security.WrappedPrompt = p.Wrap(func(lang string) string { return "body:" + lang })
 
-	got := twice("Russian")
-	if c := strings.Count(got, "STRICT DOMAIN FOCUS"); c != 2 {
-		t.Errorf("double-wrap should produce 2 prefix copies (non-idempotent), got %d\n"+
-			"if you intentionally made Wrap idempotent, update this test AND issue #13", c)
+	got := wrapped.Call("Russian")
+	if !strings.HasPrefix(got, p.Prefix()) {
+		t.Errorf("Call must place the prefix at the head, got prefix=%q", got[:min(80, len(got))])
 	}
 	if !strings.HasSuffix(got, "body:Russian") {
-		t.Errorf("inner result must survive double-wrap, got tail: %q", got[len(got)-30:])
+		t.Errorf("Call must pass the language through to the inner prompt, got tail=%q", got[max(0, len(got)-30):])
 	}
 }
