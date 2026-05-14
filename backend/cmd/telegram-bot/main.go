@@ -124,9 +124,15 @@ func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, e
 		startHandler(logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/help", bot.MatchTypePrefix,
 		helpHandler(logger))
+	b.RegisterHandler(bot.HandlerTypeMessageText, telegramadapter.ButtonHelp, bot.MatchTypeExact,
+		helpHandler(logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/analyze", bot.MatchTypePrefix,
 		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, pendingSessions, logger))
+	b.RegisterHandler(bot.HandlerTypeMessageText, telegramadapter.ButtonAnalyze, bot.MatchTypeExact,
+		makeAnalyzeHandler(analyzeHandler, b, defaultDocDownloader, pendingSessions, logger))
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/generate", bot.MatchTypePrefix,
+		makeGenerateHandler(generateHandler, b, defaultDocDownloader, pendingSessions, logger))
+	b.RegisterHandler(bot.HandlerTypeMessageText, telegramadapter.ButtonGenerate, bot.MatchTypeExact,
 		makeGenerateHandler(generateHandler, b, defaultDocDownloader, pendingSessions, logger))
 	b.RegisterHandlerMatchFunc(
 		profileMatcher(wizardSessions),
@@ -208,8 +214,24 @@ func defaultHandler(logger *slog.Logger) bot.HandlerFunc {
 	}
 }
 
+// mainReplyKeyboard is the persistent reply keyboard surfaced by /start
+// and /help: four top-level commands laid out as two rows of two buttons.
+// Telegram delivers a tapped button as a regular text message containing
+// the button label, which we route via MatchTypeExact aliases in run().
+func mainReplyKeyboard() *models.ReplyKeyboardMarkup {
+	return &models.ReplyKeyboardMarkup{
+		Keyboard: [][]models.KeyboardButton{
+			{{Text: telegramadapter.ButtonAnalyze}, {Text: telegramadapter.ButtonGenerate}},
+			{{Text: telegramadapter.ButtonProfile}, {Text: telegramadapter.ButtonHelp}},
+		},
+		ResizeKeyboard: true,
+		IsPersistent:   true,
+	}
+}
+
 // startHandler greets the user on /start with the same command list
-// MsgHelp uses, so the very first interaction is self-documenting.
+// MsgHelp uses plus the persistent reply keyboard, so the very first
+// interaction shows what's possible AND gives one-tap access.
 func startHandler(logger *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
 		if u.Message == nil {
@@ -217,13 +239,15 @@ func startHandler(logger *slog.Logger) bot.HandlerFunc {
 		}
 		logger.Debug("start", "chat_id", u.Message.Chat.ID)
 		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: u.Message.Chat.ID,
-			Text:   telegramadapter.MsgStart,
+			ChatID:      u.Message.Chat.ID,
+			Text:        telegramadapter.MsgStart,
+			ReplyMarkup: mainReplyKeyboard(),
 		})
 	}
 }
 
-// helpHandler responds to /help with the full command reference.
+// helpHandler responds to /help with the full command reference and the
+// same persistent reply keyboard so the user can re-pin it any time.
 func helpHandler(logger *slog.Logger) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, u *models.Update) {
 		if u.Message == nil {
@@ -231,8 +255,9 @@ func helpHandler(logger *slog.Logger) bot.HandlerFunc {
 		}
 		logger.Debug("help", "chat_id", u.Message.Chat.ID)
 		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: u.Message.Chat.ID,
-			Text:   telegramadapter.MsgHelp,
+			ChatID:      u.Message.Chat.ID,
+			Text:        telegramadapter.MsgHelp,
+			ReplyMarkup: mainReplyKeyboard(),
 		})
 	}
 }

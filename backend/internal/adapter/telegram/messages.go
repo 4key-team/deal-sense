@@ -65,4 +65,11 @@ const (
 	// a chat has no per-chat company profile saved. It lives next to the
 	// other user-visible strings so all bot semantics stay in one file.
 	DefaultCompanyFallback = "Software development company"
+
+	// Reply-keyboard button labels. Tapping a button sends its text as a
+	// regular message; the bot routes these via MatchTypeExact aliases.
+	ButtonAnalyze  = "📋 Анализ тендера"
+	ButtonGenerate = "📝 Создать КП"
+	ButtonProfile  = "👤 Профиль компании"
+	ButtonHelp     = "❓ Помощь"
 )
