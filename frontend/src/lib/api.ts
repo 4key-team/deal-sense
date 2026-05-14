@@ -56,6 +56,14 @@ interface StoredSettings {
   dealSenseApiKey?: string;
 }
 
+// buildTimeBackendKey is baked into the SPA bundle at docker build time
+// via `--build-arg VITE_DEAL_SENSE_API_KEY=...` (sourced from the
+// operator's .env). End-users never see or paste this — they only fill
+// LLM credentials. Empty string means the backend runs without auth
+// (passthrough) and no header is sent.
+const buildTimeBackendKey =
+  (import.meta.env.VITE_DEAL_SENSE_API_KEY as string | undefined) ?? "";
+
 function apiHeaders(): Record<string, string> {
   const s = getItem<StoredSettings>("llm-settings", {});
   const headers: Record<string, string> = {};
@@ -63,7 +71,9 @@ function apiHeaders(): Record<string, string> {
   if (s.providerId) headers["X-LLM-Provider"] = s.providerId;
   if (s.url) headers["X-LLM-URL"] = s.url;
   if (s.model) headers["X-LLM-Model"] = s.model;
-  if (s.dealSenseApiKey) headers["X-API-Key"] = s.dealSenseApiKey;
+  // X-API-Key precedence: explicit localStorage override (legacy) → build-time bake.
+  const backendKey = s.dealSenseApiKey ?? buildTimeBackendKey;
+  if (backendKey) headers["X-API-Key"] = backendKey;
   return headers;
 }
 

@@ -5,6 +5,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# Build-time injection of the backend's X-API-Key so the SPA can hit
+# /api/* endpoints without asking the end-user to paste a server-side
+# secret. Operator passes DEAL_SENSE_API_KEY in `.env` (or `docker
+# compose build --build-arg`), this gets baked into the bundle as
+# import.meta.env.VITE_DEAL_SENSE_API_KEY.
+ARG VITE_DEAL_SENSE_API_KEY=""
+ENV VITE_DEAL_SENSE_API_KEY=${VITE_DEAL_SENSE_API_KEY}
+
 COPY . .
 RUN npm run build
 

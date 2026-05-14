@@ -104,8 +104,6 @@ export function SettingsPage() {
   const [showKey, setShowKey] = useState<boolean>(false);
   const [url, setUrl] = useState<string>(saved.url);
   const [model, setModel] = useState<string>(saved.model);
-  const [dealSenseApiKey, setDealSenseApiKey] = useState<string>(saved.dealSenseApiKey ?? "");
-  const [showBackendKey, setShowBackendKey] = useState<boolean>(false);
   const [testState, setTestState] = useState<TestState>("idle");
   const [providerOpen, setProviderOpen] = useState<boolean>(false);
   const [modelOpen, setModelOpen] = useState<boolean>(false);
@@ -132,7 +130,21 @@ export function SettingsPage() {
     setTestState("idle");
     setTestError("");
     setSavedAt(null);
-  }, [providerId, apiKey, url, model, dealSenseApiKey]);
+  }, [providerId, apiKey, url, model]);
+
+  // After showing a test result (ok or fail) revert the button back to
+  // the default 'Проверить подключение' state after a few seconds so the
+  // user can re-run with the same form values without first editing
+  // something. The reset effect above handles the edit path; this
+  // covers the no-edit-needed path.
+  useEffect(() => {
+    if (testState !== "ok" && testState !== "fail") return;
+    const id = window.setTimeout(() => {
+      setTestState("idle");
+      setTestError("");
+    }, 4000);
+    return () => window.clearTimeout(id);
+  }, [testState]);
 
   async function fetchModels(provId: string, provUrl: string) {
     if (!apiKey) return;
@@ -192,7 +204,6 @@ export function SettingsPage() {
       apiKey,
       url,
       model,
-      dealSenseApiKey: dealSenseApiKey.trim() || undefined,
     });
     setSavedAt(Date.now());
   }
@@ -356,53 +367,6 @@ export function SettingsPage() {
           </Button>
         </div>
         {testError && <p className={styles.testError}>{testError}</p>}
-      </section>
-
-      <section className={styles.card} aria-label="Backend access">
-        <h2 className={styles.cardTitle}>
-          {lang === "ru" ? "Доступ к серверу Deal Sense" : "Deal Sense backend access"}
-        </h2>
-        <p className={styles.cardHint}>
-          {lang === "ru" ? (
-            <>
-              Backend защищён <code>X-API-Key</code>. Этот ключ задаёт администратор
-              при деплое (<code>DEAL_SENSE_API_KEY</code> в env). Спросите у того, кто
-              развернул бэкенд, и вставьте сюда — без него тест подключения и
-              запросы к бэкенду возвращают 401 unauthorized.
-            </>
-          ) : (
-            <>
-              The backend is protected by <code>X-API-Key</code>. Set on deploy via
-              <code> DEAL_SENSE_API_KEY</code>. Ask the operator who deployed the
-              backend; without it tests and API calls return 401 unauthorized.
-            </>
-          )}
-        </p>
-
-        <Field
-          label={lang === "ru" ? "Backend API ключ" : "Backend API key"}
-          hint={lang === "ru" ? "Хранится только в этом браузере." : "Stored in this browser only."}
-        >
-          <div className={styles.keyWrap}>
-            <input
-              className={styles.keyInput}
-              type={showBackendKey ? "text" : "password"}
-              value={dealSenseApiKey}
-              onChange={(e) => setDealSenseApiKey(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={lang === "ru" ? "dev-smoke-test-key-…" : "dev-smoke-test-key-…"}
-            />
-            <button
-              className={styles.keyToggle}
-              type="button"
-              onClick={() => setShowBackendKey((v) => !v)}
-              aria-label={showBackendKey ? t.settings.hide : t.settings.show}
-            >
-              <EyeIcon off={showBackendKey} />
-            </button>
-          </div>
-        </Field>
       </section>
 
       <section className={styles.card} aria-label="Telegram bot">
