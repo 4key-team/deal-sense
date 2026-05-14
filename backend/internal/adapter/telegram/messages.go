@@ -97,5 +97,6 @@ const (
 	ButtonAnalyze  = "📋 Анализ тендера"
 	ButtonGenerate = "📝 Создать КП"
 	ButtonProfile  = "👤 Профиль компании"
+	ButtonLLM      = "🤖 Настройки LLM"
 	ButtonHelp     = "❓ Помощь"
 )

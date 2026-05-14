@@ -39,6 +39,7 @@ func TestShouldRouteToLLM(t *testing.T) {
 		{"llm edit", "/llm edit", 42, true},
 		{"llm clear", "/llm clear", 42, true},
 		{"llm with leading whitespace", "  /llm", 42, true},
+		{"reply-keyboard llm button", telegram.ButtonLLM, 42, true},
 		{"free text + active session", "openai", 7, true},
 		{"cancel + active session", "/cancel", 7, true},
 		{"free text + no session", "hello bot", 42, false},
@@ -187,6 +188,27 @@ func TestRouteWizardOrLLM_CancelWithoutSession_NotHandled(t *testing.T) {
 	}
 	if handled {
 		t.Error("/cancel without session should NOT be claimed by llm router")
+	}
+}
+
+func TestRouteWizardOrLLM_ButtonLLM_DispatchesToCommand(t *testing.T) {
+	// Tap on the reply-keyboard "🤖 Настройки LLM" button arrives as a
+	// plain text message; the router must treat it as /llm.
+	h, sessions, _, rep := newLLMHandlerForRouting(t)
+
+	handled, err := telegram.RouteWizardOrLLM(
+		context.Background(),
+		&telegram.Update{ChatID: 42, Text: telegram.ButtonLLM},
+		h, sessions,
+	)
+	if err != nil {
+		t.Fatalf("RouteWizardOrLLM: %v", err)
+	}
+	if !handled {
+		t.Fatal("button-llm tap must be claimed by the llm router")
+	}
+	if len(rep.texts) != 1 {
+		t.Errorf("expected one reply from /llm, got %d", len(rep.texts))
 	}
 }
 
