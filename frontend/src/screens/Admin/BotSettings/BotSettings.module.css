@@ -139,6 +139,48 @@
   font-style: italic;
 }
 
+.policyCard {
+  border: 1px solid var(--color-border);
+  border-left: 4px solid #ffa726;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin: 0 0 2rem;
+  background: rgba(255, 167, 38, 0.06);
+}
+
+.policyHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+}
+
+.policyBadge {
+  display: inline-block;
+  background: #ffa726;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.policyBody {
+  margin: 0.3rem 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.policyBody code {
+  font-size: 0.85em;
+  background: var(--color-bg-elevated);
+  padding: 0 0.25rem;
+  border-radius: 3px;
+}
+
 .llmSection {
   margin-top: 3rem;
   padding-top: 2rem;

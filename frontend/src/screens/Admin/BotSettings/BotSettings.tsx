@@ -91,6 +91,26 @@ export function BotSettings() {
         after restarting the <code>telegram-bot</code> container.
       </p>
 
+      <div className={styles.policyCard} role="note" aria-label="LLM policy">
+        <div className={styles.policyHeader}>
+          <span className={styles.policyBadge}>BYOK</span>
+          <strong>Per-chat LLM is required by default</strong>
+        </div>
+        <p className={styles.policyBody}>
+          Since v0.23 the bot enforces «bring your own key»: every Telegram
+          chat must run <code>/llm edit</code> in the bot before{" "}
+          <code>/analyze</code> or <code>/generate</code> will work. The
+          server-side env <code>LLM_*</code> keys are no longer a silent
+          fallback for arbitrary users.
+        </p>
+        <p className={styles.policyBody}>
+          To revert to single-tenant behaviour (env <code>LLM_*</code> shared
+          by all chats), set{" "}
+          <code>ALLOW_SERVER_LLM_FALLBACK=true</code> on the{" "}
+          <code>telegram-bot</code> service and restart it.
+        </p>
+      </div>
+
       {loading && <p className={styles.loading}>Loading current configuration…</p>}
 
       {genericError && (
