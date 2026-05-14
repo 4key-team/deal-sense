@@ -4,6 +4,7 @@ import {
   useBotConfig,
   type BotConfigUpdateInput,
 } from "./useBotConfig";
+import { useLLMInfo } from "./useLLMInfo";
 import styles from "./BotSettings.module.css";
 
 const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
@@ -28,6 +29,7 @@ function parseAllowlist(raw: string): number[] {
 
 export function BotSettings() {
   const { data, loading, error, validation, saving, update } = useBotConfig();
+  const llmInfo = useLLMInfo();
 
   const [token, setToken] = useState("");
   const [allowlistRaw, setAllowlistRaw] = useState("");
@@ -220,6 +222,54 @@ export function BotSettings() {
           </Button>
         </div>
       </form>
+
+      <section className={styles.llmSection} aria-label="Server-side LLM">
+        <h2 className={styles.llmTitle}>Server-side LLM (read-only)</h2>
+        <p className={styles.subtitle}>
+          This is the LLM the backend uses when a chat has not configured its
+          own via the <code>/llm</code> wizard in Telegram. To change these,
+          edit the <code>LLM_*</code> env vars on the <code>backend</code>{" "}
+          service and restart it.
+        </p>
+        {llmInfo.error && (
+          <div className={`${styles.banner} ${styles.bannerError}`} role="alert">
+            ❌ {llmInfo.error}
+          </div>
+        )}
+        <dl className={styles.llmList}>
+          <div className={styles.llmRow}>
+            <dt>Active providers</dt>
+            <dd>
+              {llmInfo.providers.length > 0
+                ? llmInfo.providers.join(", ")
+                : <span className={styles.empty}>loading…</span>}
+            </dd>
+          </div>
+          <div className={styles.llmRow}>
+            <dt>Available models</dt>
+            <dd>
+              {llmInfo.models.length > 0 ? (
+                <ul className={styles.modelList}>
+                  {llmInfo.models.map((m: string) => (
+                    <li key={m}>
+                      <code>{m}</code>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className={styles.empty}>loading…</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+        <p className={styles.hint}>
+          To override per chat, the user sends <code>/llm edit</code> in the
+          Telegram bot and walks through the 4-step wizard. Per-chat settings
+          are stored in <code>/data/telegram-llm-settings.json</code> and
+          forwarded to the backend as <code>X-LLM-*</code> headers on each
+          analyze / generate call.
+        </p>
+      </section>
     </div>
   );
 }

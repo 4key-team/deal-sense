@@ -5,8 +5,20 @@ import { renderWithProviders } from "../../../test/render";
 import { BotSettings } from "./BotSettings";
 
 function mockFetchGet(body: unknown, status = 200) {
-  return vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+  return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
+    // LLM info endpoints are unrelated to the BotConfig fixture — answer
+    // them with empty stubs so the page renders without errors.
+    if (typeof url === "string" && url.includes("/api/llm/")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          url.includes("/providers")
+            ? Promise.resolve({ providers: [] })
+            : Promise.resolve({ models: [] }),
+      } as unknown as Response);
+    }
     if (method === "GET") {
       return Promise.resolve({
         ok: status >= 200 && status < 300,
@@ -19,6 +31,40 @@ function mockFetchGet(body: unknown, status = 200) {
       ok: true,
       status: 200,
       json: () => Promise.resolve(body),
+    } as unknown as Response);
+  });
+}
+
+function mockFetchSequence(
+  responses: Array<{
+    ok: boolean;
+    status: number;
+    body: unknown;
+  }>
+) {
+  // GETs to /api/llm/* always return empty stubs; the queue applies only to
+  // /api/admin/bot-config calls (GET, then PUT, in order).
+  const queue = [...responses];
+  return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    if (typeof url === "string" && url.includes("/api/llm/")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          url.includes("/providers")
+            ? Promise.resolve({ providers: [] })
+            : Promise.resolve({ models: [] }),
+      } as unknown as Response);
+    }
+    const next = queue.shift();
+    if (!next) {
+      return Promise.reject(new Error("unexpected fetch — queue empty"));
+    }
+    void init;
+    return Promise.resolve({
+      ok: next.ok,
+      status: next.status,
+      json: () => Promise.resolve(next.body),
     } as unknown as Response);
   });
 }
@@ -93,24 +139,14 @@ describe("BotSettings", () => {
       allowlist_user_ids: [],
       log_level: "info",
     };
-    const fetchSpy = vi
-      .fn()
-      // initial GET
-      .mockResolvedValueOnce({
+    const fetchSpy = mockFetchSequence([
+      { ok: true, status: 200, body: seed },
+      {
         ok: true,
         status: 200,
-        json: () => Promise.resolve(seed),
-      } as unknown as Response)
-      // PUT
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            ...seed,
-            allowlist_user_ids: [42, 100],
-          }),
-      } as unknown as Response);
+        body: { ...seed, allowlist_user_ids: [42, 100] },
+      },
+    ]);
     vi.stubGlobal("fetch", fetchSpy);
     const user = userEvent.setup();
 
@@ -142,22 +178,17 @@ describe("BotSettings", () => {
   });
 
   it("highlights the offending field when the backend returns 400 with `field`", async () => {
-    const fetchSpy = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ configured: false }),
-      } as unknown as Response)
-      .mockResolvedValueOnce({
+    const fetchSpy = mockFetchSequence([
+      { ok: true, status: 200, body: { configured: false } },
+      {
         ok: false,
         status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "bot token must be in the form <digits>:<secret> (Telegram format)",
-            field: "token",
-          }),
-      } as unknown as Response);
+        body: {
+          error: "bot token must be in the form <digits>:<secret> (Telegram format)",
+          field: "token",
+        },
+      },
+    ]);
     vi.stubGlobal("fetch", fetchSpy);
     const user = userEvent.setup();
 
@@ -201,17 +232,16 @@ describe("BotSettings", () => {
   });
 
   it("shows a generic error banner when the GET fails with non-2xx", async () => {
-    const fetchSpy = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: () => Promise.resolve({}),
-    } as unknown as Response);
+    const fetchSpy = mockFetchSequence([
+      { ok: false, status: 500, body: {} },
+    ]);
     vi.stubGlobal("fetch", fetchSpy);
 
     renderWithProviders(<BotSettings />);
 
     await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/HTTP 500/);
+      const alerts = screen.getAllByRole("alert");
+      expect(alerts.some((a) => /HTTP 500/.test(a.textContent ?? ""))).toBe(true);
     });
   });
 });

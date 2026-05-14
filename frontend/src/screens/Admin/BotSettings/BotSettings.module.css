@@ -138,3 +138,55 @@
   color: var(--color-text-muted);
   font-style: italic;
 }
+
+.llmSection {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.llmTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.llmList {
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.llmRow {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.llmRow dt {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.llmRow dd {
+  margin: 0;
+}
+
+.modelList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.modelList li {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.85rem;
+}
