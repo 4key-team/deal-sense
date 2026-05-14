@@ -93,14 +93,26 @@ func TestRun_StartsAndStops(t *testing.T) {
 	}
 }
 
-func TestRun_EmptyAllowlistFails(t *testing.T) {
+func TestRun_EmptyAllowlistOpensInOpenMode(t *testing.T) {
+	// Empty AllowlistUserIDs no longer fails — auth.ParseAllowlist returns
+	// an open allowlist (bootstrap/dev). The run() helper must therefore
+	// progress past the allowlist construction step. We exercise that by
+	// pointing at an unreachable Telegram API so run() fails on bot.New
+	// instead of on the allowlist — proving the allowlist step succeeded.
 	cfg := telegramadapter.Config{
-		BotToken: "test-token",
-		// no AllowlistUserIDs — Allowlist constructor must reject
+		BotToken:         "test-token",
+		ProfileStorePath: filepath.Join(t.TempDir(), "profiles.json"),
+		// no AllowlistUserIDs — must NOT fail; ParseAllowlist → open mode
 	}
-	err := run(t.Context(), discardLogger(), cfg, nil)
-	if !errors.Is(err, auth.ErrEmptyAllowlist) {
-		t.Errorf("err = %v, want wrapping %v", err, auth.ErrEmptyAllowlist)
+	err := run(t.Context(), discardLogger(), cfg, []bot.Option{
+		bot.WithServerURL("http://127.0.0.1:1"),
+		bot.WithCheckInitTimeout(200 * time.Millisecond),
+	})
+	if err == nil {
+		t.Fatal("expected bot.New error (unreachable stub), got nil")
+	}
+	if errors.Is(err, auth.ErrEmptyAllowlist) {
+		t.Errorf("err = %v, must NOT wrap ErrEmptyAllowlist (empty → open mode)", err)
 	}
 }
 
@@ -870,15 +882,9 @@ func TestMain_BinaryFastExit(t *testing.T) {
 		t.Errorf("expected token-missing message, got: %s", out)
 	}
 
-	// Empty allowlist → fast non-zero exit.
-	cmd2 := exec.Command(binPath)
-	cmd2.Env = append(os.Environ(),
-		"TELEGRAM_BOT_TOKEN=test",
-		"ALLOWLIST_USER_IDS=",
-	)
-	if out2, err := cmd2.CombinedOutput(); err == nil {
-		t.Errorf("expected non-zero exit on empty allowlist, got success: %s", out2)
-	}
-	// Use syscall to avoid unused-import in case build tags change.
-	_ = syscall.SIGINT
+	// Empty allowlist is no longer a fatal-config error — ParseAllowlist
+	// returns an open allowlist. The "fast non-zero exit" check was removed
+	// alongside the open-mode change (was a closed-system invariant the
+	// product now relaxes for bootstrap UX).
+	_ = syscall.SIGINT // keep import live in case build tags change
 }

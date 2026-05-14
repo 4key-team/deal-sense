@@ -68,9 +68,12 @@ func main() {
 // run wires the bot. Pass extraOpts to inject test-only options (e.g.
 // WithServerURL pointing at httptest.Server).
 func run(ctx context.Context, logger *slog.Logger, cfg telegramadapter.Config, extraOpts []bot.Option) error {
-	allowlist, err := auth.NewAllowlist(cfg.AllowlistUserIDs)
+	allowlist, err := auth.ParseAllowlist(cfg.AllowlistUserIDs)
 	if err != nil {
 		return fmt.Errorf("allowlist: %w", err)
+	}
+	if allowlist.IsOpen() {
+		logger.Warn("allowlist is open — any Telegram user can interact with this bot; set ALLOWLIST_USER_IDS or configure via /settings for production")
 	}
 
 	api := dealsenseapi.NewHTTPClient(cfg.APIBaseURL, cfg.APIKey, &http.Client{Timeout: 5 * time.Minute})
